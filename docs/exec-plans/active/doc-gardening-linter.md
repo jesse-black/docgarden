@@ -6,7 +6,12 @@ Maintain this document in accordance with `docs/PLANS.md`. If that file exists i
 
 ## Purpose / Big Picture
 
-After this change, the repository will have a dedicated linter named `Doc Gardener Linter`, exposed as the executable `dglint`, that checks whether Markdown documentation refers to local repository files and directories using a repository-selected style policy and whether those references actually resolve to real paths in the working tree. A repository will be able to choose whether local file references should prefer compact backticked paths such as `docs/PLANS.md`, Markdown links such as `[docs/PLANS.md](docs/PLANS.md)`, or a narrower exception-based mix. The user-visible benefit is that teams can enforce one consistent convention, keep documentation mechanically valid, and still tune for either agent efficiency or human navigation.
+After this change, the repository will have a dedicated linter named `Doc Gardener Linter`, exposed as the executable `dglint`, that checks whether Markdown documentation refers to local repository files and directories using a repository-selected style policy and whether those references actually resolve to real paths in the working tree. A repository will be able to choose whether local file references should prefer compact backticked paths, Markdown links, or a narrower exception-based mix. Example representations:
+
+    `docs/PLANS.md`
+    [docs/PLANS.md](docs/PLANS.md)
+
+The user-visible benefit is that teams can enforce one consistent convention, keep documentation mechanically valid, and still tune for either agent efficiency or human navigation.
 
 You will know this is working when running `dglint lint .` against a repository reports real broken path references, reports style violations according to the configured local-reference policy, reports ambiguous or non-conforming file references, and exits successfully on a clean repository. The linter must be deterministic enough to run in local development and continuous integration, and durable enough to publish as a reusable open source command-line tool.
 
@@ -14,6 +19,8 @@ You will know this is working when running `dglint lint .` against a repository 
 
 - [x] (2026-03-06 18:20Z) Revise the ExecPlan so local file-reference style is configurable instead of implicitly hard-coded to backticks only.
 - [x] (2026-03-06 18:40Z) Revise the ExecPlan so check-only mode explicitly reports when autofix is available and prints the corresponding autofix command plus a summary of fixable diagnostics.
+- [x] (2026-03-06 19:05Z) Revise hypothetical path examples so dogfooding on this repository does not lint narrative samples as live references, and document that authoring rule in `AGENTS.md`.
+- [x] (2026-03-06 19:20Z) Extend the ExecPlan to require CLI integration tests that copy a fixture repository into a temporary working directory and to require coverage reporting for the automated test suite.
 - [ ] (2026-03-06 00:00Z) Scaffold the Rust crate for `Doc Gardener Linter` and expose a working `dglint` command-line executable without changing repository docs yet.
 - [ ] (2026-03-06 00:00Z) Define the reference taxonomy: what counts as a file-path reference, what counts as a code-symbol reference, and what counts as an external navigation link.
 - [ ] (2026-03-06 00:00Z) Implement Markdown parsing with `markdown-rs`, including extraction of inline code spans, fenced code blocks, Markdown links, and source positions from mdast nodes.
@@ -46,6 +53,10 @@ You will know this is working when running `dglint lint .` against a repository 
   Rationale: The plan already required a non-mutating scan mode and a mutating autofix mode, but adoption will be materially better if check-only mode tells users when safe rewrites are available, how to invoke them, and which reported violations are fixable. Making that guidance part of the CLI contract prevents a weaker implementation that technically supports autofix but hides discoverability.
   Date/Author: 2026-03-06 / Codex
 
+- Decision: Validate the CLI with copied test repositories and report coverage with LLVM-based Rust coverage tooling.
+  Rationale: The most important behavior is command-line behavior against a real repository tree, not only internal rule functions. A dedicated test-repository fixture copied into a temporary working directory makes it possible to assert diagnostics, exit codes, and autofix behavior without mutating checked-in fixtures. Coverage should be collected with `cargo-llvm-cov` because plain Cargo does not emit useful coverage summaries by itself.
+  Date/Author: 2026-03-06 / Codex
+
 - Decision: Name the tool `Doc Gardener Linter` and expose the executable as `dglint`.
   Rationale: The human-facing title aligns with the broader doc-gardening concept, while the shorter executable name is efficient for repeated local and CI use. This also leaves room for a future higher-level doc-gardening agent or workflow that may use `dglint` as one component.
   Date/Author: 2026-03-06 / Codex
@@ -59,7 +70,13 @@ You will know this is working when running `dglint lint .` against a repository 
   Date/Author: 2026-03-06 / Codex
 
 - Decision: Require repository-local path references to be repository-relative and path-shaped.
-  Rationale: A stable grammar reduces ambiguity and allows mechanical validation. Examples include `docs/PLANS.md`, `web/src/app.tsx`, `api/Program.cs`, and `terraform/modules/network`.
+  Rationale: A stable grammar reduces ambiguity and allows mechanical validation. Representative examples are shown below.
+
+      docs/PLANS.md
+      web/src/app.tsx
+      api/Program.cs
+      terraform/modules/network
+
   Date/Author: 2026-03-06 / Codex
 
 ## Outcomes & Retrospective
@@ -68,9 +85,15 @@ No implementation work has been completed yet. The intended outcome is a linter 
 
 ## Context and Orientation
 
-This plan assumes a repository that uses Markdown documentation heavily and wants a structured knowledge base where `AGENTS.md` acts as a small map and deeper guidance lives elsewhere under `docs/`. The problem to solve is not generic prose linting. The problem is documentation drift in path references: a Markdown file says `docs/PLANS.md` exists, or links to `docs/architecture.md`, but the path is stale, inconsistent with the repository’s chosen style policy, or represented in a way the repository has decided not to allow.
+This plan assumes a repository that uses Markdown documentation heavily and wants a structured knowledge base where `AGENTS.md` acts as a small map and deeper guidance lives elsewhere under `docs/`. The problem to solve is not generic prose linting. The problem is documentation drift in path references: a Markdown file claims a repository path exists or links to a repository path, but the path is stale, inconsistent with the repository’s chosen style policy, or represented in a way the repository has decided not to allow. Example hypothetical references:
 
-In this plan, a "repository-local path reference" means a textual mention of a file or directory that is expected to exist in the same repository as the linter is running against. A "local-reference style policy" means the repository rule that decides whether those references should normally appear as backticked repository-relative paths, as Markdown links, or as one representation with documented exceptions. A "Markdown link" means standard Markdown link syntax such as `[Plans](docs/PLANS.md)`. An "external link" means a destination outside the repository, such as an `https://` URL; these remain valid and should never be rewritten according to local-path style rules. An "ambiguous inline code span" means backticked text that could be a path or could be a code fragment, for example `build`, `Program`, or `foo.bar`, where the linter cannot confidently infer that the author meant a repository path.
+    `docs/PLANS.md`
+    [docs/architecture.md](docs/architecture.md)
+
+In this plan, a "repository-local path reference" means a textual mention of a file or directory that is expected to exist in the same repository as the linter is running against. A "local-reference style policy" means the repository rule that decides whether those references should normally appear as backticked repository-relative paths, as Markdown links, or as one representation with documented exceptions. A "Markdown link" means standard Markdown link syntax such as the example below. An "external link" means a destination outside the repository, such as the URL shown below; these remain valid and should never be rewritten according to local-path style rules. An "ambiguous inline code span" means backticked text that could be a path or could be a code fragment, for example `build`, `Program`, or `foo.bar`, where the linter cannot confidently infer that the author meant a repository path.
+
+    [Plans](docs/PLANS.md)
+    https://example.com
 
 The linter should operate on Markdown files, probably under `docs/`, `README.md`, `AGENTS.md`, and other configured documentation roots. It must parse Markdown structure rather than relying only on regular expressions because fenced code blocks, inline code spans, link destinations, autolinks, and escaped punctuation behave differently. It should ignore fenced code blocks by default because those blocks often contain examples that are not intended to be live repository references. It should inspect prose, headings, list items, tables if present, and inline code spans.
 
@@ -86,13 +109,26 @@ Implement parsing on top of a real Markdown abstract syntax tree rather than try
 
 Define the reference taxonomy in code before implementing rules. A repository-local path reference must satisfy all of the following conditions unless a configuration override says otherwise. It must be repository-relative, not absolute. It must be path-shaped. "Path-shaped" means at least one of these is true: it contains a `/`; it starts with `./` or `../`; it ends with a known file extension such as `.md`, `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, `.yml`, `.yaml`, `.cs`, `.csproj`, `.tf`, `.sh`, `.sql`, `.rs`, `.toml`; or it exactly matches a configured special-case filename such as `README.md`, `AGENTS.md`, `LICENSE`, `Makefile`, or `Cargo.toml`. If a backticked token does not satisfy these rules, it is not automatically considered a path and should not be resolved against the filesystem.
 
-Implement path normalization next. Normalize candidate references to repository-relative paths from the repository root rather than resolving relative to the current Markdown file. This is a deliberate convention because repo-relative references are easier for both agents and linters to reason about consistently. The linter should flag relative same-directory references such as `./foo.md` or `../bar.md` unless the repository explicitly chooses to allow them. Normalize path separators, reject traversal that escapes the repository root, and resolve case sensitivity according to the running filesystem while warning when the literal spelling does not match the on-disk spelling on case-insensitive platforms. That warning prevents hidden drift that later breaks on Linux continuous integration.
+Implement path normalization next. Normalize candidate references to repository-relative paths from the repository root rather than resolving relative to the current Markdown file. This is a deliberate convention because repo-relative references are easier for both agents and linters to reason about consistently. The linter should flag relative same-directory references such as the examples below unless the repository explicitly chooses to allow them.
+
+    ./foo.md
+    ../bar.md
+
+Normalize path separators, reject traversal that escapes the repository root, and resolve case sensitivity according to the running filesystem while warning when the literal spelling does not match the on-disk spelling on case-insensitive platforms. That warning prevents hidden drift that later breaks on Linux continuous integration.
 
 With classification and normalization in place, implement configuration-backed style semantics before finalizing the core lint rules. The configuration should expose `local_reference_style` with at least `backticks` and `links` values, plus per-path exceptions for locations that intentionally diverge. Under `backticks`, the linter should prefer inline-code repository-relative paths for local references. Under `links`, the linter should prefer Markdown links for local references and treat bare backticked paths as style violations unless the configured exception policy allows them. Regardless of style, local references must still resolve to real repository paths.
 
-Implement the core lint rules as style-aware rules. The first rule is `unresolved-local-path`: if either inline code or a Markdown link is classified as a repository-local path reference, the referenced file or directory must exist. The second rule is `prefer-backticks-for-local-paths`: when `local_reference_style` is `backticks`, a Markdown link that points to a repository-local path and does not add meaningful explanatory content beyond repeating the destination should be rewritten as a backticked repository-relative path. The third rule is `prefer-links-for-local-paths`: when `local_reference_style` is `links`, a bare backticked path reference in prose should be rewritten to a Markdown link form when the repository wants navigable links by default. The fourth rule is `ambiguous-inline-code`: if inline code looks path-adjacent but does not satisfy the path grammar clearly enough, report it only in strict mode or as an informational warning, not as a hard failure at first. The fifth rule is `noncanonical-local-path`: if a repository-local path is written in noncanonical form, such as `./docs/PLANS.md` when the convention is `docs/PLANS.md`, report it and offer autofix.
+Implement the core lint rules as style-aware rules. The first rule is `unresolved-local-path`: if either inline code or a Markdown link is classified as a repository-local path reference, the referenced file or directory must exist. The second rule is `prefer-backticks-for-local-paths`: when `local_reference_style` is `backticks`, a Markdown link that points to a repository-local path and does not add meaningful explanatory content beyond repeating the destination should be rewritten as a backticked repository-relative path. The third rule is `prefer-links-for-local-paths`: when `local_reference_style` is `links`, a bare backticked path reference in prose should be rewritten to a Markdown link form when the repository wants navigable links by default. The fourth rule is `ambiguous-inline-code`: if inline code looks path-adjacent but does not satisfy the path grammar clearly enough, report it only in strict mode or as an informational warning, not as a hard failure at first. The fifth rule is `noncanonical-local-path`: if a repository-local path is written in noncanonical form, such as the examples below, report it and offer autofix.
 
-Be conservative about style-enforcement rules. A link like `[architecture guide](docs/architecture.md)` carries human-readable anchor text that might be valuable in prose. A backticked path like `docs/architecture.md` may also be intentional in a link-first repository if it appears inside a code-focused section or a configured exception file. The safe initial rule is narrower: autofix only links whose label is equivalent to the destination, differs only by formatting, or is a trivial filename echo, and only autofix backticks to links when the canonical link text can be generated mechanically without changing the sentence meaning. For all other local style mismatches, report with a message but do not autofix until the rule has proven low-noise in fixtures and real repository trials.
+    ./docs/PLANS.md
+    docs/PLANS.md
+
+Be conservative about style-enforcement rules. A link like the example below carries human-readable anchor text that might be valuable in prose. A backticked path like the second example below may also be intentional in a link-first repository if it appears inside a code-focused section or a configured exception file.
+
+    [architecture guide](docs/architecture.md)
+    `docs/architecture.md`
+
+The safe initial rule is narrower: autofix only links whose label is equivalent to the destination, differs only by formatting, or is a trivial filename echo, and only autofix backticks to links when the canonical link text can be generated mechanically without changing the sentence meaning. For all other local style mismatches, report with a message but do not autofix until the rule has proven low-noise in fixtures and real repository trials.
 
 Implement configuration so repositories can tune both the grammar and the style policy without editing code. The configuration file format should be TOML. The configuration should support concepts for `include`, `exclude`, allowed path extensions, special-case filenames, documentation roots, relative-path policy, ignored paths, local-reference style selection, and style exceptions. The exact TOML key structure does not need to be finalized yet, but the runtime model must cover those concepts so the syntax can be refined without reworking the engine.
 
@@ -101,6 +137,10 @@ Build ignore-pattern infrastructure into the first configuration layer even if t
 After the core rules exist, add autofix only for deterministic rewrites. The safe autofix set is: replace local Markdown links whose label is equivalent to the destination with a backticked normalized repository-relative path when `local_reference_style` is `backticks`; replace local backticked paths with a canonical Markdown link when `local_reference_style` is `links` and the link text can be generated deterministically; normalize local path spelling to the canonical repository-relative form; and optionally remove leading `./` from otherwise valid paths. Do not autofix unresolved references, because the tool cannot know the author’s intended target. Do not autofix ambiguous inline code. Every autofix should preserve surrounding punctuation and whitespace. Where a rewrite changes Markdown structure rather than a plain text slice, prefer regenerating only the affected node or file through the mdast serialization path rather than piecemeal string surgery. The diagnostics model should therefore distinguish between fixable and non-fixable violations so check-only mode can accurately explain what autofix would change without mutating any files.
 
 Testing must use fixtures rather than only unit-level parser mocks. Create a `fixtures/` area containing small synthetic repositories or document sets with known pass and fail expectations. Each fixture should include Markdown files, target files on disk, expected diagnostics, and expected autofix output where applicable. Include cases for valid backticked paths, valid link-style local references, valid external links, valid symbol references, invalid stale paths, same-name links rewritten to backticks, bare backticked paths rewritten to links in link-first mode, links with meaningful labels left untouched, code blocks ignored, Windows-style path separators rejected or normalized, and case-mismatch warnings. Add tests that assert line and column numbers, because diagnostics without stable positions are difficult to use in editors and continuous integration.
+
+In addition to rule-level and parser-level tests, add automated CLI integration tests under `tests/` that operate on a dedicated checked-in test repository fixture. Store a representative sample repository under a path such as `tests/test-repos/basic/`. Each integration test must copy that fixture tree into a temporary working directory before invoking the compiled CLI so tests can freely run check-only mode, machine-readable mode, and autofix mode without mutating the checked-in source fixture. Those tests should assert process exit codes, emitted diagnostics, post-diagnostic autofix hints, rewritten file contents after autofix, and rerun idempotence after a fix has already been applied.
+
+Add coverage reporting as part of the documented validation flow. Use `cargo test` for normal automated test execution and `cargo llvm-cov` for coverage output over unit tests, fixture tests, and CLI integration tests. The plan does not need to lock in a minimum percentage yet, but it must require generating and recording a coverage summary so gaps in CLI-path testing are visible.
 
 Once the linter is reliable in isolation, integrate it into the repository that adopts it. Add a command such as `cargo run -- lint .` during development or the installed CLI form `dglint lint .` in documentation and CI. Add continuous integration so every pull request validates documentation references. Update `AGENTS.md`, `README.md`, or the repository’s style guide to explain the selected convention in one short rule: repository-local file and directory references in prose should follow the configured local-reference style policy, and exceptions should be explicit rather than ad hoc.
 
@@ -167,7 +207,12 @@ Run the following commands from the repository root that will contain the linter
         cargo test classify
         cargo test normalize
 
-    Expected outcome: Tests prove that `docs/PLANS.md` is classified as a local path, `Program` is not, `foo/bar` is a path candidate, and `https://example.com` is external.
+    Expected outcome: Tests prove the examples below are classified correctly.
+
+        `docs/PLANS.md` -> local path
+        `Program` -> not a path
+        `foo/bar` -> path candidate
+        `https://example.com` -> external
 
 5. Implement style-policy configuration, ignore-pattern infrastructure, and lint rules.
 
@@ -196,7 +241,29 @@ Run the following commands from the repository root that will contain the linter
         test fix::rewrites_backticked_paths_to_links_in_link_mode ... ok
         test fix::normalizes_dot_slash_paths ... ok
 
-7. Run the linter against the repository itself and refine configuration to reduce false positives.
+7. Add CLI integration tests that use copied test repositories.
+
+    Working directory: crate root
+
+    Example commands:
+
+        cargo test cli
+        cargo test integration
+
+    Expected outcome: Integration tests copy a checked-in test repository fixture into a temporary working directory, run the compiled `dglint` binary against that copy, and prove the CLI emits the expected diagnostics, exit codes, autofix hints, and file rewrites without mutating the source fixture.
+
+8. Generate coverage output for the full test suite.
+
+    Working directory: crate root
+
+    Example commands:
+
+        cargo llvm-cov --summary-only
+        cargo llvm-cov --html
+
+    Expected outcome: Coverage output includes parser tests, rule tests, autofix tests, and CLI integration tests. The summary is recorded in this plan’s `Artifacts and Notes` section so future contributors can see whether end-to-end CLI paths are exercised.
+
+9. Run the linter against the repository itself and refine configuration to reduce false positives.
 
     Working directory: repository root
 
@@ -207,13 +274,13 @@ Run the following commands from the repository root that will contain the linter
 
     Expected outcome: Initial failures expose real stale references and a manageable number of convention mismatches. After fixes and configuration tuning, `dglint lint .` exits successfully on the repository.
 
-8. Add continuous integration.
+10. Add continuous integration.
 
     Working directory: repository root
 
-    Example outcome: The repository’s pull request validation runs `dglint lint .` and fails the build when violations are introduced.
+    Example outcome: The repository’s pull request validation runs `cargo test`, runs `cargo llvm-cov --summary-only` or an equivalent coverage command, runs `dglint lint .`, and fails the build when violations or test regressions are introduced.
 
-9. Update documentation.
+11. Update documentation.
 
     Working directory: repository root
 
@@ -227,19 +294,44 @@ Validation is complete only when all of the following are true.
 
 Running the linter against fixture repositories proves correct behavior for both passing and failing cases. At minimum, there must be fixtures covering valid backticked file paths, valid link-style local references, broken local paths in both representations, local Markdown links that should be rewritten to backticks in backtick mode, backticked paths that should be rewritten to links in link mode, local Markdown links that should remain links because their label adds meaning, code spans that are symbols rather than paths, commands that are not paths, code blocks that are ignored, and path normalization edge cases.
 
+Automated CLI integration tests must use at least one checked-in test repository fixture that is copied into a temporary working directory before each test run. Acceptance is not complete until those tests prove check-only mode, machine-readable mode, and autofix mode against the copied repository tree, including exit codes, stdout or stderr diagnostics, autofix-hint output, rewritten file contents after autofix, and a second run that confirms autofix idempotence.
+
+Coverage validation is also required. Run `cargo llvm-cov` across the automated test suite and record the resulting summary in `Artifacts and Notes`. The goal is not a hard numeric gate yet; the goal is to prove that coverage reporting exists and that the CLI integration tests contribute to exercised code paths.
+
 Running the linter against the repository itself must demonstrate at least one of these observable outcomes. Either it finds real documentation drift that you then fix, or it passes cleanly after confirming existing docs already satisfy the convention. In both cases, the command and result must be recorded in this plan’s `Artifacts and Notes` section.
 
 Acceptance should be phrased in behavior, not implementation details:
 
-- When a Markdown file contains `docs/PLANS.md` in backticks, the file exists, and `local_reference_style` is `backticks`, `dglint` emits no error.
-- When a Markdown file contains `[docs/PLANS.md](docs/PLANS.md)`, the file exists, and `local_reference_style` is `links`, `dglint` emits no error.
-- When a Markdown file contains `docs/DOES-NOT-EXIST.md` in backticks or `[docs/DOES-NOT-EXIST.md](docs/DOES-NOT-EXIST.md)`, `dglint` reports `unresolved-local-path` with file, line, and column.
-- When a Markdown file contains `[docs/PLANS.md](docs/PLANS.md)` and `local_reference_style` is `backticks`, `dglint` reports `prefer-backticks-for-local-paths` and autofix rewrites it to `docs/PLANS.md`.
-- When a Markdown file contains `docs/PLANS.md` in backticks and `local_reference_style` is `links`, `dglint` reports `prefer-links-for-local-paths` and autofix rewrites it to `[docs/PLANS.md](docs/PLANS.md)` or another configured canonical label form.
-- When a Markdown file contains `[planning guide](docs/PLANS.md)`, `dglint` either leaves it untouched under the repository’s exception policy or reports it without autofix, depending on configured strictness.
+- When a Markdown file contains the example below in backticks, the file exists, and `local_reference_style` is `backticks`, `dglint` emits no error.
+
+      docs/PLANS.md
+
+- When a Markdown file contains the example below as a Markdown link, the file exists, and `local_reference_style` is `links`, `dglint` emits no error.
+
+      [docs/PLANS.md](docs/PLANS.md)
+
+- When a Markdown file contains one of the examples below, `dglint` reports `unresolved-local-path` with file, line, and column.
+
+      `docs/DOES-NOT-EXIST.md`
+      [docs/DOES-NOT-EXIST.md](docs/DOES-NOT-EXIST.md)
+
+- When a Markdown file contains the example below and `local_reference_style` is `backticks`, `dglint` reports `prefer-backticks-for-local-paths` and autofix rewrites it to the backticked form.
+
+      [docs/PLANS.md](docs/PLANS.md)
+
+- When a Markdown file contains the example below in backticks and `local_reference_style` is `links`, `dglint` reports `prefer-links-for-local-paths` and autofix rewrites it to a Markdown link with the same destination or another configured canonical label form.
+
+      docs/PLANS.md
+
+- When a Markdown file contains the example below, `dglint` either leaves it untouched under the repository’s exception policy or reports it without autofix, depending on configured strictness.
+
+      [planning guide](docs/PLANS.md)
 - When a Markdown file contains `Program` or `npm test`, `dglint` does not incorrectly report these as missing files.
 - When `dglint` runs in check-only mode and finds one or more fixable violations, it prints a post-diagnostic summary that states how many violations are fixable, identifies the fixable rule kinds found in that run, and prints the exact autofix command for the same invocation shape, including `--config` or path/glob arguments when present.
 - When `dglint` runs in check-only mode and finds only non-fixable violations such as `unresolved-local-path`, it does not advertise autofix for those violations.
+- When an integration test copies a checked-in test repository fixture into a temporary working directory and runs `dglint` against that copy, the CLI returns the expected exit code and diagnostics without mutating the source fixture directory.
+- When an integration test runs autofix against the copied test repository, the expected files change in the working copy, and a second `dglint lint` run over that same working copy confirms the fix was applied cleanly.
+- When the test suite runs under `cargo llvm-cov`, the coverage summary includes the CLI integration-test run and is captured in the plan artifacts.
 - When the repository’s continuous integration runs `dglint` on a pull request, a newly introduced broken repository-local path causes the job to fail.
 
 ## Idempotence and Recovery
@@ -306,3 +398,7 @@ Revision note: Added ignore-pattern infrastructure to the current plan as founda
 Revision note: Selected TOML as the configuration file format for `dglint`, while still leaving the detailed key structure and override syntax open for further design work.
 
 Revision note: Clarified the CLI contract as two primary user workflows, check-only and autofix, and required check-only mode to mark fixable diagnostics, summarize what autofix can change, and print the exact follow-up autofix command whenever safe rewrites are available.
+
+Revision note: Moved hypothetical path examples in this plan into indented code blocks so the repository can dogfood `dglint` on its own docs without linting narrative samples as live references.
+
+Revision note: Added automated CLI integration-test requirements based on copying checked-in test repositories into temporary working directories, and added `cargo llvm-cov` coverage reporting to the validation and CI expectations.
