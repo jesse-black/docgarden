@@ -1,4 +1,4 @@
-# Doc Gardener Linter
+# Doc Gardening Linter
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -6,7 +6,7 @@ Maintain this document in accordance with `docs/PLANS.md`. If that file exists i
 
 ## Purpose / Big Picture
 
-After this change, the repository will have a dedicated linter named `Doc Gardener Linter`, exposed as the executable `dglint`, that checks whether Markdown documentation refers to local repository files and directories using a repository-selected style policy and whether those references actually resolve to real paths in the working tree. A repository will be able to choose whether local file references should prefer compact backticked paths, Markdown links, or a narrower exception-based mix. Example representations:
+After this change, the repository will have a dedicated linter named `Doc Gardening Linter`, exposed as the executable `dglint`, that checks whether Markdown documentation refers to local repository files and directories using a repository-selected style policy and whether those references actually resolve to real paths in the working tree. A repository will be able to choose whether local file references should prefer compact backticked paths, Markdown links, or a narrower exception-based mix. Example representations:
 
     `docs/PLANS.md`
     [docs/PLANS.md](docs/PLANS.md)
@@ -21,7 +21,10 @@ You will know this is working when running `dglint lint .` against a repository 
 - [x] (2026-03-06 18:40Z) Revise the ExecPlan so check-only mode explicitly reports when autofix is available and prints the corresponding autofix command plus a summary of fixable diagnostics.
 - [x] (2026-03-06 19:05Z) Revise hypothetical path examples so dogfooding on this repository does not lint narrative samples as live references, and document that authoring rule in `AGENTS.md`.
 - [x] (2026-03-06 19:20Z) Extend the ExecPlan to require CLI integration tests that copy a fixture repository into a temporary working directory and to require coverage reporting for the automated test suite.
-- [ ] (2026-03-06 00:00Z) Scaffold the Rust crate for `Doc Gardener Linter` and expose a working `dglint` command-line executable without changing repository docs yet.
+- [x] (2026-03-06 19:35Z) Revise the ExecPlan so known file extensions are configurable but seeded from a robust built-in default set derived from a maintained extension corpus rather than a short handwritten list.
+- [x] (2026-03-06 19:45Z) Commit the initial configuration shape to a dedicated root-level `dglint.toml` with Ruff-like top-level keys, `per-file-ignores`, and gitignore-style glob semantics.
+- [x] (2026-03-06 19:55Z) Lock down the remaining v1 config contract details: config discovery, CLI-over-config precedence, explicit special filename keys, repo-root-relative matching, no config layering, default scan targets, and symlink behavior.
+- [ ] (2026-03-06 00:00Z) Scaffold the Rust crate for `Doc Gardening Linter` and expose a working `dglint` command-line executable without changing repository docs yet.
 - [ ] (2026-03-06 00:00Z) Define the reference taxonomy: what counts as a file-path reference, what counts as a code-symbol reference, and what counts as an external navigation link.
 - [ ] (2026-03-06 00:00Z) Implement Markdown parsing with `markdown-rs`, including extraction of inline code spans, fenced code blocks, Markdown links, and source positions from mdast nodes.
 - [ ] (2026-03-06 00:00Z) Implement path classification rules for backticked text and repository-relative path resolution.
@@ -45,8 +48,24 @@ You will know this is working when running `dglint lint .` against a repository 
   Rationale: The core product is mechanical validation of repository-local references, not a permanently hard-coded opinion about one representation. Backticks remain the best default for agent-oriented repositories, but the tool will be more reusable if repositories can opt into link-first behavior or narrow exception lists without forking rule logic.
   Date/Author: 2026-03-06 / Codex
 
-- Decision: Use TOML as the configuration file format, while deferring the exact configuration key structure until the rule model and override ergonomics are clearer.
-  Rationale: TOML matches Rust ecosystem expectations, is comfortable for hand-edited linter configuration, supports comments, and keeps room for readable nested settings and override blocks. Choosing the serialization format now reduces implementation ambiguity without prematurely locking in the user-facing config layout.
+- Decision: Use a dedicated `dglint.toml` file with root-level TOML keys for the initial configuration format.
+  Rationale: TOML matches Rust ecosystem expectations and is comfortable for hand-edited linter configuration. A dedicated `dglint.toml` keeps the first open-source release simpler than supporting embedded configuration in shared tool files, while still leaving room for future embedding under a table such as `[tool.dglint]` if real demand appears later.
+  Date/Author: 2026-03-06 / Codex
+
+- Decision: Follow Ruff-like configuration ergonomics for discovery and overrides, while keeping the schema specific to doc linting.
+  Rationale: Ruff’s configuration style is familiar, compact, and practical for root-level `include`, `exclude`, and per-file ignores. Adopting that shape makes `dglint` easier to learn without inheriting Python-specific concepts that do not fit this tool.
+  Date/Author: 2026-03-06 / Codex
+
+- Decision: Use gitignore-style glob semantics for include, exclude, and per-file ignore patterns.
+  Rationale: Contributors already understand gitignore-style matching, especially in repositories that use `.gitignore`, `.ignore`, or similar tooling. Reusing that mental model reduces ambiguity and makes it easier to explain how patterns such as `docs/generated/**` or `node_modules/**` behave.
+  Date/Author: 2026-03-06 / Codex
+
+- Decision: Keep configuration discovery and precedence simple in v1: use one dedicated `dglint.toml`, make all patterns repo-root-relative, let CLI flags override config, and do not support layered or nested config files.
+  Rationale: Discovery and precedence bugs are a common source of user confusion in new tools. A single discovered config file plus explicit `--config` override keeps behavior easy to explain and test. Repo-root-relative matching avoids cwd-dependent surprises, and refusing nested config files or inheritance prevents a large amount of accidental complexity in the first release.
+  Date/Author: 2026-03-06 / Codex
+
+- Decision: Do not follow directory symlinks during scanning in v1, and lint only real files within the repository root unless a future plan expands that behavior.
+  Rationale: Symlink traversal can create duplicate work, loops, or confusing paths that appear to leave the repository tree. The safest initial behavior is to lint regular files selected from the repository root and skip symlinked directories.
   Date/Author: 2026-03-06 / Codex
 
 - Decision: Treat `dglint` as a two-mode CLI with explicit check-only and autofix user experience requirements.
@@ -57,8 +76,12 @@ You will know this is working when running `dglint lint .` against a repository 
   Rationale: The most important behavior is command-line behavior against a real repository tree, not only internal rule functions. A dedicated test-repository fixture copied into a temporary working directory makes it possible to assert diagnostics, exit codes, and autofix behavior without mutating checked-in fixtures. Coverage should be collected with `cargo-llvm-cov` because plain Cargo does not emit useful coverage summaries by itself.
   Date/Author: 2026-03-06 / Codex
 
-- Decision: Name the tool `Doc Gardener Linter` and expose the executable as `dglint`.
-  Rationale: The human-facing title aligns with the broader doc-gardening concept, while the shorter executable name is efficient for repeated local and CI use. This also leaves room for a future higher-level doc-gardening agent or workflow that may use `dglint` as one component.
+- Decision: Make known file extensions configurable, but seed the default extension and filename set from a vendored snapshot of GitHub Linguist data.
+  Rationale: A short handwritten allowlist will underfit real repositories and create churn as new common file types are discovered. GitHub Linguist maintains a broad, widely used mapping of filenames and extensions across programming, markup, prose, and data formats, which makes it the best fast-start source for robust defaults. The linter should vendor a filtered snapshot of that data into the crate rather than depending on a live network fetch or a Ruby runtime at execution time.
+  Date/Author: 2026-03-06 / Codex
+
+- Decision: Name the tool `Doc Gardening Linter` and expose the executable as `dglint`.
+  Rationale: The human-facing title matches the broader doc-gardening practice while avoiding the awkward stacked-agent phrasing of `Doc Gardener Linter`. The shorter executable name remains efficient for repeated local and CI use. This also leaves room for a future higher-level doc-gardening agent or workflow that may use `dglint` as one component.
   Date/Author: 2026-03-06 / Codex
 
 - Decision: Implement the first version in Rust using `markdown-rs` for Markdown-to-mdast parsing.
@@ -97,17 +120,17 @@ In this plan, a "repository-local path reference" means a textual mention of a f
 
 The linter should operate on Markdown files, probably under `docs/`, `README.md`, `AGENTS.md`, and other configured documentation roots. It must parse Markdown structure rather than relying only on regular expressions because fenced code blocks, inline code spans, link destinations, autolinks, and escaped punctuation behave differently. It should ignore fenced code blocks by default because those blocks often contain examples that are not intended to be live repository references. It should inspect prose, headings, list items, tables if present, and inline code spans.
 
-The implementation should be repository-agnostic. It belongs in its own repository or crate so other repositories can adopt it. That means configuration must be explicit. The linter should accept a repository root to scan, a set of Markdown globs to include or exclude, and a small TOML configuration file describing allowed path extensions, documentation roots, local-reference style policy, and exceptions.
+The implementation should be repository-agnostic. It belongs in its own repository or crate so other repositories can adopt it. That means configuration must be explicit. The linter should accept a repository root to scan, a set of repository-relative include and exclude patterns, and a small dedicated TOML configuration file named `dglint.toml` describing allowed path extensions, documentation roots, local-reference style policy, and exceptions. In v1, config discovery should be simple: if `--config` is provided, load exactly that file; otherwise look for `dglint.toml` at the repository root being scanned. Do not merge multiple config files, do not walk parent directories beyond the selected repository root, and do not support nested per-directory config files in the initial implementation.
 
 The Rust implementation should build on `markdown-rs` to parse source Markdown into mdast nodes with source positions. For autofix support, the implementation should use the Rust mdast serialization stack to write edited mdast trees back to Markdown text. This keeps parsing and serialization aligned around mdast rather than mixing unrelated text-manipulation approaches.
 
 ## Plan of Work
 
-Start by creating a standalone Rust crate for `Doc Gardener Linter` that builds a CLI executable named `dglint`. Use Cargo as the package manager and test runner. The crate should expose a small command-line interface with at least these modes: scan and report violations, scan with machine-readable output, and scan with autofix for safe rewrites. Treat the user-facing CLI contract as two primary human workflows: a check-only mode that scans and reports without modifying files, and an autofix mode that applies the safe deterministic rewrites. In check-only mode, every diagnostic that is safe to rewrite should be marked as fixable. If any fixable diagnostics are found, the CLI must print a short fix summary after the diagnostics, including how many violations are autofix candidates, which rule kinds are fixable in the current run, and the exact autofix command the user should run next for the same repository root, globs, and configuration file. The command-line interface should accept a repository root, optional file globs, and a configuration file path. It should exit with code `0` when no violations are found, `1` when violations are found, and a distinct non-zero code when configuration or parser errors prevent a complete run.
+Start by creating a standalone Rust crate for `Doc Gardening Linter` that builds a CLI executable named `dglint`. Use Cargo as the package manager and test runner. The crate should expose a small command-line interface with at least these modes: scan and report violations, scan with machine-readable output, and scan with autofix for safe rewrites. Treat the user-facing CLI contract as two primary human workflows: a check-only mode that scans and reports without modifying files, and an autofix mode that applies the safe deterministic rewrites. In check-only mode, every diagnostic that is safe to rewrite should be marked as fixable. If any fixable diagnostics are found, the CLI must print a short fix summary after the diagnostics, including how many violations are autofix candidates, which rule kinds are fixable in the current run, and the exact autofix command the user should run next for the same repository root, globs, and configuration file. The command-line interface should accept a repository root, optional file globs, and a configuration file path. It should exit with code `0` when no violations are found, `1` when violations are found, and a distinct non-zero code when configuration or parser errors prevent a complete run.
 
 Implement parsing on top of a real Markdown abstract syntax tree rather than trying to lint with line-oriented regular expressions. Use `markdown-rs` to parse Markdown into mdast, and preserve source positions for inline code spans, link nodes, text nodes, and other relevant nodes. Source positions matter because the linter needs to print file, line, and column for each violation and because safe autofix requires precise replacements or stable AST-to-Markdown regeneration.
 
-Define the reference taxonomy in code before implementing rules. A repository-local path reference must satisfy all of the following conditions unless a configuration override says otherwise. It must be repository-relative, not absolute. It must be path-shaped. "Path-shaped" means at least one of these is true: it contains a `/`; it starts with `./` or `../`; it ends with a known file extension such as `.md`, `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, `.yml`, `.yaml`, `.cs`, `.csproj`, `.tf`, `.sh`, `.sql`, `.rs`, `.toml`; or it exactly matches a configured special-case filename such as `README.md`, `AGENTS.md`, `LICENSE`, `Makefile`, or `Cargo.toml`. If a backticked token does not satisfy these rules, it is not automatically considered a path and should not be resolved against the filesystem.
+Define the reference taxonomy in code before implementing rules. A repository-local path reference must satisfy all of the following conditions unless a configuration override says otherwise. It must be repository-relative, not absolute. It must be path-shaped. "Path-shaped" means at least one of these is true: it contains a `/`; it starts with `./` or `../`; it ends with a known file extension; or it exactly matches a configured special-case filename. The known-extension and special-filename defaults must be robust and configurable rather than hard-coded to a tiny starter list. Seed the built-in defaults from a vendored snapshot of GitHub Linguist's extension and filename data, then filter that corpus down to the text-like file kinds the linter should plausibly treat as repository-local references by default. The configuration layer must allow repositories to add, remove, or override extensions and special filenames without patching code. If a backticked token does not satisfy these rules, it is not automatically considered a path and should not be resolved against the filesystem.
 
 Implement path normalization next. Normalize candidate references to repository-relative paths from the repository root rather than resolving relative to the current Markdown file. This is a deliberate convention because repo-relative references are easier for both agents and linters to reason about consistently. The linter should flag relative same-directory references such as the examples below unless the repository explicitly chooses to allow them.
 
@@ -130,13 +153,35 @@ Be conservative about style-enforcement rules. A link like the example below car
 
 The safe initial rule is narrower: autofix only links whose label is equivalent to the destination, differs only by formatting, or is a trivial filename echo, and only autofix backticks to links when the canonical link text can be generated mechanically without changing the sentence meaning. For all other local style mismatches, report with a message but do not autofix until the rule has proven low-noise in fixtures and real repository trials.
 
-Implement configuration so repositories can tune both the grammar and the style policy without editing code. The configuration file format should be TOML. The configuration should support concepts for `include`, `exclude`, allowed path extensions, special-case filenames, documentation roots, relative-path policy, ignored paths, local-reference style selection, and style exceptions. The exact TOML key structure does not need to be finalized yet, but the runtime model must cover those concepts so the syntax can be refined without reworking the engine.
+Implement configuration so repositories can tune both the grammar and the style policy without editing code. The initial configuration file format should be a dedicated root-level `dglint.toml`. Follow a Ruff-like top-level structure rather than nested tool tables for v1 because the file is dedicated to this tool. At minimum, the file must support root-level keys such as `include`, `exclude`, `local-reference-style`, `extend-extensions`, `remove-extensions`, `extend-special-filenames`, `remove-special-filenames`, and a `[per-file-ignores]` table. The extension and filename settings must be layered on top of the robust built-in defaults rather than replacing them with an underspecified minimal list. Embedded configuration in shared files such as `pyproject.toml` or `Cargo.toml` is explicitly out of scope for the initial implementation. CLI flags must override configuration-file values when both are present.
 
-Build ignore-pattern infrastructure into the first configuration layer even if the final TOML structure is still under discussion. The implementation should support two concepts from the start. The first is a whole-file exclusion that removes matching Markdown files from all linting. The second is a rule-specific exclusion that still scans a file but suppresses named rules for matching paths. The plan should stay neutral about the final TOML key layout or override shape, but the runtime behavior should be part of the first implementation because repositories will need it immediately for files such as `AGENTS.md`, generated docs, or future plan directories.
+The built-in default scan target set should be explicit in the implementation and documentation. Start from repository-root-relative Markdown-oriented defaults that include:
+
+    docs/**
+    README.md
+    AGENTS.md
+    *.md
+
+Then let configuration and CLI options widen or narrow that set. All `include`, `exclude`, and `[per-file-ignores]` patterns are matched relative to the repository root, not relative to the current working directory and not relative to the location of `dglint.toml`.
+
+The intended shape is as follows:
+
+    exclude = ["node_modules/**"]
+    include = ["docs/**", "README.md", "AGENTS.md"]
+    extend-extensions = [".proto"]
+    remove-extensions = [".txt"]
+    extend-special-filenames = ["Justfile"]
+    remove-special-filenames = ["LICENSE"]
+
+    [per-file-ignores]
+    "docs/legacy.md" = ["prefer-backticks-for-local-paths"]
+    "docs/generated/**" = ["ambiguous-inline-code"]
+
+Build ignore-pattern infrastructure into the first configuration layer using that `dglint.toml` structure from the start. The implementation should support two concepts from the start. The first is a whole-file exclusion that removes matching files from all linting through root-level `exclude` patterns. The second is a rule-specific exclusion that still scans a file but suppresses named rules for matching paths through `[per-file-ignores]`. Pattern matching for `include`, `exclude`, and `[per-file-ignores]` must use gitignore-style glob semantics and must be documented with clear precedence rules. The initial precedence rule should be: start from the built-in default documentation targets, apply config-file `include` to widen or narrow the candidate set, apply config-file `exclude` to remove matches, apply CLI include or exclude overrides if present, then apply `[per-file-ignores]` only after a file is selected for scanning. Skip symlinked directories during file discovery in v1, and treat symlink handling as an explicit future extension if users need it.
 
 After the core rules exist, add autofix only for deterministic rewrites. The safe autofix set is: replace local Markdown links whose label is equivalent to the destination with a backticked normalized repository-relative path when `local_reference_style` is `backticks`; replace local backticked paths with a canonical Markdown link when `local_reference_style` is `links` and the link text can be generated deterministically; normalize local path spelling to the canonical repository-relative form; and optionally remove leading `./` from otherwise valid paths. Do not autofix unresolved references, because the tool cannot know the author’s intended target. Do not autofix ambiguous inline code. Every autofix should preserve surrounding punctuation and whitespace. Where a rewrite changes Markdown structure rather than a plain text slice, prefer regenerating only the affected node or file through the mdast serialization path rather than piecemeal string surgery. The diagnostics model should therefore distinguish between fixable and non-fixable violations so check-only mode can accurately explain what autofix would change without mutating any files.
 
-Testing must use fixtures rather than only unit-level parser mocks. Create a `fixtures/` area containing small synthetic repositories or document sets with known pass and fail expectations. Each fixture should include Markdown files, target files on disk, expected diagnostics, and expected autofix output where applicable. Include cases for valid backticked paths, valid link-style local references, valid external links, valid symbol references, invalid stale paths, same-name links rewritten to backticks, bare backticked paths rewritten to links in link-first mode, links with meaningful labels left untouched, code blocks ignored, Windows-style path separators rejected or normalized, and case-mismatch warnings. Add tests that assert line and column numbers, because diagnostics without stable positions are difficult to use in editors and continuous integration.
+Testing must use fixtures rather than only unit-level parser mocks. Create a `fixtures/` area containing small synthetic repositories or document sets with known pass and fail expectations. Each fixture should include Markdown files, target files on disk, expected diagnostics, and expected autofix output where applicable. Include cases for valid backticked paths, valid link-style local references, valid external links, valid symbol references, invalid stale paths, same-name links rewritten to backticks, bare backticked paths rewritten to links in link-first mode, links with meaningful labels left untouched, code blocks ignored, Windows-style path separators rejected or normalized, and case-mismatch warnings. Add tests that assert line and column numbers, because diagnostics without stable positions are difficult to use in editors and continuous integration. Add configuration tests that prove repositories can extend and shrink the default extension set, and snapshot tests that prove the vendored default extension corpus is loaded deterministically.
 
 In addition to rule-level and parser-level tests, add automated CLI integration tests under `tests/` that operate on a dedicated checked-in test repository fixture. Store a representative sample repository under a path such as `tests/test-repos/basic/`. Each integration test must copy that fixture tree into a temporary working directory before invoking the compiled CLI so tests can freely run check-only mode, machine-readable mode, and autofix mode without mutating the checked-in source fixture. Those tests should assert process exit codes, emitted diagnostics, post-diagnostic autofix hints, rewritten file contents after autofix, and rerun idempotence after a fix has already been applied.
 
@@ -214,6 +259,8 @@ Run the following commands from the repository root that will contain the linter
         `foo/bar` -> path candidate
         `https://example.com` -> external
 
+    Additional expected outcome: Tests prove the built-in default extension set recognizes common documentation and source-code paths without requiring per-repository configuration, while TOML overrides can add or remove specific extensions or special filenames.
+
 5. Implement style-policy configuration, ignore-pattern infrastructure, and lint rules.
 
     Working directory: crate root
@@ -225,6 +272,7 @@ Run the following commands from the repository root that will contain the linter
         cargo test rules
 
     Expected outcome: Fixture tests prove unresolved paths, style-policy violations, ignore-pattern behavior, and noncanonical local paths are reported with file, line, column, rule id, and message.
+    Additional expected outcome: Configuration tests prove `dglint.toml` root-level `include` and `exclude` keys, gitignore-style matching, `extend-special-filenames` and `remove-special-filenames`, CLI-over-config precedence, and `[per-file-ignores]` behave as documented.
 
 6. Implement autofix for the safe subset.
 
@@ -293,6 +341,12 @@ Run the following commands from the repository root that will contain the linter
 Validation is complete only when all of the following are true.
 
 Running the linter against fixture repositories proves correct behavior for both passing and failing cases. At minimum, there must be fixtures covering valid backticked file paths, valid link-style local references, broken local paths in both representations, local Markdown links that should be rewritten to backticks in backtick mode, backticked paths that should be rewritten to links in link mode, local Markdown links that should remain links because their label adds meaning, code spans that are symbols rather than paths, commands that are not paths, code blocks that are ignored, and path normalization edge cases.
+
+The automated tests must also prove that the default extension and filename corpus is robust enough for common documentation and source repositories out of the box, and that configuration can override those defaults safely. At minimum, add tests for a common documentation extension, a common programming extension, a special filename with no extension, and a repository-specific override that adds one extension and removes another.
+
+Configuration acceptance is not complete until tests prove that `dglint.toml` is discovered and parsed in its dedicated root-level form, that `--config` overrides discovery, that `include` and `exclude` use gitignore-style glob semantics rooted at the repository root, that CLI settings override config-file settings, that `extend-special-filenames` and `remove-special-filenames` work as documented, that no nested config layering occurs, and that `[per-file-ignores]` suppresses only the named rules for matching files that were otherwise selected for scanning.
+
+File-discovery acceptance is not complete until tests prove the built-in default scan target set is applied as documented and that symlinked directories are skipped during v1 scanning.
 
 Automated CLI integration tests must use at least one checked-in test repository fixture that is copied into a temporary working directory before each test run. Acceptance is not complete until those tests prove check-only mode, machine-readable mode, and autofix mode against the copied repository tree, including exit codes, stdout or stderr diagnostics, autofix-hint output, rewritten file contents after autofix, and a second run that confirms autofix idempotence.
 
@@ -402,3 +456,11 @@ Revision note: Clarified the CLI contract as two primary user workflows, check-o
 Revision note: Moved hypothetical path examples in this plan into indented code blocks so the repository can dogfood `dglint` on its own docs without linting narrative samples as live references.
 
 Revision note: Added automated CLI integration-test requirements based on copying checked-in test repositories into temporary working directories, and added `cargo llvm-cov` coverage reporting to the validation and CI expectations.
+
+Revision note: Replaced the tiny example-based extension list with a requirement for configurable extension detection backed by a robust built-in default corpus, with GitHub Linguist named as the intended seed source for vendored defaults.
+
+Revision note: Committed the initial config format to a dedicated root-level `dglint.toml`, adopted Ruff-like root-level keys and `per-file-ignores`, declared embedded config out of scope for v1, and specified gitignore-style glob semantics plus precedence expectations.
+
+Revision note: Added the remaining initial config-contract details: explicit config discovery and `--config` behavior, CLI-over-config precedence, special-filename add/remove keys, repo-root-relative pattern evaluation, no config layering in v1, explicit default scan targets, and a conservative symlink policy.
+
+Revision note: Renamed the human-facing tool from `Doc Gardener Linter` to `Doc Gardening Linter` while keeping the executable name `dglint`, so the linter name reads naturally alongside a separate `Doc Gardener` agent persona.
