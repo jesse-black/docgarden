@@ -7,5 +7,14 @@
 - `src/` – Rust code for the `dglint` linter.
 
 ## Documentation Guidance
-- When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, put them in indented code blocks so `dglint` can ignore them during dogfooding.
+- When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
 - Keep live repository references in normal prose only when they are intended to resolve and be linted.
+- After updating documentation, run `dglint` on the changed files before finishing so hypothetical examples and stale references are caught locally.
+
+## Rust Workflow
+- Format Rust code with `cargo fmt`.
+- Run `cargo check` as the fast baseline compiler verification step.
+- Lint Rust code with `cargo clippy --all-targets --all-features -- -D warnings`.
+- Run `cargo test` for the automated test suite.
+- Run `cargo llvm-cov --summary-only` and keep coverage at or above 80% across the codebase before considering work complete.
+- For small lexical filters and token-shape checks, prefer direct string predicates such as `contains()` plus a single `chars().any(...)` pass over regexes. Reserve regexes for genuinely pattern-oriented parsing or matching.

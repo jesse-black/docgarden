@@ -1,3 +1,6 @@
 fn main() {
-    println!("Hello, world!");
+    if let Err(error) = dglint::run() {
+        eprintln!("{error:#}");
+        std::process::exit(2);
+    }
 }

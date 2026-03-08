@@ -11,6 +11,9 @@ These are candidate rule families and checks for `dglint` beyond local file-refe
 - Repo-map consistency: if `AGENTS.md` says a knowledge area exists under `docs/`, verify the directory or document is actually present.
 - Exception auditing: if the repository allows link exceptions or backtick exceptions, require them to be explicit and locally justified instead of ad hoc.
 - Unresolved-link repair suggestions: when a repository-local reference does not resolve, search the workspace in two stages before offering help. First, search for exact basename matches elsewhere in the tree. Second, if that is ambiguous or empty, search with fuzzy filename matching. Treat these as ranked repair suggestions first, not unconditional autofix, because the tool is inferring intent rather than applying a deterministic rewrite. If promoted later, require a clear safety policy such as "only autofix when exactly one high-confidence candidate exists."
+- Nonportable machine-path detection: add a separate scanner and rule family for host-specific absolute paths such as `C:\...`, `C:/...`, `/Users/alice/...`, or `/home/bob/...`. Keep this separate from repository-local path classification so `unresolved-local-path` remains focused on workspace references. Start warning-only if adopted, because machine-local path examples may be intentional in some docs.
+- Rich terminal presentation: after the basic `--color auto|always|never` support lands, consider richer human-readable output such as clickable hyperlinks in supported terminals, grouped rule summaries, compact and verbose display modes, and a more intentional visual layout. Keep this separate from the initial implementation so terminal styling does not distort the core linting contract.
+- Optional themed output: if open-source adopters want more ergonomic terminal output later, consider user-selectable themes or style presets for human-readable diagnostics. This should stay optional and must never affect JSON or other machine-readable output.
 
 ## Ownership And Freshness Metadata
 
@@ -34,6 +37,12 @@ These are candidate rule families and checks for `dglint` beyond local file-refe
 - Architecture-doc rules: prefer naming important files, modules, and types without brittle deep links to source lines, following the guidance in `docs/repository-knowledge/architecture-md.md`.
 - Architecture content checks: require sections that cover the bird's-eye view, code map, invariants, boundaries, and cross-cutting concerns for docs that claim to be architecture documents.
 - Boundary-language checks: flag architecture docs that drift into low-level implementation detail instead of answering "where does X live?" and "what are the invariants?".
+
+## Rust Tooling
+
+- `cargo-deny` integration: add dependency-policy, license, and source checks once the dependency graph stabilizes and CI is ready to enforce them.
+- `cargo-audit` integration: add vulnerability scanning for published crates and transitive dependencies as part of release or CI hygiene.
+- `cargo-nextest` adoption: consider switching the test runner from `cargo test` to `cargo nextest` once the integration-test matrix grows enough that speed, retries, and richer CI reporting matter.
 
 ## Priority Candidates
 
