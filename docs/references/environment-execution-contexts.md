@@ -8,7 +8,7 @@ The quick reference lives in `docs/TOOLS.md`.
 
 - Codex Cloud universal image Dockerfile: <https://raw.githubusercontent.com/openai/codex-universal/refs/heads/main/Dockerfile>
 - Codex Cloud default domain allowlist presets: <https://developers.openai.com/codex/cloud/internet-access#preset-domain-lists>
-- Repo-specific domain additions: `docs/references/codex-cloud-setup-domain-allowlist.md`
+- Repo-specific domain additions: `` `docs/references/codex-cloud-setup-domain-allowlist.md` ``
 - Jules Environment Setup: <https://jules.google/docs/environment/>
 
 ## Intent
@@ -23,9 +23,9 @@ Environment setup follows the repository knowledge philosophy of progressive dis
 4. **Avoid redundant tooling in cloud**: do not bootstrap tools that duplicate native platform integrations (for example, GitHub CLI in Codex Cloud).
 
 
-## Decision inputs for `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh`
+## Decision inputs for `` `scripts/setup-codex-cloud.sh` `` and `scripts/setup-jules.sh`
 
-Tooling included in `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
+Tooling included in `` `scripts/setup-codex-cloud.sh` `` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
 
 - Devcontainer toolchain baseline: `.devcontainer/Dockerfile`
 - Codex Cloud universal image baseline: <https://raw.githubusercontent.com/openai/codex-universal/refs/heads/main/Dockerfile>
@@ -33,8 +33,8 @@ Tooling included in `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` 
 - Repository workflow requirements and quality gates in code/docs/CI
 
 The setup scripts should only include tools that are needed for Voicer workflows and are not already reliably provided by Codex Cloud or Jules integrations, or their respective base images.
-It should also prefer distribution-derived values (for example, codename detection from `/etc/os-release`) over hardcoded repository codenames so the bootstrap remains portable as base images evolve.
-This includes deriving OS family and version from `/etc/os-release` when selecting distribution-specific bootstrap URLs (such as the Microsoft package feed bootstrap `.deb`).
+It should also prefer distribution-derived values (for example, codename detection from `` `/etc/os-release` ``) over hardcoded repository codenames so the bootstrap remains portable as base images evolve.
+This includes deriving OS family and version from `` `/etc/os-release` `` when selecting distribution-specific bootstrap URLs (such as the Microsoft package feed bootstrap `.deb`).
 
 ## Tool-selection rationale by environment
 
@@ -47,10 +47,10 @@ For some tools (for example Task and TFLint), the bootstrap may prefer GitHub re
 ## Operational workflow
 
 1. Update setup script and docs in a branch.
-2. Configure Codex Cloud setup command to call `scripts/setup-codex-cloud.sh` or Jules to call `scripts/setup-jules.sh`.
+2. Configure Codex Cloud setup command to call `` `scripts/setup-codex-cloud.sh` `` or Jules to call `scripts/setup-jules.sh`.
 3. Validate required tool availability and task execution from that branch.
 4. Merge after validation.
 
 ## Network allowlist considerations
 
-When setup scripts add external package sources, record required additional domains in `docs/references/codex-cloud-setup-domain-allowlist.md` so administrators can update Codex Cloud network policies intentionally.
+When setup scripts add external package sources, record required additional domains in `` `docs/references/codex-cloud-setup-domain-allowlist.md` `` so administrators can update Codex Cloud network policies intentionally.
