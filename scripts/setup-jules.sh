@@ -37,6 +37,7 @@ APT_PACKAGES=()
 # Useful agentic tooling
 need_cmd jq && APT_PACKAGES+=(jq)
 need_cmd rg && APT_PACKAGES+=(ripgrep)
+need_cmd yq && APT_PACKAGES+=(yq)
 need_cmd fdfind && APT_PACKAGES+=(fd-find)
 need_cmd eza && APT_PACKAGES+=(eza)
 need_cmd shellcheck && APT_PACKAGES+=(shellcheck)

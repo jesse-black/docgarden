@@ -14,6 +14,7 @@ See `docs/references/environment-execution-contexts.md` for deeper rationale, so
 ### Installed in devcontainer and bootstrapped for Codex Cloud/Jules
 
 - `cargo-llvm-cov` for coverage checks
+- `yq` for structured edits/queries in GitHub Actions workflow YAML files and Markdown frontmatter
 - `eza` for filesystem inspection
 - `shellcheck` and `shfmt` for shell script quality and formatting in `scripts/` and related automation
 
