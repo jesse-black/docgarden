@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  rust:
+  quality-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,5 +23,20 @@ jobs:
         run: cargo test
       - name: Coverage
         run: cargo llvm-cov --summary-only
+
+  dependency-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-machete
+      - name: Dependency hygiene
+        run: cargo machete
+
+  dogfood-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Dogfood lint
         run: cargo run -- .
