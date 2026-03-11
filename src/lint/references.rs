@@ -295,3 +295,85 @@ pub(crate) fn label_text(children: &[Node]) -> String {
     }
     text
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CandidateReference, ReferenceKind, label_equivalent, render_link_destination,
+        render_repo_relative, resolve_candidate,
+    };
+    use markdown::mdast::{InlineCode, Link, Node, Text};
+    use tempfile::TempDir;
+
+    #[test]
+    fn resolve_candidate_normalizes_relative_segments_and_separators() {
+        let candidate = CandidateReference {
+            display_text: "./nested\\..\\real.md".to_string(),
+            uses_relative_syntax: true,
+            uses_workspace_root_syntax: false,
+        };
+
+        let resolved =
+            resolve_candidate("docs/guide.md", &candidate, ReferenceKind::Backtick).unwrap();
+
+        assert_eq!(resolved.repo_relative_path, "docs/real.md");
+    }
+
+    #[test]
+    fn resolve_candidate_rejects_escape_above_repository_root() {
+        let candidate = CandidateReference {
+            display_text: "../../../secret.md".to_string(),
+            uses_relative_syntax: true,
+            uses_workspace_root_syntax: false,
+        };
+
+        assert!(resolve_candidate("docs/guide.md", &candidate, ReferenceKind::Backtick).is_none());
+        assert!(resolve_candidate("docs/guide.md", &candidate, ReferenceKind::Link).is_none());
+    }
+
+    #[test]
+    fn render_link_destination_keeps_workspace_root_and_directory_suffix() {
+        let temp = TempDir::new().unwrap();
+        let docs = temp.path().join("docs");
+        std::fs::create_dir(&docs).unwrap();
+        let candidate = CandidateReference {
+            display_text: "/docs".to_string(),
+            uses_relative_syntax: false,
+            uses_workspace_root_syntax: true,
+        };
+        let resolved = resolve_candidate("README.md", &candidate, ReferenceKind::Link).unwrap();
+
+        let rendered = render_link_destination("README.md", &candidate, &resolved, &docs);
+
+        assert_eq!(rendered, "/docs/");
+        assert_eq!(render_repo_relative(&resolved, &docs), "docs/");
+    }
+
+    #[test]
+    fn label_equivalent_accepts_filename_only_and_inline_code_text() {
+        let children = vec![Node::InlineCode(InlineCode {
+            value: "PLANS.md".to_string(),
+            position: None,
+        })];
+        assert!(label_equivalent(
+            &children,
+            "docs/PLANS.md",
+            "docs/PLANS.md"
+        ));
+
+        let nested_children = vec![Node::Link(Link {
+            children: vec![Node::Text(Text {
+                value: "docs/PLANS.md".to_string(),
+                position: None,
+            })],
+            title: None,
+            url: "docs/PLANS.md".to_string(),
+            position: None,
+        })];
+        assert!(label_equivalent(
+            &nested_children,
+            "docs/PLANS.md",
+            "docs/PLANS.md"
+        ));
+    }
+}

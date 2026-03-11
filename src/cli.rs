@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
@@ -9,6 +8,7 @@ use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::discover::{discover_markdown_files, discover_markdown_files_for_targets};
 use crate::lint::{Mode, lint_file, summarize};
+use crate::root::{RootMarker, infer_repository_root};
 
 #[derive(Parser, Debug)]
 #[command(name = "dglint")]
@@ -52,7 +52,14 @@ fn execute(
         targets
     };
     let resolved_targets = canonicalize_targets(&invocation_targets)?;
-    let repository_root = infer_repository_root(&resolved_targets, config_path.as_deref())?;
+    let repository_root = infer_repository_root(
+        &resolved_targets,
+        config_path.as_deref(),
+        &[
+            RootMarker::File("dglint.toml"),
+            RootMarker::Directory(".git"),
+        ],
+    )?;
     let config = Config::load(&repository_root, config_path.as_deref())?;
     let files = if resolved_targets.len() == 1 && resolved_targets[0].is_dir() {
         discover_markdown_files(&config)?
@@ -189,89 +196,4 @@ fn canonicalize_targets(targets: &[PathBuf]) -> Result<Vec<PathBuf>> {
                 .with_context(|| format!("failed to canonicalize {}", target.display()))
         })
         .collect()
-}
-
-fn infer_repository_root(targets: &[PathBuf], explicit_config: Option<&Path>) -> Result<PathBuf> {
-    if let Some(config_path) = explicit_config {
-        let config_path = config_path
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize {}", config_path.display()))?;
-        return Ok(config_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("/")));
-    }
-
-    let start = common_ancestor(
-        &targets
-            .iter()
-            .map(|target| {
-                if target.is_dir() {
-                    target.clone()
-                } else {
-                    target.parent().unwrap_or(target.as_path()).to_path_buf()
-                }
-            })
-            .collect::<Vec<_>>(),
-    )
-    .unwrap_or(std::env::current_dir()?);
-
-    if let Some(root) = find_config_root(&start) {
-        return Ok(root);
-    }
-
-    if let Some(root) = find_git_root(&start) {
-        return Ok(root);
-    }
-
-    std::env::current_dir().context("failed to read current working directory")
-}
-
-fn find_config_root(start: &Path) -> Option<PathBuf> {
-    for ancestor in start.ancestors() {
-        if ancestor.join("dglint.toml").exists() {
-            return Some(ancestor.to_path_buf());
-        }
-    }
-    None
-}
-
-fn find_git_root(start: &Path) -> Option<PathBuf> {
-    for ancestor in start.ancestors() {
-        if ancestor.join(".git").exists() {
-            return Some(ancestor.to_path_buf());
-        }
-    }
-    None
-}
-
-fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
-    let mut components: Vec<OsString> = paths
-        .first()?
-        .components()
-        .map(|component| component.as_os_str().to_os_string())
-        .collect();
-
-    for path in &paths[1..] {
-        let other: Vec<OsString> = path
-            .components()
-            .map(|component| component.as_os_str().to_os_string())
-            .collect();
-        let shared = components
-            .iter()
-            .zip(other.iter())
-            .take_while(|(left, right)| left == right)
-            .count();
-        components.truncate(shared);
-    }
-
-    if components.is_empty() {
-        return None;
-    }
-
-    let mut ancestor = PathBuf::new();
-    for component in components {
-        ancestor.push(component);
-    }
-    Some(ancestor)
 }

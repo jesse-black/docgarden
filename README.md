@@ -78,6 +78,14 @@ Enable optional warnings for path-adjacent inline backticks such as `` `crates/p
 
     report-ambiguous-inline-code = true
 
+## Repository Policy
+
+This repository dogfoods `dglint` with the default `backticks` local-reference style. In practice that means direct local path mentions in prose should usually look like `docs/PLANS.md`, `ARCHITECTURE.md`, or `src/lint/mod.rs`.
+
+There are two intended exceptions. Keep external destinations as normal Markdown links such as [OpenAI API docs](https://platform.openai.com/docs/). Keep local Markdown links only when the label adds real prose value instead of merely repeating the destination, for example `[execution-plan rules](docs/PLANS.md)`.
+
+The root `dglint.toml` excludes `tests/**` from dogfooding so fixture repositories and expected-output samples do not create noise in the main repository lint pass.
+
 ### Example CI Usage
 
 Run `dglint` as a repository-quality gate after checkout:
