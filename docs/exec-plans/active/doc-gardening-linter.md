@@ -37,7 +37,7 @@ You will know this is working when running `dglint .` against a repository repor
 
 ## Surprises & Discoveries
 
-- Observation: Dogfooding the first implementation on this repository produces many false positives from example-oriented docs, especially files under `docs/repository-knowledge/` and the active ExecPlan.
+- Observation: Dogfooding the first implementation on this repository produces many false positives from example-oriented docs and the active ExecPlan.
   Evidence: `cargo run -- .` reported unresolved example paths such as the examples below even after excluding checked-in test fixtures through `dglint.toml`.
 
       crates/parser
@@ -435,17 +435,17 @@ Record concise evidence here as implementation proceeds. Replace the placeholder
 
 Expected diagnostic style example:
 
-    docs/repository-knowledge/repository-knowledge-system.md:42:17  error  unresolved-local-path
+    docs/bootstrap-repository-knowledge.md:42:17  error  unresolved-local-path
     Local repository path `docs/architecture.md` does not exist from repository root.
 
 Expected link-mode diagnostic example:
 
-    docs/repository-knowledge/repository-knowledge-system.md:42:17  error  prefer-links-for-local-paths
+    docs/bootstrap-repository-knowledge.md:42:17  error  prefer-links-for-local-paths
     Local repository path `docs/architecture.md` should use Markdown link syntax under the configured style policy.
 
 Expected check-only autofix hint example:
 
-    docs/repository-knowledge/repository-knowledge-system.md:42:17  error  prefer-backticks-for-local-paths  fixable
+    docs/bootstrap-repository-knowledge.md:42:17  error  prefer-backticks-for-local-paths  fixable
     Local repository link `[docs/architecture.md](docs/architecture.md)` should use backticks under the configured style policy.
 
     1 fixable violation found across 1 file.
