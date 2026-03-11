@@ -1,4 +1,3 @@
 exclude = [
     "tests/**",
-    "docs/repository-knowledge/example-architecture-md.md",
 ]
