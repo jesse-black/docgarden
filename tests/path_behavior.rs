@@ -28,6 +28,28 @@ fn directory_trailing_slash_is_accepted() {
 }
 
 #[test]
+fn missing_directory_reference_is_ignored_by_default() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("dglint.toml"),
+        "local-reference-style = \"backticks\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "Plans move through `docs/exec-plans/active/` before completion.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .args([root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-local-path").not());
+}
+
+#[test]
 fn relative_inline_path_is_accepted_in_backtick_mode() {
     let temp = tempdir().unwrap();
     let root = temp.path();

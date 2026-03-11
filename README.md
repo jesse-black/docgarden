@@ -86,6 +86,8 @@ There are two intended exceptions. Keep external destinations as normal Markdown
 
 The root `dglint.toml` excludes `tests/**` from dogfooding so fixture repositories and expected-output samples do not create noise in the main repository lint pass.
 
+`dglint` does not fail on missing trailing-slash directory references such as `docs/exec-plans/active/`. That avoids churn around intentionally empty directories and `.gitkeep` placeholders while still allowing directory-style references to act as strong path signals for classification.
+
 ### Example CI Usage
 
 Run `dglint` as a repository-quality gate after checkout:

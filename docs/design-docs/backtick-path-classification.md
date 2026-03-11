@@ -55,6 +55,8 @@ Examples that should be treated as valid directory references:
 
 These should not be rewritten to forms without the trailing slash simply for normalization.
 
+These references are still classified as directory-like paths, but a missing trailing-slash directory does not become a hard `unresolved-local-path` error. This keeps lifecycle-dependent directories such as execution-plan staging areas from requiring `.gitkeep` placeholders purely for lint hygiene.
+
 ## Relative Markers
 
 Leading `/`, `./`, and `../` are also meaningful syntax, not noise. They help disambiguate paths from ordinary inline code and should be preserved by default.

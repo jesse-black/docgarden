@@ -137,6 +137,9 @@ fn lint_inline_code_node(
         if let Some(resolved) = resolve_candidate(file, &candidate, ReferenceKind::Backtick) {
             let exists_path = config.repository_root.join(&resolved.repo_relative_path);
             let exists = exists_path.exists();
+            if !exists && candidate.is_directory_like {
+                return Ok(());
+            }
             if !exists {
                 push_diagnostic(
                     diagnostics,
@@ -230,6 +233,9 @@ fn lint_link_node(
     {
         let exists_path = config.repository_root.join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
+        if !exists && candidate.is_directory_like {
+            return Ok(());
+        }
         if !exists {
             push_diagnostic(
                 diagnostics,

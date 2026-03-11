@@ -9,6 +9,7 @@ pub(crate) struct CandidateReference {
     pub(crate) display_text: String,
     pub(crate) uses_relative_syntax: bool,
     pub(crate) uses_workspace_root_syntax: bool,
+    pub(crate) is_directory_like: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +41,7 @@ pub(crate) fn classify_inline_reference(
             display_text: value.to_string(),
             uses_relative_syntax,
             uses_workspace_root_syntax,
+            is_directory_like: value.ends_with('/') || value.ends_with('\\'),
         });
     }
     let path = Path::new(value);
@@ -50,6 +52,7 @@ pub(crate) fn classify_inline_reference(
                 display_text: value.to_string(),
                 uses_relative_syntax: false,
                 uses_workspace_root_syntax: false,
+                is_directory_like: false,
             });
         }
     }
@@ -58,6 +61,7 @@ pub(crate) fn classify_inline_reference(
             display_text: value.to_string(),
             uses_relative_syntax: false,
             uses_workspace_root_syntax: false,
+            is_directory_like: false,
         });
     }
     None
@@ -78,6 +82,7 @@ pub(crate) fn classify_link_reference(config: &Config, value: &str) -> Option<Ca
             display_text: value.to_string(),
             uses_relative_syntax,
             uses_workspace_root_syntax,
+            is_directory_like: value.ends_with('/') || value.ends_with('\\'),
         });
     }
     let path = Path::new(value);
@@ -88,6 +93,7 @@ pub(crate) fn classify_link_reference(config: &Config, value: &str) -> Option<Ca
                 display_text: value.to_string(),
                 uses_relative_syntax: false,
                 uses_workspace_root_syntax: false,
+                is_directory_like: false,
             });
         }
     }
@@ -96,6 +102,7 @@ pub(crate) fn classify_link_reference(config: &Config, value: &str) -> Option<Ca
             display_text: value.to_string(),
             uses_relative_syntax: false,
             uses_workspace_root_syntax: false,
+            is_directory_like: false,
         });
     }
     None
@@ -311,6 +318,7 @@ mod tests {
             display_text: "./nested\\..\\real.md".to_string(),
             uses_relative_syntax: true,
             uses_workspace_root_syntax: false,
+            is_directory_like: false,
         };
 
         let resolved =
@@ -325,6 +333,7 @@ mod tests {
             display_text: "../../../secret.md".to_string(),
             uses_relative_syntax: true,
             uses_workspace_root_syntax: false,
+            is_directory_like: false,
         };
 
         assert!(resolve_candidate("docs/guide.md", &candidate, ReferenceKind::Backtick).is_none());
@@ -340,6 +349,7 @@ mod tests {
             display_text: "/docs".to_string(),
             uses_relative_syntax: false,
             uses_workspace_root_syntax: true,
+            is_directory_like: true,
         };
         let resolved = resolve_candidate("README.md", &candidate, ReferenceKind::Link).unwrap();
 
