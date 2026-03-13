@@ -15,8 +15,6 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Format
         run: cargo fmt --check
-      - name: Check
-        run: cargo check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
@@ -40,3 +38,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Dogfood lint
         run: cargo run -- .
+
