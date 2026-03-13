@@ -85,6 +85,7 @@ fn walk_node(
         }
         Node::Link(_) => {
             lint_link_node(config, file, node, diagnostics, ignored_rules, mode, edits)?;
+            return Ok(());
         }
         _ => {}
     }
@@ -221,7 +222,8 @@ fn lint_link_node(
                     position: link.position.as_ref(),
                     rule: "unresolved-local-path",
                     message: format!(
-                        "Local repository path `{}` does not resolve within the repository.",
+                        "Local repository link `[{}]({})` does not resolve within the repository.",
+                        label_text(&link.children),
                         candidate.display_text
                     ),
                     fixable: false,
