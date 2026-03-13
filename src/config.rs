@@ -147,3 +147,76 @@ fn normalize_extension(value: &str) -> String {
         format!(".{value}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::{Config, LocalReferenceStyle};
+    use tempfile::TempDir;
+
+    #[test]
+    fn load_ignores_nested_config_when_root_config_is_absent() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        let nested = repository_root.join("docs");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(
+            nested.join("dglint.toml"),
+            "local-reference-style = \"links\"\n",
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(
+            config.repository_root,
+            repository_root.canonicalize().unwrap()
+        );
+        assert!(config.config_path.is_none());
+        assert_eq!(config.local_reference_style, LocalReferenceStyle::Backticks);
+        assert_eq!(
+            config.include,
+            vec!["docs/**", "README.md", "AGENTS.md", "*.md"]
+        );
+    }
+
+    #[test]
+    fn load_applies_alias_keys_and_override_sets() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("dglint.toml");
+        fs::write(
+            &config_path,
+            r#"
+local_reference_style = "links"
+report_ambiguous_inline_code = true
+extend_extensions = ["proto", ".rego"]
+remove_extensions = ["md"]
+extend_special_filenames = ["Tiltfile"]
+remove_special_filenames = ["LICENSE"]
+
+[per_file_ignores]
+"docs/generated/**" = ["ambiguous-inline-code"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(config.config_path, Some(config_path));
+        assert!(!config.config_was_explicit);
+        assert_eq!(config.local_reference_style, LocalReferenceStyle::Links);
+        assert!(config.report_ambiguous_inline_code);
+        assert!(config.known_extensions.contains(".proto"));
+        assert!(config.known_extensions.contains(".rego"));
+        assert!(!config.known_extensions.contains(".md"));
+        assert!(config.special_filenames.contains("Tiltfile"));
+        assert!(!config.special_filenames.contains("LICENSE"));
+        assert_eq!(
+            config.per_file_ignores.get("docs/generated/**").unwrap(),
+            &vec!["ambiguous-inline-code".to_string()]
+        );
+    }
+}

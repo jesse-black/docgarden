@@ -2,9 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
-use markdown::mdast::{InlineCode, Link, Node, Text};
+use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
-use mdast_util_to_markdown::to_markdown;
 
 use crate::config::{Config, LocalReferenceStyle};
 use crate::diagnostics::{Diagnostic, FixSummary, Severity, ignored_rules_for_path};
@@ -29,6 +28,13 @@ pub struct LintResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct Edit {
+    start_char: usize,
+    end_char: usize,
+    replacement: String,
+}
+
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
     let relative_path = relative_path(&config.repository_root, path)?;
     let ignored_rules = ignored_rules_for_path(
@@ -38,24 +44,23 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
     )?;
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    let mut tree = to_mdast(&source, &ParseOptions::gfm())
+    let tree = to_mdast(&source, &ParseOptions::gfm())
         .map_err(|error| anyhow!("failed to parse {}: {}", path.display(), error))?;
     let mut diagnostics = Vec::new();
-    let mut edits = false;
+    let mut edits = Vec::new();
 
     walk_node(
         config,
         &relative_path,
-        &mut tree,
+        &tree,
         &mut diagnostics,
         &ignored_rules,
         mode,
         &mut edits,
     )?;
 
-    if mode == Mode::Fix && edits {
-        let rewritten = to_markdown(&tree)
-            .map_err(|error| anyhow!("failed to render {}: {}", path.display(), error))?;
+    if mode == Mode::Fix && !edits.is_empty() {
+        let rewritten = apply_edits(&source, &edits)?;
         if rewritten != source {
             fs::write(path, rewritten)
                 .with_context(|| format!("failed to write {}", path.display()))?;
@@ -68,49 +73,26 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
 fn walk_node(
     config: &Config,
     file: &str,
-    node: &mut Node,
+    node: &Node,
     diagnostics: &mut Vec<Diagnostic>,
     ignored_rules: &std::collections::BTreeSet<String>,
     mode: Mode,
-    changed: &mut bool,
+    edits: &mut Vec<Edit>,
 ) -> Result<()> {
     match node {
         Node::InlineCode(_) => {
-            lint_inline_code_node(
-                config,
-                file,
-                node,
-                diagnostics,
-                ignored_rules,
-                mode,
-                changed,
-            )?;
+            lint_inline_code_node(config, file, node, diagnostics, ignored_rules, mode, edits)?;
         }
         Node::Link(_) => {
-            lint_link_node(
-                config,
-                file,
-                node,
-                diagnostics,
-                ignored_rules,
-                mode,
-                changed,
-            )?;
+            lint_link_node(config, file, node, diagnostics, ignored_rules, mode, edits)?;
+            return Ok(());
         }
         _ => {}
     }
 
     if let Some(children) = children_mut(node) {
         for child in children {
-            walk_node(
-                config,
-                file,
-                child,
-                diagnostics,
-                ignored_rules,
-                mode,
-                changed,
-            )?;
+            walk_node(config, file, child, diagnostics, ignored_rules, mode, edits)?;
         }
     }
 
@@ -120,11 +102,11 @@ fn walk_node(
 fn lint_inline_code_node(
     config: &Config,
     file: &str,
-    node: &mut Node,
+    node: &Node,
     diagnostics: &mut Vec<Diagnostic>,
     ignored_rules: &std::collections::BTreeSet<String>,
     mode: Mode,
-    changed: &mut bool,
+    edits: &mut Vec<Edit>,
 ) -> Result<()> {
     let Some(inline) = (match node {
         Node::InlineCode(inline) => Some(inline),
@@ -137,6 +119,9 @@ fn lint_inline_code_node(
         if let Some(resolved) = resolve_candidate(file, &candidate, ReferenceKind::Backtick) {
             let exists_path = config.repository_root.join(&resolved.repo_relative_path);
             let exists = exists_path.exists();
+            if !exists && candidate.is_directory_like {
+                return Ok(());
+            }
             if !exists {
                 push_diagnostic(
                     diagnostics,
@@ -174,16 +159,11 @@ fn lint_inline_code_node(
                 if mode == Mode::Fix {
                     let link_text =
                         render_link_destination(file, &candidate, &resolved, &exists_path);
-                    *node = Node::Link(Link {
-                        children: vec![Node::Text(Text {
-                            value: candidate.display_text.clone(),
-                            position: inline.position.clone(),
-                        })],
-                        title: None,
-                        url: link_text,
-                        position: inline.position.clone(),
-                    });
-                    *changed = true;
+                    record_edit(
+                        edits,
+                        inline.position.as_ref(),
+                        format!("[{}]({link_text})", candidate.display_text),
+                    );
                 }
             }
         }
@@ -209,11 +189,11 @@ fn lint_inline_code_node(
 fn lint_link_node(
     config: &Config,
     file: &str,
-    node: &mut Node,
+    node: &Node,
     diagnostics: &mut Vec<Diagnostic>,
     ignored_rules: &std::collections::BTreeSet<String>,
     mode: Mode,
-    changed: &mut bool,
+    edits: &mut Vec<Edit>,
 ) -> Result<()> {
     let Some(link) = (match node {
         Node::Link(link) => Some(link),
@@ -230,6 +210,9 @@ fn lint_link_node(
     {
         let exists_path = config.repository_root.join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
+        if !exists && candidate.is_directory_like {
+            return Ok(());
+        }
         if !exists {
             push_diagnostic(
                 diagnostics,
@@ -239,7 +222,8 @@ fn lint_link_node(
                     position: link.position.as_ref(),
                     rule: "unresolved-local-path",
                     message: format!(
-                        "Local repository path `{}` does not resolve within the repository.",
+                        "Local repository link `[{}]({})` does not resolve within the repository.",
+                        label_text(&link.children),
                         candidate.display_text
                     ),
                     fixable: false,
@@ -273,38 +257,88 @@ fn lint_link_node(
             );
             if mode == Mode::Fix {
                 let inline_text = render_repo_relative(&resolved, &exists_path);
-                *node = Node::InlineCode(InlineCode {
-                    value: inline_text,
-                    position: link.position.clone(),
-                });
-                *changed = true;
+                record_edit(edits, link.position.as_ref(), format!("`{inline_text}`"));
             }
         }
     }
     Ok(())
 }
 
-fn children_mut(node: &mut Node) -> Option<&mut Vec<Node>> {
+fn children_mut(node: &Node) -> Option<&Vec<Node>> {
     match node {
-        Node::Root(root) => Some(&mut root.children),
-        Node::Paragraph(paragraph) => Some(&mut paragraph.children),
-        Node::Heading(heading) => Some(&mut heading.children),
-        Node::Blockquote(blockquote) => Some(&mut blockquote.children),
-        Node::List(list) => Some(&mut list.children),
-        Node::ListItem(item) => Some(&mut item.children),
-        Node::Emphasis(emphasis) => Some(&mut emphasis.children),
-        Node::Strong(strong) => Some(&mut strong.children),
-        Node::Delete(delete) => Some(&mut delete.children),
-        Node::Link(link) => Some(&mut link.children),
-        Node::LinkReference(link) => Some(&mut link.children),
-        Node::Table(table) => Some(&mut table.children),
-        Node::TableRow(row) => Some(&mut row.children),
-        Node::TableCell(cell) => Some(&mut cell.children),
-        Node::FootnoteDefinition(definition) => Some(&mut definition.children),
-        Node::MdxJsxFlowElement(element) => Some(&mut element.children),
-        Node::MdxJsxTextElement(element) => Some(&mut element.children),
+        Node::Root(root) => Some(&root.children),
+        Node::Paragraph(paragraph) => Some(&paragraph.children),
+        Node::Heading(heading) => Some(&heading.children),
+        Node::Blockquote(blockquote) => Some(&blockquote.children),
+        Node::List(list) => Some(&list.children),
+        Node::ListItem(item) => Some(&item.children),
+        Node::Emphasis(emphasis) => Some(&emphasis.children),
+        Node::Strong(strong) => Some(&strong.children),
+        Node::Delete(delete) => Some(&delete.children),
+        Node::Link(link) => Some(&link.children),
+        Node::LinkReference(link) => Some(&link.children),
+        Node::Table(table) => Some(&table.children),
+        Node::TableRow(row) => Some(&row.children),
+        Node::TableCell(cell) => Some(&cell.children),
+        Node::FootnoteDefinition(definition) => Some(&definition.children),
+        Node::MdxJsxFlowElement(element) => Some(&element.children),
+        Node::MdxJsxTextElement(element) => Some(&element.children),
         _ => None,
     }
+}
+
+fn record_edit(
+    edits: &mut Vec<Edit>,
+    position: Option<&markdown::unist::Position>,
+    replacement: String,
+) {
+    let Some(position) = position else {
+        return;
+    };
+    edits.push(Edit {
+        start_char: position.start.offset,
+        end_char: position.end.offset,
+        replacement,
+    });
+}
+
+fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
+    let mut sorted: Vec<_> = edits.iter().collect();
+    sorted.sort_by(|left, right| right.start_char.cmp(&left.start_char));
+    let mut rewritten = source.to_string();
+
+    for window in sorted.windows(2) {
+        let earlier = window[1];
+        let later = window[0];
+        if earlier.end_char > later.start_char {
+            return Err(anyhow!(
+                "overlapping fix edits at character offsets {}..{} and {}..{}",
+                earlier.start_char,
+                earlier.end_char,
+                later.start_char,
+                later.end_char
+            ));
+        }
+    }
+
+    for edit in sorted {
+        let start = char_offset_to_byte_index(source, edit.start_char)?;
+        let end = char_offset_to_byte_index(source, edit.end_char)?;
+        rewritten.replace_range(start..end, &edit.replacement);
+    }
+
+    Ok(rewritten)
+}
+
+fn char_offset_to_byte_index(source: &str, char_offset: usize) -> Result<usize> {
+    if char_offset == source.chars().count() {
+        return Ok(source.len());
+    }
+    source
+        .char_indices()
+        .nth(char_offset)
+        .map(|(byte_offset, _)| byte_offset)
+        .ok_or_else(|| anyhow!("character offset {char_offset} is out of bounds"))
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String> {

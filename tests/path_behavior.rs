@@ -28,6 +28,28 @@ fn directory_trailing_slash_is_accepted() {
 }
 
 #[test]
+fn missing_directory_reference_is_ignored_by_default() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("dglint.toml"),
+        "local-reference-style = \"backticks\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "Plans move through `docs/exec-plans/active/` before completion.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .args([root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-local-path").not());
+}
+
+#[test]
 fn relative_inline_path_is_accepted_in_backtick_mode() {
     let temp = tempdir().unwrap();
     let root = temp.path();
@@ -302,4 +324,35 @@ fn workspace_root_markdown_link_resolves_from_repo_root() {
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not());
+}
+
+#[test]
+fn ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("dglint.toml"),
+        concat!(
+            "local-reference-style = \"backticks\"\n",
+            "\n",
+            "[per-file-ignores]\n",
+            "\"README.md\" = [\"prefer-backticks-for-local-paths\"]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .args([root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-local-path").count(1))
+        .stdout(predicate::str::contains(
+            "Local repository link `[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)` does not resolve within the repository.",
+        ))
+        .stdout(predicate::str::contains("prefer-backticks-for-local-paths").not());
 }

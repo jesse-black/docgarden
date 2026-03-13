@@ -37,7 +37,7 @@ The tool is intentionally local and repository-scoped. It does not fetch remote 
 - parsing command-line arguments with `clap`
 - selecting check mode versus fix mode
 - canonicalizing explicit targets
-- inferring the repository root from `dglint.toml`, `.git`, or the current working directory
+- selecting the repository-root markers that should be used for this invocation
 - loading configuration
 - choosing between full discovery and explicit target handling
 - running the linter over each selected file
@@ -45,6 +45,8 @@ The tool is intentionally local and repository-scoped. It does not fetch remote 
 - determining the process exit condition
 
 If you want to understand the end-to-end control flow of the binary, start here.
+
+`src/root.rs` contains repository-root inference helpers. It computes a common starting ancestor from the invocation targets, walks upward looking for configured marker files or directories, and falls back to the current working directory when no marker matches. This keeps filesystem-root policy reusable outside the CLI entrypoint.
 
 ### Configuration and defaults
 

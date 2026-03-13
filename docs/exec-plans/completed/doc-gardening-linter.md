@@ -31,9 +31,9 @@ You will know this is working when running `dglint .` against a repository repor
 - [x] (2026-03-06 22:05Z) Amend the ExecPlan so the initial CLI contract includes basic colored human-readable output with `--color auto|always|never`, while leaving richer terminal presentation work out of scope.
 - [x] (2026-03-06 22:40Z) Expand the automated coverage beyond the original CLI happy path by adding JSON-output tests, explicit-config tests, `--color always` coverage, and distinct backtick-style and link-style fixture repositories.
 - [x] (2026-03-06 22:40Z) Add a GitHub Actions workflow that runs format checks, `cargo check`, Clippy, tests, coverage, and a dogfooding lint pass.
-- [ ] (2026-03-07 00:00Z) Add targeted tests for the highest-risk uncovered branches reported by `cargo llvm-cov` (completed: recorded that the current suite reaches 81.96% region coverage overall; remaining: add focused coverage for config edge cases and the main lint/reference normalization branches instead of chasing a repo-wide percentage for its own sake).
-- [ ] (2026-03-06 22:40Z) Update repository documentation to explain the selected local-reference style policy and the limited exceptions that remain allowed (completed: added a top-level `README.md` with build/run/test commands; remaining: document the repo's chosen dogfooding config and style guidance once the false-positive policy is settled).
-- [ ] (2026-03-06 00:00Z) Capture final evidence, update this plan, and move it to `docs/exec-plans/completed/` when the linter is adopted.
+- [x] (2026-03-11 18:58Z) Add targeted tests for the highest-risk uncovered branches reported by `cargo llvm-cov`, focusing on config discovery and alias parsing in `src/config.rs` plus reference normalization, traversal rejection, and link rendering in `src/lint/references.rs`.
+- [x] (2026-03-11 18:58Z) Update repository documentation to explain the selected local-reference style policy and the limited exceptions that remain allowed, including the repo's dogfooding stance in `README.md` and the short authoring rule in `AGENTS.md`.
+- [x] (2026-03-11 18:58Z) Capture final evidence, update this plan, and move it to `docs/exec-plans/completed/` now that the repository lints cleanly and the validation workflow passes end to end.
 
 ## Surprises & Discoveries
 
@@ -52,6 +52,12 @@ You will know this is working when running `dglint .` against a repository repor
 
 - Observation: The current coverage bar is technically met, but the remaining gaps cluster in the code that is most likely to produce user-visible lint regressions.
   Evidence: `cargo llvm-cov --summary-only` currently reports 81.96% region coverage overall, with the lowest module coverage in `src/config.rs`, `src/lint/mod.rs`, and `src/lint/references.rs`.
+
+- Observation: Direct unit tests for config loading and reference normalization were enough to close the remaining high-risk gaps without adding low-signal fixture churn.
+  Evidence: After adding those tests, `cargo llvm-cov --summary-only` reports `src/config.rs` at 92.27% region coverage, `src/lint/references.rs` at 89.49%, and the repository total at 87.98%.
+
+- Observation: The repository's own dogfooding rule is now stable enough to document concisely: direct local path mentions use backticks, while external links and meaningful local links remain allowed.
+  Evidence: `cargo run -- .` exits successfully after documenting that rule in `README.md` and `AGENTS.md`; the only adjustment needed was converting one local README link back to a backticked path.
 
 ## Decision Log
 
@@ -99,6 +105,10 @@ You will know this is working when running `dglint .` against a repository repor
   Rationale: A short handwritten allowlist will underfit real repositories and create churn as new common file types are discovered. GitHub Linguist maintains a broad, widely used mapping of filenames and extensions across programming, markup, prose, and data formats, which makes it the best fast-start source for robust defaults. The linter should vendor a filtered snapshot of that data into the crate rather than depending on a live network fetch or a Ruby runtime at execution time.
   Date/Author: 2026-03-06 / Codex
 
+- Decision: Document this repository's dogfooding policy as "backticks by default, with meaningful local links and external links as explicit exceptions" instead of inventing a second repo-specific config surface.
+  Rationale: That rule matches the implementation already enforced by `dglint`, keeps the authoring guidance short, and avoids adding policy knobs where the current behavior is already stable and low-noise.
+  Date/Author: 2026-03-11 / Codex
+
 - Decision: Name the tool `Doc Gardening Linter` and expose the executable as `dglint`.
   Rationale: The human-facing title matches the broader doc-gardening practice while avoiding the awkward stacked-agent phrasing of `Doc Gardener Linter`. The shorter executable name remains efficient for repeated local and CI use. This also leaves room for a future higher-level doc-gardening agent or workflow that may use `dglint` as one component.
   Date/Author: 2026-03-06 / Codex
@@ -123,9 +133,9 @@ You will know this is working when running `dglint .` against a repository repor
 
 ## Outcomes & Retrospective
 
-The repository now contains a working first implementation of `dglint` rather than just a plan. The CLI supports check mode by default and `--fix` for autofix, loads a dedicated `dglint.toml`, discovers Markdown files with gitignore-style include and exclude patterns, parses Markdown with `markdown-rs`, emits diagnostics with file, line, and column, and applies a safe subset of autofixes through the mdast-to-Markdown serialization path. A copied-fixture CLI integration test proves the end-to-end lint and fix loop against a temporary working repository.
+The repository now has the finished first release scope described by this plan, not just a partial milestone. `dglint` builds as a working Rust CLI, discovers `dglint.toml` from the repository root or an explicit `--config`, infers repository roots from ordered marker lists, discovers Markdown files with gitignore-style include and exclude behavior, parses Markdown with `markdown-rs`, resolves repository-local references, reports deterministic diagnostics, and applies the safe autofix subset for style-only rewrites. The test suite covers both backtick-first and link-first repository fixtures, machine-readable and human-readable CLI output, fix idempotence, config loading behavior, and focused normalization edge cases.
 
-The current implementation is still an early milestone rather than the finished product described by the full plan. Dogfooding shows that the classifier is too eager on example-heavy documents and directory-style references, but the automated validation is now materially stronger: there are explicit backtick-style and link-style fixture repositories, JSON and color-mode coverage, explicit-config coverage, a CI workflow, and an 81.96% region-coverage baseline from `cargo llvm-cov`. The next iteration should focus on reducing false positives, deciding how to treat directory references with trailing slashes, adding targeted tests for the remaining high-risk uncovered branches, and documenting the repository’s dogfooding policy once the rule noise is low enough to make that policy stable.
+The remaining follow-up work is product growth rather than unfinished execution-plan scope. Coverage now sits well above the repository floor at 87.98% region coverage overall, the highest-risk config and normalization branches have direct regression tests, the repository's own dogfooding rule is documented in `README.md` and `AGENTS.md`, and `cargo run -- .` passes cleanly on the repository. With those pieces in place, this ExecPlan can move to `docs/exec-plans/completed/`.
 
 ## Context and Orientation
 
@@ -431,7 +441,39 @@ If a repository has many existing local Markdown links, enable autofix in a dedi
 
 ## Artifacts and Notes
 
-Record concise evidence here as implementation proceeds. Replace the placeholders below with real transcripts and examples.
+Record concise evidence here as implementation proceeds. The key end-state evidence is below.
+
+Validation transcript:
+
+    $ cargo check
+        Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.12s
+
+    $ cargo clippy --all-targets --all-features -- -D warnings
+        Finished `dev` profile [unoptimized + debuginfo] target(s) in 59.13s
+
+    $ cargo test
+        test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+        test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+        test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+        test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+Coverage summary excerpt:
+
+    $ cargo llvm-cov --summary-only
+    config.rs           92.27% regions
+    lint/references.rs  89.49% regions
+    TOTAL               87.98% regions
+
+Dogfooding transcript:
+
+    $ cargo run -- .
+        Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.68s
+        Running `target/debug/dglint .`
+
+Targeted regression coverage added in this final pass:
+
+    - `src/config.rs`: root-only config discovery, alias-key parsing, extension overrides, special-filename overrides, and per-file-ignore loading.
+    - `src/lint/references.rs`: relative-segment normalization, traversal rejection above the repository root, workspace-root link rendering for directories, and label-equivalence handling for inline-code and nested-link labels.
 
 Expected diagnostic style example:
 
@@ -515,3 +557,5 @@ Revision note: Added a scoped follow-up item to use the recorded `cargo llvm-cov
 Revision note: Removed `noncanonical-local-path` from the active plan and implementation after concluding that canonicalization adds style noise without enough value to justify a repository-level policy requirement.
 
 Revision note: Removed the `relative-path-policy` configuration surface after deciding that link destinations should simply follow standard Markdown editor semantics instead of exposing a second repository policy knob.
+
+Revision note: Closed the remaining plan items by adding focused config and normalization regression tests, documenting the repository's dogfooding policy and exceptions, recording final verification evidence including 87.98% region coverage and a clean `cargo run -- .` pass, and preparing the plan to move to `docs/exec-plans/completed/`.
