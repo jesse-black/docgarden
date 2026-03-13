@@ -1,127 +1,109 @@
-# dglint
+# Doc Gardening Linter
 
 [![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/dglint/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/dglint/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/jesse-black/dglint)](https://github.com/jesse-black/dglint/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-`dglint` is the `Doc Gardening Linter`, a Rust CLI for enforcing mechanical repository-knowledge invariants in agentic engineering repositories.
 
-Built in Rust, `dglint` is designed for repositories where agents rely on versioned in-repo documentation as working context. It runs entirely locally, parses Markdown into an AST, validates repository-local references against the working tree, and emits deterministic diagnostics and safe autofixes without requiring any model or network access.
+`dglint` is a blazing-fast, zero-dependency Rust CLI for enforcing structural repository-knowledge invariants in an agent-first world.
 
-Today, the tool focuses on repository-local path correctness and style in Markdown, with CI and recurring doc-gardening workflows as the main operating mode. The broader direction is to enforce repository-knowledge hygiene for agent-first repositories: keeping high-traffic docs small, cross-linked, current, and mechanically legible enough for progressive context loading.
+When autonomous coding agents treat your repository's Markdown files (`AGENTS.md`, `ARCHITECTURE.md`, `docs/`) as executable context, documentation stops being "nice to have" prose. Broken local references, monolithic instruction files, and stale context directly reduce agent reliability and waste expensive context windows. 
 
-See `docs/PRODUCT.md` for the product framing and `ARCHITECTURE.md` for the current code map and invariants.
+`dglint` validates repository-local references, enforces machine-readable styling, and emits deterministic diagnostics and safe autofixes. It ensures your repository remains a highly legible, progressively loadable operating system for your agents.
 
-## The "Mechanical-First" Philosophy
+## The "Agent-Legible" Philosophy
 
-`dglint` takes a strict stance: **repository-knowledge checks should be deterministic, local, and mechanically enforceable.**
+**Give agents a map, not a 1,000-page instruction manual.**
 
-That means the tool is intentionally narrow in what it tries to do. It does not attempt natural-language review, semantic summarization, or model-backed judgment. Instead, it focuses on the part that agents and CI systems should be able to trust absolutely:
+In early agentic workflows, teams often try to stuff every rule, constraint, and context clue into a single, massive `AGENTS.md` file. This fails predictably: it crowds out the actual code in the context window, it rots instantly because it cannot be mechanically verified, and agents start optimizing for the wrong constraints.
 
-- does a repository-local reference resolve
-- is it written in the configured style
-- does a document satisfy structural rules that can be checked mechanically
+To achieve high agent throughput, the repository itself must become the system of record. Knowledge is divided into a structured, cross-linked map of Markdown files, allowing agents to use progressive disclosure—starting with a small entry point and navigating to specific design docs or execution plans only when needed.
 
-This matters more in agentic engineering repositories than in ordinary Markdown-heavy repositories. When agents treat `AGENTS.md`, `ARCHITECTURE.md`, plans, and related docs as executable context, documentation stops being “nice to have” prose and starts functioning as part of the repository agent operating system. Broken paths, oversized entry-point docs, missing ownership, or stale metadata are not just doc quality issues; they directly reduce agent reliability and waste context.
 
-The design consequence is straightforward: if a rule requires judgment that would normally belong to an LLM, `dglint` should not implement that judgment itself. The agent using `dglint` can do the higher-level reasoning. `dglint` should remain the mechanical enforcement layer underneath that workflow.
 
-## Scope Today
+`dglint` is the mechanical enforcer of this map. It focuses exclusively on the structural invariants that agents and CI systems must be able to trust absolutely:
 
-The current implementation covers:
+* Does this repository-local path actually exist?
+* Is this reference written in the configured machine-readable style?
+* Is the document structured correctly for a coding agent to parse?
 
-- repository-local path detection in Markdown inline code and links
-- path resolution against the repository root
-- style enforcement for local references using backticks or Markdown links
-- safe autofix for deterministic style rewrites
-- JSON output and human-readable output for CI and local runs
+## The Doc Gardener Workflow
 
-## Build
+`dglint` is designed to be the deterministic discovery engine for a larger **Doc Gardener** agent workflow. 
 
-From the repository root:
+Because agents are bottlenecked by context windows and token costs, having an LLM read thousands of lines of documentation just to find broken links or style violations is highly inefficient. 
 
-    cargo build
+Instead, `dglint` runs instantly and freely in CI or locally to identify exactly what needs gardening. It emits machine-readable JSON that is fed directly to an autonomous Doc Gardener agent (acting as a repository skill). The agent then uses its context window exclusively for what it does best: applying semantic, natural-language fixes to the specific files `dglint` flagged.
 
-To build and run the CLI in one step:
+## Installation
 
-    cargo run -- --help
+Because `dglint` is a statically linked Rust binary, it runs instantly in your CI pipeline without requiring any language runtimes.
+
+**Via Cargo (Local Development):**
+```bash
+cargo install dglint
+```
+
+*(Alternatively, build from source: `cargo build --release`)*
 
 ## Usage
 
+Run `dglint` locally or in your CI pipeline to continuously garden your repository knowledge.
+
 ### CLI Arguments
 
-- `[TARGETS]...`: Repository root, directories, or explicit Markdown files to lint. Defaults to `.`
-- `--config <FILE>`: Use an explicit `dglint.toml`
-- `--json`: Emit machine-readable diagnostics
-- `--fix`: Apply deterministic safe rewrites
-- `--color <auto|always|never>`: Control colored human-readable output
+* `[TARGETS]...`: Repository root, directories, or explicit Markdown files to lint. Defaults to `.`
+* `--config <FILE>`: Use an explicit `dglint.toml` configuration file.
+* `--json`: Emit machine-readable diagnostics for agents or CI parsers.
+* `--fix`: Apply deterministic safe rewrites to resolve violations.
+* `--color <auto|always|never>`: Control colored human-readable output.
 
-### Run
+### Examples
 
-Lint the current repository:
-
-    cargo run -- .
-
-Lint a single file or an explicit file list:
-
-    cargo run -- docs/exec-plans/active/doc-gardening-linter.md
-    cargo run -- README.md AGENTS.md
-
-Apply safe autofixes:
-
-    cargo run -- . --fix
-
-Use an explicit config file:
-
-    cargo run -- . --config dglint.toml
-
-Enable optional warnings for path-adjacent inline backticks such as `` `crates/parser` ``:
-
-    report-ambiguous-inline-code = true
-
-## Repository Policy
-
-This repository dogfoods `dglint` with the default `backticks` local-reference style. In practice that means direct local path mentions in prose should usually look like `docs/PLANS.md`, `ARCHITECTURE.md`, or `src/lint/mod.rs`.
-
-There are two intended exceptions. Keep external destinations as normal Markdown links such as [OpenAI API docs](https://platform.openai.com/docs/). Keep local Markdown links only when the label adds real prose value instead of merely repeating the destination, for example `[execution-plan rules](docs/PLANS.md)`.
-
-The root `dglint.toml` excludes `tests/**` from dogfooding so fixture repositories and expected-output samples do not create noise in the main repository lint pass.
-
-`dglint` does not fail on missing trailing-slash directory references such as `docs/exec-plans/active/`. That avoids churn around intentionally empty directories and `.gitkeep` placeholders while still allowing directory-style references to act as strong path signals for classification.
-
-### Example CI Usage
-
-Run `dglint` as a repository-quality gate after checkout:
-
-```yaml
-- name: Lint repository knowledge
-  run: cargo run -- .
+**Lint the entire repository:**
+```bash
+dglint .
 ```
 
-If you install the binary in CI, the same step becomes:
+**Lint specific high-traffic entry points:**
+```bash
+dglint README.md AGENTS.md docs/exec-plans/
+```
 
+**Apply safe autofixes to the working tree:**
+```bash
+dglint . --fix
+```
+
+**Example CI Usage (GitHub Actions):**
 ```yaml
 - name: Lint repository knowledge
   run: dglint .
 ```
 
-## How Does `dglint` Compare?
+## How does `dglint` compare to existing tools?
 
-There are adjacent tools, but the category is still early.
+The category of agent-first repository tooling is still early. While there are a few adjacent tools in this space, `dglint` is optimized entirely around token efficiency and context window management.
 
-`AGENTS.md` is now a widely used open format for guiding coding agents, and it provides the context standard that many agent-first repositories build around. There are also newer adjacent tools that focus on scoring or linting agent instruction files and prompt surfaces.
+**Standard Markdown Linters (e.g., `markdownlint`)**
+Standard linters are designed for human typography and styling (e.g., heading levels, trailing spaces). They do not understand the repository filesystem and cannot validate whether a referenced path actually exists in the working tree. `dglint` guarantees that when an agent tries to read a referenced file, it will be there.
 
-`dglint` sits in a different spot. It is not a general agent-quality scorer and it is not just an `AGENTS.md` validator. It is aimed at the broader repository knowledge system around those entry-point files: local references, structural doc rules, metadata, cross-linking, and other deterministic invariants that support CI-enforced doc gardening in agent-first repositories.
+**Heuristic-Based Prompt Linters**
+Tools are emerging to lint agent instruction files using basic heuristics. These tools generally focus on the syntax of the prompt itself. `dglint`, by contrast, secures the integrity of the *entire repository knowledge graph*. 
 
-## Test
+**The `dglint` Advantage**
+By enforcing strict cross-linking hygiene and local reference accuracy, `dglint` guarantees that your repository knowledge base is highly optimized for progressive disclosure. Agents can confidently navigate your repository via references instead of forcing you to load massive, monolithic instruction files into every single prompt, saving significant token costs and improving agent focus.
 
-Run the automated test suite:
+## Architecture & Product Vision
 
-    cargo test
+For a deeper dive into the internal design and the broader vision of CI-enforced doc-gardening workflows, see:
 
-Run the quiet form used for quick local verification:
+* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - The current code map and architectural invariants.
+* [`docs/PRODUCT.md`](docs/PRODUCT.md) - The product framing, core workflows, and non-goals.
 
-    cargo test --quiet
+## Contributing
 
-Generate coverage if `cargo-llvm-cov` is installed:
+Contributions are welcome! If you want to add support for a new repository-knowledge check, please ensure it aligns with our philosophy: rules must be deterministic, repository-local, and enforceable without model inference.
 
-    cargo llvm-cov --summary-only
+## License
+
+Apache 2.0. See [LICENSE](LICENSE) for details.
