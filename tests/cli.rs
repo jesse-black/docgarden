@@ -124,3 +124,50 @@ fn fix_rewrites_backticks_to_links_in_link_mode() {
         .assert()
         .success();
 }
+
+#[test]
+fn fix_preserves_unrelated_readme_formatting() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("dglint.toml"),
+        "local-reference-style = \"backticks\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
+    fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
+    let readme = root.join("README.md");
+    let original = concat!(
+        "# Doc Gardening Linter\n",
+        "\n",
+        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/dglint/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/dglint/actions/workflows/ci.yml)\n",
+        "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)\n",
+        "\n",
+        "\n",
+        "Text with a trailing space. \n",
+        "\n",
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+    );
+    let expected = concat!(
+        "# Doc Gardening Linter\n",
+        "\n",
+        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/dglint/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/dglint/actions/workflows/ci.yml)\n",
+        "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)\n",
+        "\n",
+        "\n",
+        "Text with a trailing space. \n",
+        "\n",
+        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
+    );
+    fs::write(&readme, original).unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .current_dir(root)
+        .args(["README.md", "--fix"])
+        .assert()
+        .success();
+
+    let rewritten = fs::read_to_string(readme).unwrap();
+    assert_eq!(rewritten, expected);
+}
