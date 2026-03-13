@@ -93,13 +93,6 @@ Tools are emerging to lint agent instruction files using basic heuristics. These
 **The `dglint` Advantage**
 By enforcing strict cross-linking hygiene and local reference accuracy, `dglint` guarantees that your repository knowledge base is highly optimized for progressive disclosure. Agents can confidently navigate your repository via references instead of forcing you to load massive, monolithic instruction files into every single prompt, saving significant token costs and improving agent focus.
 
-## Architecture & Product Vision
-
-For a deeper dive into the internal design and the broader vision of CI-enforced doc-gardening workflows, see:
-
-* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - The current code map and architectural invariants.
-* [`docs/PRODUCT.md`](docs/PRODUCT.md) - The product framing, core workflows, and non-goals.
-
 ## Contributing
 
 Contributions are welcome! If you want to add support for a new repository-knowledge check, please ensure it aligns with our philosophy: rules must be deterministic, repository-local, and enforceable without model inference.
