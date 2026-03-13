@@ -6,6 +6,12 @@ See `docs/references/environment-execution-contexts.md` for deeper rationale, so
 
 ## Repo-relevant tooling summary
 
+
+## Setup commands
+
+- Codex Cloud setup command should run `scripts/setup-codex-cloud.sh`.
+- Jules setup command should run `scripts/setup-jules.sh`.
+
 ### Available in both environments
 
 - Core CLI/build tools: `git`, `curl`, `jq`, `ripgrep`, `fd`, `zip/unzip`, `build-essential`
