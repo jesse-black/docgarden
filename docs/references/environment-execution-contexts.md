@@ -22,9 +22,9 @@ Environment setup follows the repository knowledge philosophy of progressive dis
 4. **Avoid redundant tooling in cloud**: do not bootstrap tools that duplicate native platform integrations (for example, GitHub CLI in Codex Cloud).
 
 
-## Decision inputs for `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh`
+## Decision inputs for `scripts/agent-env-setup.sh`
 
-Tooling included in `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
+Tooling included in `scripts/agent-env-setup.sh` is determined by cross-referencing these sources:
 
 - Devcontainer toolchain baseline: `.devcontainer/Dockerfile`
 - Codex Cloud universal image baseline: <https://raw.githubusercontent.com/openai/codex-universal/refs/heads/main/Dockerfile>
@@ -46,7 +46,7 @@ For some tools (for example Task and TFLint), the bootstrap may prefer GitHub re
 ## Operational workflow
 
 1. Update setup script and docs in a branch.
-2. Configure Codex Cloud setup command to call `scripts/setup-codex-cloud.sh` or Jules to call `scripts/setup-jules.sh`.
+2. Configure Codex Cloud and Jules setup commands to call `scripts/agent-env-setup.sh`.
 3. Validate required tool availability and task execution from that branch.
 4. Merge after validation.
 
