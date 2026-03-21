@@ -10,7 +10,9 @@ jobs:
   quality-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -18,7 +20,6 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: covgate
-          repo: jesse-black/covgate
       - name: Format
         run: cargo fmt --check
       - name: Clippy
