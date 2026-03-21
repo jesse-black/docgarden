@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::discover::{discover_markdown_files, discover_markdown_files_for_targets};
+use crate::discover::discover_markdown_files_for_targets;
 use crate::lint::{Mode, lint_file, summarize};
 use crate::root::{RootMarker, infer_repository_root};
 
@@ -61,11 +61,7 @@ fn execute(
         ],
     )?;
     let config = Config::load(&repository_root, config_path.as_deref())?;
-    let files = if resolved_targets.len() == 1 && resolved_targets[0].is_dir() {
-        discover_markdown_files(&config)?
-    } else {
-        discover_markdown_files_for_targets(&config, &resolved_targets)?
-    };
+    let files = discover_markdown_files_for_targets(&config, &resolved_targets)?;
     let mut diagnostics = Vec::new();
 
     for path in files {

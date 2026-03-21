@@ -7,10 +7,6 @@ use ignore::WalkBuilder;
 use crate::config::Config;
 use crate::diagnostics::PatternMatcher;
 
-pub fn discover_markdown_files(config: &Config) -> Result<Vec<PathBuf>> {
-    discover_markdown_files_under(config, &config.repository_root)
-}
-
 pub fn discover_markdown_files_for_targets(
     config: &Config,
     targets: &[PathBuf],

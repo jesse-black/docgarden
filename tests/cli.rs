@@ -90,6 +90,27 @@ fn explicit_file_list_is_supported() {
 }
 
 #[test]
+fn explicit_directory_target_does_not_scan_outside_directory() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
+    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
+    fs::write(
+        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        "See `scripts/setup-jules.sh`.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .current_dir(root)
+        .args(["docs"])
+        .assert()
+        .success();
+}
+
+#[test]
 fn git_root_is_used_when_no_dglint_toml_is_found() {
     let temp = tempdir().unwrap();
     let workspace = temp.path();
