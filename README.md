@@ -55,6 +55,7 @@ Run `dglint` locally or in your CI pipeline to continuously garden your reposito
 * `--config <FILE>`: Use an explicit `dglint.toml` configuration file.
 * `--json`: Emit machine-readable diagnostics for agents or CI parsers.
 * `--fix`: Apply deterministic safe rewrites to resolve violations.
+* `--no-gitignore`: Ignore `.gitignore`, `.ignore`, and related git exclude files during discovery.
 * `--color <auto|always|never>`: Control colored human-readable output.
 
 ### Examples
@@ -72,6 +73,11 @@ dglint README.md AGENTS.md docs/exec-plans/
 **Apply safe autofixes to the working tree:**
 ```bash
 dglint . --fix
+```
+
+**Lint files that are normally skipped by `.gitignore`:**
+```bash
+dglint . --no-gitignore
 ```
 
 **Example CI Usage (GitHub Actions):**

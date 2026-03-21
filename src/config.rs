@@ -50,6 +50,9 @@ pub struct FileConfig {
         alias = "report_ambiguous_inline_code"
     )]
     pub report_ambiguous_inline_code: bool,
+    #[serde(default = "default_respect_gitignore")]
+    #[serde(rename = "respect-gitignore", alias = "respect_gitignore")]
+    pub respect_gitignore: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +67,7 @@ pub struct Config {
     pub config_path: Option<PathBuf>,
     pub config_was_explicit: bool,
     pub report_ambiguous_inline_code: bool,
+    pub respect_gitignore: bool,
 }
 
 impl Config {
@@ -89,7 +93,10 @@ impl Config {
             toml::from_str::<FileConfig>(&content)
                 .with_context(|| format!("failed to parse {}", path.display()))?
         } else {
-            FileConfig::default()
+            FileConfig {
+                respect_gitignore: default_respect_gitignore(),
+                ..FileConfig::default()
+            }
         };
 
         let mut known_extensions = default_extensions();
@@ -136,8 +143,13 @@ impl Config {
             config_path,
             config_was_explicit,
             report_ambiguous_inline_code: parsed.report_ambiguous_inline_code,
+            respect_gitignore: parsed.respect_gitignore,
         })
     }
+}
+
+fn default_respect_gitignore() -> bool {
+    true
 }
 
 fn normalize_extension(value: &str) -> String {
@@ -192,6 +204,7 @@ mod tests {
             r#"
 local_reference_style = "links"
 report_ambiguous_inline_code = true
+respect_gitignore = false
 extend_extensions = ["proto", ".rego"]
 remove_extensions = ["md"]
 extend_special_filenames = ["Tiltfile"]
@@ -209,6 +222,7 @@ remove_special_filenames = ["LICENSE"]
         assert!(!config.config_was_explicit);
         assert_eq!(config.local_reference_style, LocalReferenceStyle::Links);
         assert!(config.report_ambiguous_inline_code);
+        assert!(!config.respect_gitignore);
         assert!(config.known_extensions.contains(".proto"));
         assert!(config.known_extensions.contains(".rego"));
         assert!(!config.known_extensions.contains(".md"));
@@ -218,5 +232,16 @@ remove_special_filenames = ["LICENSE"]
             config.per_file_ignores.get("docs/generated/**").unwrap(),
             &vec!["ambiguous-inline-code".to_string()]
         );
+    }
+
+    #[test]
+    fn load_defaults_to_respecting_gitignore() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert!(config.respect_gitignore);
     }
 }

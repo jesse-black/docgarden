@@ -381,6 +381,7 @@ mod tests {
             config_path: None,
             config_was_explicit: false,
             report_ambiguous_inline_code: false,
+            respect_gitignore: true,
         }
     }
 

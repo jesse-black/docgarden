@@ -111,6 +111,80 @@ fn explicit_directory_target_does_not_scan_outside_directory() {
 }
 
 #[test]
+fn gitignored_files_are_skipped_by_default() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
+    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::write(root.join(".gitignore"), "target/\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
+    fs::write(
+        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        "See `scripts/setup-jules.sh`.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .current_dir(root)
+        .args(["."])
+        .assert()
+        .success();
+}
+
+#[test]
+fn no_gitignore_flag_scans_gitignored_files() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
+    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::write(root.join(".gitignore"), "target/\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
+    fs::write(
+        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        "See `scripts/setup-jules.sh`.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .current_dir(root)
+        .args([".", "--no-gitignore", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "target/package/dglint-0.1.0/docs/stale.md",
+        ))
+        .stdout(predicate::str::contains("unresolved-local-path"));
+}
+
+#[test]
+fn config_can_opt_out_of_gitignore_support() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
+    fs::write(root.join("dglint.toml"), "respect-gitignore = false\n").unwrap();
+    fs::write(root.join(".gitignore"), "target/\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
+    fs::write(
+        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        "See `scripts/setup-jules.sh`.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_dglint"))
+        .current_dir(root)
+        .args([".", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "target/package/dglint-0.1.0/docs/stale.md",
+        ))
+        .stdout(predicate::str::contains("unresolved-local-path"));
+}
+
+#[test]
 fn git_root_is_used_when_no_dglint_toml_is_found() {
     let temp = tempdir().unwrap();
     let workspace = temp.path();

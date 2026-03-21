@@ -37,9 +37,11 @@ fn discover_markdown_files_under(config: &Config, root: &Path) -> Result<Vec<Pat
     let mut walker = WalkBuilder::new(root);
     walker
         .hidden(false)
-        .git_ignore(false)
-        .git_exclude(false)
-        .git_global(false);
+        .git_ignore(config.respect_gitignore)
+        .git_exclude(config.respect_gitignore)
+        .git_global(config.respect_gitignore)
+        .ignore(config.respect_gitignore)
+        .require_git(false);
     walker.follow_links(false);
 
     for entry in walker.build() {
