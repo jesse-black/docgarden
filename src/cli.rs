@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::discover::{discover_markdown_files, discover_markdown_files_for_targets};
+use crate::discover::discover_markdown_files_for_targets;
 use crate::lint::{Mode, lint_file, summarize};
 use crate::root::{RootMarker, infer_repository_root};
 
@@ -22,6 +22,8 @@ pub struct Args {
     json: bool,
     #[arg(long)]
     fix: bool,
+    #[arg(long)]
+    no_gitignore: bool,
     #[arg(long, value_enum, default_value_t = ColorChoice::Auto)]
     color: ColorChoice,
 }
@@ -36,7 +38,14 @@ enum ColorChoice {
 pub fn run() -> Result<()> {
     let args = Args::parse();
     let mode = if args.fix { Mode::Fix } else { Mode::Check };
-    execute(args.targets, args.config, mode, args.json, args.color)
+    execute(
+        args.targets,
+        args.config,
+        mode,
+        args.json,
+        args.no_gitignore,
+        args.color,
+    )
 }
 
 fn execute(
@@ -44,6 +53,7 @@ fn execute(
     config_path: Option<PathBuf>,
     mode: Mode,
     json: bool,
+    no_gitignore: bool,
     color: ColorChoice,
 ) -> Result<()> {
     let invocation_targets = if targets.is_empty() {
@@ -60,12 +70,11 @@ fn execute(
             RootMarker::Directory(".git"),
         ],
     )?;
-    let config = Config::load(&repository_root, config_path.as_deref())?;
-    let files = if resolved_targets.len() == 1 && resolved_targets[0].is_dir() {
-        discover_markdown_files(&config)?
-    } else {
-        discover_markdown_files_for_targets(&config, &resolved_targets)?
-    };
+    let mut config = Config::load(&repository_root, config_path.as_deref())?;
+    if no_gitignore {
+        config.respect_gitignore = false;
+    }
+    let files = discover_markdown_files_for_targets(&config, &resolved_targets)?;
     let mut diagnostics = Vec::new();
 
     for path in files {

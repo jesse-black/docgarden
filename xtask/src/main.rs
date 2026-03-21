@@ -17,7 +17,17 @@ fn main() -> Result<()> {
 fn validate() -> Result<()> {
     run("cargo", &["fmt", "--check"])?;
     run("cargo", &["clippy"])?;
-    run("cargo", &["llvm-cov", "--fail-under-regions=88"])?;
+    run(
+        "cargo",
+        &[
+            "llvm-cov",
+            "--json",
+            "--output-path",
+            "target/coverage.json",
+            "--fail-under-regions=88",
+        ],
+    )?;
+    run("covgate", &["check", "target/coverage.json"])?;
     run("cargo-machete", &["."])?;
     run("cargo-deny", &["check"])?;
     Ok(())

@@ -9,8 +9,8 @@ See `docs/references/environment-execution-contexts.md` for deeper rationale, so
 
 ## Setup commands
 
-- Codex Cloud setup command should run `scripts/setup-codex-cloud.sh`.
-- Jules setup command should run `scripts/setup-jules.sh`.
+- Codex Cloud and Jules setup commands should both run `scripts/agent-env-setup.sh`.
+- Codex Cloud and Jules maintenance commands should both run `scripts/agent-env-maintenance.sh`.
 
 ### Available in both environments
 
