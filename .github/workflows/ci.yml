@@ -15,14 +15,18 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: covgate
+          repo: jesse-black/covgate
       - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test
       - name: Coverage
-        run: cargo llvm-cov --summary-only
+        run: cargo llvm-cov --json --output-path target/coverage.json
+      - name: Covgate
+        run: covgate check target/coverage.json
 
   dependency-hygiene:
     runs-on: ubuntu-latest
@@ -49,4 +53,3 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Dogfood lint
         run: cargo run -- .
-

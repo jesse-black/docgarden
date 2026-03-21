@@ -47,8 +47,9 @@ For some tools (for example Task and TFLint), the bootstrap may prefer GitHub re
 
 1. Update setup script and docs in a branch.
 2. Configure Codex Cloud and Jules setup commands to call `scripts/agent-env-setup.sh`.
-3. Validate required tool availability and task execution from that branch.
-4. Merge after validation.
+3. Configure Codex Cloud and Jules maintenance commands to call `scripts/agent-env-maintenance.sh`.
+4. Validate required tool availability and task execution from that branch.
+5. Merge after validation.
 
 ## Network allowlist considerations
 
