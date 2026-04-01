@@ -1,6 +1,6 @@
 # Linter Ideas
 
-These are candidate rule families and checks for `dglint` beyond local file-reference style and path-resolution validation. They are grounded in this repository's agentic-engineering model: `AGENTS.md` is a short routing map, `docs/` is the repository knowledge system of record, and deeper context should be discoverable through cross-linked repository documents.
+These are candidate rule families and checks for `docgarden` beyond local file-reference style and path-resolution validation. They are grounded in this repository's agentic-engineering model: `AGENTS.md` is a short routing map, `docs/` is the repository knowledge system of record, and deeper context should be discoverable through cross-linked repository documents.
 
 ## Repository-Knowledge Checks
 

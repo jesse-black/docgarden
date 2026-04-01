@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines how `dglint` should interpret backticked text when deciding whether it is a repository-local file or directory reference, ambiguous inline code, or ordinary code text that should not trigger path diagnostics. The goal is to keep path linting useful during dogfooding without turning example-heavy documentation into false-positive noise.
+This document defines how `docgarden` should interpret backticked text when deciding whether it is a repository-local file or directory reference, ambiguous inline code, or ordinary code text that should not trigger path diagnostics. The goal is to keep path linting useful during dogfooding without turning example-heavy documentation into false-positive noise.
 
 ## Scope
 
@@ -41,7 +41,7 @@ The classifier should also reject a small v1 set of obviously non-path backtick 
 - `//` anywhere in the token
 - glob metacharacters such as `*`, `?`, `[`, and `{`
 - code punctuation such as `(`, `)`, `<`, `>`, `"`, and `'`
-- `:`, because `dglint` is aimed at workspace-relative sandboxes and portable Git repositories rather than drive-letter path syntax
+- `:`, because `docgarden` is aimed at workspace-relative sandboxes and portable Git repositories rather than drive-letter path syntax
 
 ## Directory References
 
@@ -121,7 +121,7 @@ This separation affects policy:
 - Markdown links follow VS Code Markdown navigation semantics
 - Markdown links remain enforceable link destinations, so `[docs glob](docs/**/*.md)` is still a broken local link target
 
-For Markdown links, `dglint` should follow the same basic resolution model that VS Code uses in Markdown editors:
+For Markdown links, `docgarden` should follow the same basic resolution model that VS Code uses in Markdown editors:
 
 - a destination starting with `/` is workspace-root-relative
 - a destination not starting with `/` is relative to the current document directory

@@ -1,19 +1,19 @@
 # Architecture
 
-This document describes the high-level architecture of `dglint`.
+This document describes the high-level architecture of `docgarden`.
 
-`dglint` is a Rust CLI for enforcing mechanical repository-knowledge invariants in agentic engineering repositories.
+`docgarden` is a Rust CLI for enforcing mechanical repository-knowledge invariants in agentic engineering repositories.
 
 Today, the implementation is centered on Markdown-local path integrity and style. It scans repository Markdown files, parses them into an AST, classifies repository-local references found in inline code and links, resolves those references against the repository root, and reports or fixes violations according to the configured style policy.
 
-This makes `dglint` part of the repository agent operating system rather than a general-purpose Markdown linter. The tool is intended to support progressive context loading and CI-enforced doc-gardening workflows in repositories that treat in-repo documentation as the system of record. As the rule set expands, new checks should remain deterministic, repository-local, and mechanically enforceable without model inference.
+This makes `docgarden` part of the repository agent operating system rather than a general-purpose Markdown linter. The tool is intended to support progressive context loading and CI-enforced doc-gardening workflows in repositories that treat in-repo documentation as the system of record. As the rule set expands, new checks should remain deterministic, repository-local, and mechanically enforceable without model inference.
 
 ## Bird's-Eye View
 
-At the highest level, `dglint` has a simple pipeline:
+At the highest level, `docgarden` has a simple pipeline:
 
 1. Parse CLI arguments and determine the effective repository root and execution mode.
-2. Load configuration from `dglint.toml` or built-in defaults.
+2. Load configuration from `docgarden.toml` or built-in defaults.
 3. Discover the Markdown files that should be linted for this invocation.
 4. Parse each file into a Markdown AST.
 5. Walk the AST and classify inline code and links that might represent repository-local paths.
@@ -26,7 +26,7 @@ The tool is intentionally local and repository-scoped. It does not fetch remote 
 
 ### Entry points
 
-`src/main.rs` is the binary entry point. It delegates directly to `dglint::run()`.
+`src/main.rs` is the binary entry point. It delegates directly to `docgarden::run()`.
 
 `src/lib.rs` is a small crate root that exposes the CLI runner and keeps the executable thin.
 
@@ -50,7 +50,7 @@ If you want to understand the end-to-end control flow of the binary, start here.
 
 ### Configuration and defaults
 
-`src/config.rs` loads `dglint.toml`, merges it with built-in defaults, and produces the effective `Config`.
+`src/config.rs` loads `docgarden.toml`, merges it with built-in defaults, and produces the effective `Config`.
 
 The config model currently controls:
 
@@ -89,11 +89,11 @@ As the product grows into broader repository-knowledge checks such as front matt
 
 These invariants are important to preserve even if the internal implementation changes.
 
-- `dglint` is repository-local. It reasons about paths that should resolve within the current repository root and does not depend on network access.
-- `dglint` is mechanically enforced for agent workflows. It should not require natural-language understanding or model-backed judgments to decide whether a rule passes.
-- `dglint` assumes repository knowledge should be encoded in versioned repo artifacts. Rules should reinforce discoverable, cross-linked documentation rather than rely on external context.
+- `docgarden` is repository-local. It reasons about paths that should resolve within the current repository root and does not depend on network access.
+- `docgarden` is mechanically enforced for agent workflows. It should not require natural-language understanding or model-backed judgments to decide whether a rule passes.
+- `docgarden` assumes repository knowledge should be encoded in versioned repo artifacts. Rules should reinforce discoverable, cross-linked documentation rather than rely on external context.
 - Markdown AST traversal is the source of truth for linting. The tool does not rely on regex-only scanning for rule decisions.
-- Resolution is path-based, not symbol-based. `dglint` verifies whether a referenced repository path exists; it does not infer semantic meaning from the target file contents.
+- Resolution is path-based, not symbol-based. `docgarden` verifies whether a referenced repository path exists; it does not infer semantic meaning from the target file contents.
 - Fix mode is conservative. The tool only rewrites cases where the local-reference style policy can be applied mechanically without inventing new target semantics.
 - Configuration affects classification and scope, not repository contents. The linter never mutates anything outside files explicitly being fixed.
 - Diagnostics are file-local. Each reported issue is anchored to a single Markdown file position and can be emitted in human-readable or JSON form.

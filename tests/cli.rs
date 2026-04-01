@@ -9,17 +9,54 @@ mod common;
 use common::fixture_repo;
 
 #[test]
-fn lint_reports_fixable_diagnostics_for_fixture_repo() {
+fn root_help_lists_explicit_subcommands() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: docgarden <COMMAND>"))
+        .stdout(predicate::str::contains("lint"))
+        .stdout(predicate::str::contains("fix"))
+        .stdout(predicate::str::contains("init"))
+        .stdout(predicate::str::contains("skill"))
+        .stdout(predicate::str::contains("[TARGETS]").not())
+        .stdout(predicate::str::contains("--fix").not());
+}
+
+#[test]
+fn lint_and_fix_help_list_shared_flags() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[TARGETS]..."))
+        .stdout(predicate::str::contains("--config <CONFIG>"))
+        .stdout(predicate::str::contains("--json"))
+        .stdout(predicate::str::contains("--no-gitignore"))
+        .stdout(predicate::str::contains("--color <COLOR>"));
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["fix", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[TARGETS]..."))
+        .stdout(predicate::str::contains("--config <CONFIG>"))
+        .stdout(predicate::str::contains("--json"))
+        .stdout(predicate::str::contains("--no-gitignore"))
+        .stdout(predicate::str::contains("--color <COLOR>"));
+}
+
+#[test]
+fn lint_subcommand_reports_fixable_diagnostics_for_fixture_repo() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
         .stdout(predicate::str::contains("fixable"))
-        .stdout(predicate::str::contains("Run `dglint "))
-        .stdout(predicate::str::contains("--fix"))
+        .stdout(predicate::str::contains("Run `docgarden fix "))
         .stdout(predicate::str::contains("--config").not());
 }
 
@@ -27,29 +64,31 @@ fn lint_reports_fixable_diagnostics_for_fixture_repo() {
 fn explicit_file_target_reports_fixable_diagnostics() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
-        .args(["docs/guide.md", "--color", "never"])
+        .args(["lint", "docs/guide.md", "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
-        .stdout(predicate::str::contains("Run `dglint docs/guide.md --fix`"));
+        .stdout(predicate::str::contains(
+            "Run `docgarden fix docs/guide.md`",
+        ));
 }
 
 #[test]
-fn fix_rewrites_files_and_second_lint_passes() {
+fn fix_subcommand_rewrites_files_and_second_lint_passes() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--fix"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["fix", root.to_str().unwrap()])
         .assert()
         .success();
 
     let doc = fs::read_to_string(root.join("docs/guide.md")).unwrap();
     assert!(doc.contains("`docs/real.md`"));
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap()])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap()])
         .assert()
         .success();
 }
@@ -58,18 +97,18 @@ fn fix_rewrites_files_and_second_lint_passes() {
 fn explicit_file_fix_rewrites_and_second_passes() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
-        .args(["docs/guide.md", "--fix"])
+        .args(["fix", "docs/guide.md"])
         .assert()
         .success();
 
     let doc = fs::read_to_string(root.join("docs/guide.md")).unwrap();
     assert!(doc.contains("`docs/real.md`"));
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
-        .args(["docs/guide.md"])
+        .args(["lint", "docs/guide.md"])
         .assert()
         .success();
 }
@@ -78,14 +117,14 @@ fn explicit_file_fix_rewrites_and_second_passes() {
 fn explicit_file_list_is_supported() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
-        .args(["docs/guide.md", "docs/real.md", "--color", "never"])
+        .args(["lint", "docs/guide.md", "docs/real.md", "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
         .stdout(predicate::str::contains(
-            "Run `dglint docs/guide.md docs/real.md --fix`",
+            "Run `docgarden fix docs/guide.md docs/real.md`",
         ));
 }
 
@@ -94,18 +133,18 @@ fn explicit_directory_target_does_not_scan_outside_directory() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
-    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args(["docs"])
+        .args(["lint", "docs"])
         .assert()
         .success();
 }
@@ -115,19 +154,19 @@ fn gitignored_files_are_skipped_by_default() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
-    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args(["."])
+        .args(["lint", "."])
         .assert()
         .success();
 }
@@ -137,23 +176,23 @@ fn no_gitignore_flag_scans_gitignored_files() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
-    fs::write(root.join("dglint.toml"), "").unwrap();
+    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args([".", "--no-gitignore", "--color", "never"])
+        .args(["lint", ".", "--no-gitignore", "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
-            "target/package/dglint-0.1.0/docs/stale.md",
+            "target/package/docgarden-0.1.0/docs/stale.md",
         ))
         .stdout(predicate::str::contains("unresolved-local-path"));
 }
@@ -163,29 +202,29 @@ fn config_can_opt_out_of_gitignore_support() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/dglint-0.1.0/docs")).unwrap();
-    fs::write(root.join("dglint.toml"), "respect-gitignore = false\n").unwrap();
+    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "respect-gitignore = false\n").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/dglint-0.1.0/docs/stale.md"),
+        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args([".", "--color", "never"])
+        .args(["lint", ".", "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
-            "target/package/dglint-0.1.0/docs/stale.md",
+            "target/package/docgarden-0.1.0/docs/stale.md",
         ))
         .stdout(predicate::str::contains("unresolved-local-path"));
 }
 
 #[test]
-fn git_root_is_used_when_no_dglint_toml_is_found() {
+fn git_root_is_used_when_no_docgarden_toml_is_found() {
     let temp = tempdir().unwrap();
     let workspace = temp.path();
     let root = workspace.join("repo");
@@ -195,9 +234,9 @@ fn git_root_is_used_when_no_dglint_toml_is_found() {
     fs::create_dir_all(&outside).unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&outside)
-        .arg(root.join("docs/guide.md"))
+        .args(["lint", root.join("docs/guide.md").to_str().unwrap()])
         .assert()
         .success();
 }
@@ -206,16 +245,16 @@ fn git_root_is_used_when_no_dglint_toml_is_found() {
 fn fix_rewrites_backticks_to_links_in_link_mode() {
     let (_temp, root) = fixture_repo("links");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--fix"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["fix", root.to_str().unwrap()])
         .assert()
         .success();
 
     let doc = fs::read_to_string(root.join("docs/guide.md")).unwrap();
     assert!(doc.contains("[./real.md](real.md)"));
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap()])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap()])
         .assert()
         .success();
 }
@@ -226,7 +265,7 @@ fn fix_preserves_unrelated_readme_formatting() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
@@ -234,9 +273,9 @@ fn fix_preserves_unrelated_readme_formatting() {
     fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
     let readme = root.join("README.md");
     let original = concat!(
-        "# Doc Gardening Linter\n",
+        "# Doc Garden\n",
         "\n",
-        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/dglint/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/dglint/actions/workflows/ci.yml)\n",
+        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/docgarden/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml)\n",
         "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)\n",
         "\n",
         "\n",
@@ -245,9 +284,9 @@ fn fix_preserves_unrelated_readme_formatting() {
         "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
     );
     let expected = concat!(
-        "# Doc Gardening Linter\n",
+        "# Doc Garden\n",
         "\n",
-        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/dglint/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/dglint/actions/workflows/ci.yml)\n",
+        "[![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/docgarden/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml)\n",
         "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)\n",
         "\n",
         "\n",
@@ -257,9 +296,9 @@ fn fix_preserves_unrelated_readme_formatting() {
     );
     fs::write(&readme, original).unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args(["README.md", "--fix"])
+        .args(["fix", "README.md"])
         .assert()
         .success();
 

@@ -4,3 +4,4 @@ exclude = [
 
 [per-file-ignores]
 "README.md" = ["prefer-backticks-for-local-paths"]
+"docs/exec-plans/completed/**" = ["unresolved-local-path"]
