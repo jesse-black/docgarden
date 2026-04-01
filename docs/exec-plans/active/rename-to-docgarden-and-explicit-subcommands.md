@@ -6,13 +6,14 @@ This ExecPlan is a living document. The sections `Progress`, `Surprises & Discov
 
 ## Purpose / Big Picture
 
-After this change, the tool will present itself as `docgarden` instead of `dglint`, and its command surface will use explicit subcommands rather than the current implicit “lint by default, fix with `--fix`” model. A user will be able to run commands such as `docgarden lint .`, `docgarden fix README.md`, `docgarden init`, and `docgarden skill init` without the parser ambiguity that comes from mixing top-level positional targets with optional subcommands.
+After this change, the tool will present itself as `docgarden` instead of `dglint`, and its command surface will use explicit subcommands rather than the current implicit “lint by default, fix with `--fix`” model. A user will be able to run commands such as `docgarden lint .`, `docgarden fix README.md`, and `docgarden init` without the parser ambiguity that comes from mixing top-level positional targets with optional subcommands. The command tree will also reserve a singular `skill` namespace for future work without requiring this plan to implement broader skill-management behavior now.
 
 This change matters because the product is no longer just a narrow linter. The repository direction now includes repository bootstrap and skill scaffolding, so the executable name should describe the broader system and the command tree should scale cleanly as more setup-oriented workflows are added. You will know the work is complete when the binary name, help output, installation instructions, tests, and repository documentation all consistently describe `docgarden`, and when the explicit subcommands behave correctly in both local development and CI-style runs.
 
 ## Progress
 
 - [x] (2026-03-21 00:00Z) Authored the initial ExecPlan in `docs/exec-plans/active/rename-to-docgarden-and-explicit-subcommands.md`.
+- [x] (2026-04-01 00:00Z) Revised the plan after product-shape discussion to keep `docgarden` as the canonical binary name, keep `fix` as its own subcommand, and move broader skill-management work into a separate future ExecPlan while reserving the singular `skill` namespace here.
 - [ ] Add failing CLI tests that describe the new `docgarden lint` and `docgarden fix` command surface and lock in the intended help output.
 - [ ] Refactor the CLI parser in `src/cli.rs` to use required explicit subcommands and route lint and fix through shared execution logic.
 - [ ] Rename the package, executable, and configuration filename from `dglint` to `docgarden`.
@@ -30,19 +31,37 @@ This change matters because the product is no longer just a narrow linter. The r
 - Observation: The current name is spread through more than the parser. It appears in Cargo package metadata, config-file discovery, tests that reference `env!("CARGO_BIN_EXE_dglint")`, user-facing fix hints, README examples, and completed plan history.
   Evidence: `Cargo.toml`, `src/config.rs`, `src/cli.rs`, `src/main.rs`, `tests/cli.rs`, `tests/config.rs`, `tests/path_behavior.rs`, and multiple files under `docs/` all contain `dglint` or `dglint.toml`.
 
+- Observation: The current plan uses future-oriented examples such as `docgarden skill init`, but the repository does not yet have a separate agreed ExecPlan for broader skill management, and mixing that future work into this rename plan makes the required scope harder to read.
+  Evidence: Discussion on 2026-04-01 concluded that skill matching and other skill-management commands should be specified in a separate ExecPlan, while this plan should only reserve command-tree space for the singular `skill` namespace.
+
+- Observation: A plain `cargo test <filter>` command is not a reliable TDD gate for this plan because Cargo treats the filter as a substring match, and the old example filters such as `cli::lint` can succeed while running zero integration tests from `tests/cli.rs`.
+  Evidence: `tests/cli.rs` currently uses integration-test names such as `lint_reports_fixable_diagnostics_for_fixture_repo` rather than unit-test paths like `cli::lint`, so the old filter shape can miss every intended test while still exiting successfully.
+
 ## Decision Log
 
 - Decision: Rename the human-facing tool and primary executable to `docgarden`.
   Rationale: The product scope now includes repository bootstrap and skill scaffolding in addition to linting. `docgarden` better captures the full repository-knowledge workflow than a name that reads as “Doc Gardening Linter” only.
   Date/Author: 2026-03-21 / Codex
 
+- Decision: Keep `docgarden` as the canonical binary name for this migration and do not introduce a shortened primary name or alias such as `dcgn`.
+  Rationale: The longer name is more legible in help output, documentation, installation instructions, and future product positioning. A shortened primary name would save a small amount of typing but would make the tool less self-explanatory and more brittle in docs and examples.
+  Date/Author: 2026-04-01 / Codex
+
 - Decision: Use explicit required subcommands for the main command tree rather than an optional-subcommand parser with default lint behavior.
-  Rationale: The repository has already experienced friction with `clap` parsers that mix top-level positional targets and optional subcommands. A required subcommand enum keeps the parser simpler, removes target-versus-subcommand ambiguity, and leaves a clean place to add `init` and `skill init`.
+  Rationale: The repository has already experienced friction with `clap` parsers that mix top-level positional targets and optional subcommands. A required subcommand enum keeps the parser simpler, removes target-versus-subcommand ambiguity, and leaves a clean place to add `init` and future `skill` subcommands.
   Date/Author: 2026-03-21 / Codex
 
 - Decision: Restore separate `lint` and `fix` subcommands instead of keeping `--fix` as the only autofix entrypoint.
   Rationale: With explicit subcommands, `lint` and `fix` are easier to reason about than mixing repository-setup commands with one lone mode flag. They also make command examples and help output more uniform across the CLI.
   Date/Author: 2026-03-21 / Codex
+
+- Decision: Reserve the singular `skill` namespace in the root command tree, but keep concrete skill-management behavior out of scope for this ExecPlan except where needed to preserve an extensible parser shape.
+  Rationale: This rename and subcommand migration should stay focused on the tool rename, the explicit `lint` and `fix` contract, config discovery, and documentation consistency. Skill matching, listing, installation, and validation deserve their own plan so their UX and determinism can be specified independently.
+  Date/Author: 2026-04-01 / Codex
+
+- Decision: Specify future skill discovery and matching behavior in a separate ExecPlan rather than in this migration plan.
+  Rationale: The current discussion established an early direction for free-text skill matching, but that work has its own product and CLI tradeoffs. Keeping it separate avoids binding this rename plan to unresolved details.
+  Date/Author: 2026-04-01 / Codex
 
 - Decision: Rename the configuration file to the new `docgarden`-branded filename without keeping dual discovery for `dglint.toml`.
   Rationale: The repository is still private and the tool has not been deployed yet, so a pre-release rename can be done as one clean cut without carrying compatibility logic that will immediately become maintenance burden.
@@ -54,7 +73,7 @@ This change matters because the product is no longer just a narrow linter. The r
 
 ## Outcomes & Retrospective
 
-No implementation work has been completed yet. The expected outcome is a renamed tool whose command surface scales cleanly to linting, fixing, repository initialization, and skill scaffolding, while remaining deterministic and CI-friendly. The largest risk is inconsistency: the code can compile while tests, docs, config discovery, and installation instructions still point at the old name. This plan exists to keep those surfaces synchronized during one pre-release cutover.
+No implementation work has been completed yet. The expected outcome is a renamed tool whose command surface scales cleanly to linting, fixing, repository initialization, and future skill-oriented expansion, while remaining deterministic and CI-friendly. The largest risk is inconsistency: the code can compile while tests, docs, config discovery, and installation instructions still point at the old name. A second risk is accidental scope creep if future `skill` behavior gets mixed into this rename plan before that workflow has its own executable specification. This plan exists to keep those surfaces synchronized during one pre-release cutover while leaving future command-tree growth room.
 
 ## Context and Orientation
 
@@ -62,21 +81,21 @@ This repository currently builds a Rust command-line program named `dglint`. The
 
 Configuration currently lives in a dedicated repository-root file named `dglint.toml`. `src/config.rs` discovers that file when no explicit `--config` path is provided. Repository-root inference in `src/cli.rs` and `src/root.rs` also treats `dglint.toml` as a marker. The test suite uses `assert_cmd` in `tests/cli.rs`, `tests/config.rs`, and `tests/path_behavior.rs` to execute the compiled binary by its current Cargo-generated name `CARGO_BIN_EXE_dglint`.
 
-The README and product docs still describe the tool as `dglint`, a deterministic linter that powers a broader Doc Gardener workflow. The requested product shift is to make the binary itself represent the broader system under the name `docgarden`, with linting as one explicit subcommand alongside `init` and `skill init`. That means this change is not only a parser refactor. It is a coordinated product rename, command-surface migration, and documentation update.
+The README and product docs still describe the tool as `dglint`, a deterministic linter that powers a broader Doc Gardener workflow. The requested product shift is to make the binary itself represent the broader system under the name `docgarden`, with linting as one explicit subcommand alongside `init` and a reserved future `skill` namespace. That means this change is not only a parser refactor. It is a coordinated product rename, command-surface migration, and documentation update. It is not the place to fully define skill matching, listing, installation, or validation behavior.
 
 The term “explicit subcommand model” in this plan means the root parser requires one named action such as `lint`, `fix`, `init`, or `skill`. In plain language, users no longer type the executable followed by bare paths. They choose an action first.
 
 ## Plan of Work
 
-Start with tests so the new command surface is specified before the parser changes. In `tests/cli.rs`, replace or supplement the current assertions that invoke the binary with bare targets or `--fix`. Add focused tests that prove `docgarden lint <targets>` behaves like the current check mode and `docgarden fix <targets>` behaves like the current autofix mode. Include one help-output test that asserts the root help shows the explicit subcommands, and that `lint --help` and `fix --help` expose the lint-target arguments and shared flags the user needs. Because the Cargo-generated binary name will change as part of this work, update test invocations from `env!("CARGO_BIN_EXE_dglint")` to the new executable name once the package metadata changes. The tests should fail before the CLI implementation is updated.
+Start with tests so the new command surface is specified before the parser changes. In `tests/cli.rs`, replace or supplement the current assertions that invoke the binary with bare targets or `--fix`. Add focused tests that prove `docgarden lint <targets>` behaves like the current check mode and `docgarden fix <targets>` behaves like the current autofix mode. Include one help-output test that asserts the root help shows the explicit subcommands, and that `lint --help` and `fix --help` expose the lint-target arguments and shared flags the user needs. Give these new integration tests stable, explicit names so they can be run through `cargo test --test cli <exact-test-name>` without relying on a broad substring filter that might match nothing. Because the Cargo-generated binary name will change as part of this work, update test invocations from `env!("CARGO_BIN_EXE_dglint")` to the new executable name once the package metadata changes. The tests should fail before the CLI implementation is updated.
 
-After the tests describe the new behavior, refactor `src/cli.rs` into a root parser plus a subcommand enum. The root parser should carry only global options that truly apply across commands. The `lint` and `fix` subcommands should share one reusable argument struct for targets, config, JSON output, gitignore behavior, and color where appropriate. Preserve the current lint execution pipeline by routing both subcommands into a shared function that still performs repository-root inference, config loading, file discovery, lint traversal, diagnostic printing, and exit-status decisions. `fix` should still use `crate::lint::Mode::Fix`, while `lint` should still use `crate::lint::Mode::Check`. The goal is to change the command surface without forking the underlying lint logic.
+After the tests describe the new behavior, refactor `src/cli.rs` into a root parser plus a subcommand enum. The root parser should carry only global options that truly apply across commands. The `lint` and `fix` subcommands should share one reusable argument struct for targets, config, JSON output, gitignore behavior, and color where appropriate. Preserve the current lint execution pipeline by routing both subcommands into a shared function that still performs repository-root inference, config loading, file discovery, lint traversal, diagnostic printing, and exit-status decisions. `fix` should still use `crate::lint::Mode::Fix`, while `lint` should still use `crate::lint::Mode::Check`. The goal is to change the command surface without forking the underlying lint logic. If placeholder parser nodes for `init` or `skill` are introduced in this milestone, keep them intentionally shallow and clearly marked as reserved command-tree space rather than as completed product workflows.
 
 Once the command tree is in place, perform the rename. Update `Cargo.toml` so the published package and binary expose `docgarden`. Update `src/main.rs` and the crate exports so the main function calls the renamed crate module path correctly. Change `#[command(name = "...")]` in `src/cli.rs` to `docgarden`, and rewrite any user-facing fix hints so they print `docgarden fix ...` rather than `dglint ... --fix`. Rename the canonical config filename to the new `docgarden`-branded filename in `src/config.rs`, `src/cli.rs`, and `src/root.rs`, and update every test and fixture string that mentions the old binary or config name, including README text embedded in tests.
 
 Do the config rename as a full cutover rather than a compatibility layer. `src/config.rs` should discover the new config filename when no explicit `--config` path is provided, and `src/cli.rs` plus `src/root.rs` should use that new filename as the repository-root marker. Keep explicit `--config` behavior unchanged except for examples that should now show the new filename. Because the tool is still private, there is no need to preserve dual discovery or precedence rules.
 
-After the binary and config rename are functional, update documentation and examples. The highest-priority files are `README.md`, `docs/PRODUCT.md`, `ARCHITECTURE.md`, `AGENTS.md`, and any active or completed ExecPlans whose instructions are intended to remain operational for future contributors. Update the README usage section so the examples become `docgarden lint .`, `docgarden fix .`, and later `docgarden init` / `docgarden skill init` where relevant. In architecture and product docs, rewrite the narrative to describe `docgarden` as the primary tool and describe linting as one subcommand family. When touching historical completed plans, preserve history rather than pretending the old name never existed; if a historical reference remains intentionally historical, label it as such in prose instead of silently rewriting implementation history.
+After the binary and config rename are functional, update documentation and examples. The highest-priority files are `README.md`, `docs/PRODUCT.md`, `ARCHITECTURE.md`, `AGENTS.md`, and any active or completed ExecPlans whose instructions are intended to remain operational for future contributors. Update the README usage section so the examples become `docgarden lint .` and `docgarden fix .`, with `docgarden init` included only if that command is actually implemented in this migration. In architecture and product docs, rewrite the narrative to describe `docgarden` as the primary tool and describe linting as one subcommand family. If docs mention future `skill` work, frame it explicitly as reserved future command-tree space rather than as delivered behavior. When touching historical completed plans, preserve history rather than pretending the old name never existed; if a historical reference remains intentionally historical, label it as such in prose instead of silently rewriting implementation history.
 
 Finally, run the required validation stack from the repository root. Because the repository policy says to use TDD for bug reports and review findings and to run `cargo xtask validate`, use the full validation command after the focused CLI tests pass. Then dogfood the renamed tool against the changed documentation so the repository proves it can lint its own newly renamed docs and config references.
 
@@ -86,10 +105,11 @@ Work from the repository root.
 
 1. Add the new CLI contract tests first.
 
-    cargo test cli::lint
-    cargo test cli::fix
+    cargo test --test cli root_help_lists_explicit_subcommands
+    cargo test --test cli lint_subcommand_reports_fixable_diagnostics_for_fixture_repo
+    cargo test --test cli fix_subcommand_rewrites_files_and_second_lint_passes
 
-Expected result before implementation: the new tests fail because the binary name, parser shape, or help output still matches the old `dglint` plus `--fix` contract.
+Expected result before implementation: these exact integration tests fail because the binary name, parser shape, or help output still matches the old `dglint` plus `--fix` contract. If any command reports zero tests run, stop and fix the test name or invocation before continuing; a green run with zero executed tests does not satisfy this milestone.
 
 2. Refactor the parser and dispatch logic.
 
@@ -127,7 +147,9 @@ Expected result: `cargo run -- lint .` behaves like the former default check mod
 
 Acceptance is behavioral and must be observable from the command line and from checked-in documentation.
 
-First, the root help output must show explicit subcommands rather than bare positional lint targets. A user running the renamed binary’s help should be able to discover `lint`, `fix`, `init`, and `skill` from one screen without reading the source code. The `lint` and `fix` help pages must each explain targets, config selection, color control, JSON output where applicable, and gitignore behavior.
+First, the root help output must show explicit subcommands rather than bare positional lint targets. A user running the renamed binary’s help should be able to discover `lint` and `fix` from one screen without reading the source code. If `init` or a reserved `skill` placeholder is present in the parser, the help output must label them in a way that does not imply more implemented behavior than actually exists. The `lint` and `fix` help pages must each explain targets, config selection, color control, JSON output where applicable, and gitignore behavior.
+
+The focused pre-implementation test gate must be trustworthy. Running the exact `cargo test --test cli <test-name>` commands listed in `Concrete Steps` must execute the intended integration tests in `tests/cli.rs`; a command that succeeds only because no test name matched is not acceptable evidence.
 
 Second, end-to-end lint and fix behavior must remain intact under the new command names. A fixture repository that currently fails under lint mode must still fail when invoked as `docgarden lint <target>`, and the same fixture must become clean after running `docgarden fix <target>` when the violations are mechanically fixable. A second lint pass after fix must succeed just as it does today.
 
@@ -152,7 +174,7 @@ Expected root help shape after implementation:
       lint    Lint repository knowledge without modifying files
       fix     Apply deterministic safe rewrites
       init    Initialize repository-local docgarden configuration
-      skill   Manage repository skill scaffolding
+      skill   Reserved namespace for future skill workflows
 
 Expected fix hint shape after implementation:
 
@@ -208,3 +230,5 @@ The exact type names may differ, but the final design must preserve one shared e
 For the config rename, the implementation must continue to use `crate::config::Config::load` and `crate::root::infer_repository_root`, updated so the canonical discovered filename is the new `docgarden`-branded config file. Tests must exercise the renamed discovery path directly.
 
 Revision note: Created this plan to capture the decision to rename the tool to `docgarden`, restore explicit subcommands, and implement the migration in a way that keeps the parser, config discovery, tests, and docs aligned.
+Revision note: Updated on 2026-04-01 to keep `docgarden` as the sole canonical binary name, confirm `fix` as a separate explicit subcommand, and move broader `skill` behavior into a separate future ExecPlan while keeping the singular `skill` namespace reserved in this plan.
+Revision note: Updated on 2026-04-01 to replace unreliable `cargo test <filter>` examples with `cargo test --test cli <exact-test-name>` commands so the TDD gate cannot pass while running zero CLI integration tests.
