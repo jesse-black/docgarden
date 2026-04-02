@@ -305,3 +305,73 @@ fn fix_preserves_unrelated_readme_formatting() {
     let rewritten = fs::read_to_string(readme).unwrap();
     assert_eq!(rewritten, expected);
 }
+
+#[test]
+fn fix_respects_per_file_ignores_for_readme_style_rules() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        concat!(
+            "local-reference-style = \"backticks\"\n",
+            "\n",
+            "[per-file-ignores]\n",
+            "\"README.md\" = [\"prefer-backticks-for-local-paths\"]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
+    fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
+    let readme = root.join("README.md");
+    let original = concat!(
+        "# Doc Garden\n",
+        "\n",
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+    );
+    fs::write(&readme, original).unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["fix", "README.md"])
+        .assert()
+        .success();
+
+    let rewritten = fs::read_to_string(readme).unwrap();
+    assert_eq!(rewritten, original);
+}
+
+#[test]
+fn fix_handles_multibyte_text_before_rewrites_without_corruption() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "local-reference-style = \"backticks\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
+    fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
+    let readme = root.join("README.md");
+    let original = concat!(
+        "Préface\n",
+        "\n",
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+    );
+    let expected = concat!(
+        "Préface\n",
+        "\n",
+        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
+    );
+    fs::write(&readme, original).unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["fix", "README.md"])
+        .assert()
+        .success();
+
+    let rewritten = fs::read_to_string(readme).unwrap();
+    assert_eq!(rewritten, expected);
+}

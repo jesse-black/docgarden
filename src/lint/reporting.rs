@@ -9,14 +9,7 @@ pub(crate) struct DiagnosticPayload<'a> {
     pub(crate) severity: Severity,
 }
 
-pub(crate) fn push_diagnostic(
-    diagnostics: &mut Vec<Diagnostic>,
-    ignored_rules: &std::collections::BTreeSet<String>,
-    payload: DiagnosticPayload<'_>,
-) {
-    if ignored_rules.contains(payload.rule) {
-        return;
-    }
+pub(crate) fn push_diagnostic(diagnostics: &mut Vec<Diagnostic>, payload: DiagnosticPayload<'_>) {
     let (line, column) = payload
         .position
         .map(|value| (value.start.line, value.start.column))

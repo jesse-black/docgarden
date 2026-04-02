@@ -110,4 +110,4 @@ Contributions are welcome! If you want to add support for a new repository-knowl
 
 ## License
 
-Apache 2.0. See [L`LICENSE`or details.
+Apache 2.0. See [LICENSE](LICENSE) for details.
