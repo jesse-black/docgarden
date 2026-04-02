@@ -1,0 +1,4 @@
+interface:
+  display_name: "ARCHITECTURE.md Authoring"
+  short_description: "Create and revise concise architecture codemaps"
+  default_prompt: "Use $architecture-md-authoring to create or revise ARCHITECTURE.md as a short, stable codemap with explicit boundaries and architectural invariants."
