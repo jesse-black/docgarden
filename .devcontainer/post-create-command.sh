@@ -10,8 +10,13 @@ if ! command -v nix >/dev/null 2>&1; then
 fi
 
 mkdir -p "${HOME}/.config/nix"
-cat > "${HOME}/.config/nix/nix.conf" <<'EOF'
-experimental-features = nix-command flakes
-EOF
+
+NIX_CONF="${HOME}/.config/nix/nix.conf"
+
+touch "${NIX_CONF}"
+
+if ! grep -Eq '^[[:space:]]*experimental-features[[:space:]]*=.*\bnix-command\b.*\bflakes\b' "${NIX_CONF}"; then
+  printf '%s\n' "experimental-features = nix-command flakes" >> "${NIX_CONF}"
+fi
 
 nix run "path:${SCRIPT_DIR}#homeConfigurations.vscode.activationPackage"

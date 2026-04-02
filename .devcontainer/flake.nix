@@ -27,7 +27,10 @@
         else [ ];
         
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [ "llvm-tools-preview" ];
+        extensions = [
+          "llvm-tools-preview"
+          "rust-src"
+        ];
       };
     in {
       homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
