@@ -1,0 +1,4 @@
+interface:
+  display_name: "Import Reference"
+  short_description: "Capture a web source into docs/references"
+  default_prompt: "Use $import-reference to retrieve a URL and save it into docs/references with the repository standard reference front matter."

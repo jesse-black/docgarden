@@ -99,7 +99,7 @@ When a repository uses local skills, ensure the root file makes them findable wi
 
 Good pattern:
 
-- point to `skills/README.md`,
+- point to `.agents/skills/README.md`,
 - mention the categories of specialist workflows covered,
 - and include short alias mapping when a likely user phrase differs from the skill folder name.
 

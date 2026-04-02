@@ -66,7 +66,7 @@ Examples:
 
 Do not claim a package bump was attempted unless you actually checked whether it exists and whether it is compatible.
 
-If the smallest safe fix requires adding a temporary lint/tooling override (for example disabling a newly introduced rule for specific files), also add a concrete follow-up task to `docs/cleanup-backlog.md` describing how to remove that override later.
+If the smallest safe fix requires adding a temporary lint/tooling override (for example disabling a newly introduced rule for specific files), also add a concrete follow-up task to `docs/TODO.md` describing how to remove that override later.
 
 ### `legacy-peer-deps` / `--force` Are Last Resort
 

@@ -44,6 +44,7 @@
               cargo-deny
               cargo-machete
               cargo-binstall
+              python3
             ];
           })
         ] ++ localModules;
