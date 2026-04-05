@@ -10,7 +10,7 @@ fn directory_trailing_slash_is_accepted() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
@@ -20,8 +20,8 @@ fn directory_trailing_slash_is_accepted() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("noncanonical-local-path").not());
@@ -32,7 +32,7 @@ fn missing_directory_reference_is_ignored_by_default() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
@@ -42,8 +42,8 @@ fn missing_directory_reference_is_ignored_by_default() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not());
@@ -55,7 +55,7 @@ fn relative_inline_path_is_accepted_in_backtick_mode() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
@@ -66,8 +66,8 @@ fn relative_inline_path_is_accepted_in_backtick_mode() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("noncanonical-local-path").not());
@@ -79,7 +79,7 @@ fn workspace_root_backtick_path_is_accepted() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
@@ -90,8 +90,8 @@ fn workspace_root_backtick_path_is_accepted() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not());
@@ -102,7 +102,7 @@ fn whitespace_backtick_token_is_not_treated_as_a_path() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
@@ -112,8 +112,8 @@ fn whitespace_backtick_token_is_not_treated_as_a_path() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -125,14 +125,14 @@ fn double_slash_backtick_token_is_not_treated_as_a_path() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "Example token: `//foo`.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -144,7 +144,7 @@ fn ellipsis_backtick_token_is_not_treated_as_a_path() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
@@ -154,8 +154,8 @@ fn ellipsis_backtick_token_is_not_treated_as_a_path() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -167,7 +167,7 @@ fn colon_backtick_token_is_not_treated_as_a_path() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
@@ -177,8 +177,8 @@ fn colon_backtick_token_is_not_treated_as_a_path() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -190,14 +190,14 @@ fn bare_slash_only_inline_reference_is_not_treated_as_missing_path() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "Example crate: `crates/parser`.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -209,14 +209,14 @@ fn ambiguous_inline_code_is_quiet_by_default() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "Example crate: `crates/base_db`.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("ambiguous-inline-code").not());
@@ -227,14 +227,14 @@ fn ambiguous_inline_code_can_be_enabled_explicitly() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "Example crate: `crates/base_db`.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("ambiguous-inline-code"));
@@ -245,14 +245,14 @@ fn glob_pattern_inline_code_is_ignored() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"backticks\"\nreport-ambiguous-inline-code = true\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "Pattern: `docs/**/*.md`.\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not())
@@ -264,14 +264,14 @@ fn glob_pattern_markdown_link_is_reported_as_broken_link() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"links\"\n",
     )
     .unwrap();
     fs::write(root.join("README.md"), "[docs glob](docs/**/*.md)\n").unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("unresolved-local-path"))
@@ -284,7 +284,7 @@ fn same_directory_markdown_link_resolves_relative_to_current_file() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"links\"\n",
     )
     .unwrap();
@@ -295,8 +295,8 @@ fn same_directory_markdown_link_resolves_relative_to_current_file() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not());
@@ -308,7 +308,7 @@ fn workspace_root_markdown_link_resolves_from_repo_root() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         "local-reference-style = \"links\"\n",
     )
     .unwrap();
@@ -319,8 +319,8 @@ fn workspace_root_markdown_link_resolves_from_repo_root() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .success()
         .stdout(predicate::str::contains("unresolved-local-path").not());
@@ -331,7 +331,7 @@ fn ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(
-        root.join("dglint.toml"),
+        root.join("docgarden.toml"),
         concat!(
             "local-reference-style = \"backticks\"\n",
             "\n",
@@ -346,8 +346,8 @@ fn ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link() {
     )
     .unwrap();
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "never"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("unresolved-local-path").count(1))

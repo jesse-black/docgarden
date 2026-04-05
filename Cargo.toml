@@ -1,10 +1,10 @@
 [package]
-name = "dglint"
+name = "docgarden"
 version = "0.1.0"
 edition = "2024"
 description = "Mechanical repository-knowledge linter for agentic engineering repositories"
 license = "Apache-2.0"
-repository = "https://github.com/jesse-black/dglint"
+repository = "https://github.com/jesse-black/docgarden"
 readme = "README.md"
 keywords = ["agents", "linter", "markdown", "documentation", "repository"]
 categories = ["command-line-utilities", "development-tools"]

@@ -1,8 +1,6 @@
-# Tools
+d# Tools
 
 Brief guide to tooling available to an agent running either in a Codex Cloud environment, a Jules environment, or in this repository's devcontainer.
-
-See `docs/references/environment-execution-contexts.md` for deeper rationale, source references, and setup-decision process details.
 
 ## Repo-relevant tooling summary
 

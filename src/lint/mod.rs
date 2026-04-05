@@ -30,9 +30,14 @@ pub struct LintResult {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Edit {
-    start_char: usize,
-    end_char: usize,
+    start_offset: usize,
+    end_offset: usize,
     replacement: String,
+}
+
+struct Finding<'a> {
+    payload: DiagnosticPayload<'a>,
+    edit: Option<Edit>,
 }
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
@@ -123,63 +128,73 @@ fn lint_inline_code_node(
                 return Ok(());
             }
             if !exists {
-                push_diagnostic(
+                emit_finding(
                     diagnostics,
                     ignored_rules,
-                    DiagnosticPayload {
-                        file,
-                        position: inline.position.as_ref(),
-                        rule: "unresolved-local-path",
-                        message: format!(
-                            "Local repository path `{}` does not resolve within the repository.",
-                            candidate.display_text
-                        ),
-                        fixable: false,
-                        severity: Severity::Error,
+                    mode,
+                    edits,
+                    Finding {
+                        payload: DiagnosticPayload {
+                            file,
+                            position: inline.position.as_ref(),
+                            rule: "unresolved-local-path",
+                            message: format!(
+                                "Local repository path `{}` does not resolve within the repository.",
+                                candidate.display_text
+                            ),
+                            fixable: false,
+                            severity: Severity::Error,
+                        },
+                        edit: None,
                     },
                 );
                 return Ok(());
             }
             if config.local_reference_style == LocalReferenceStyle::Links {
-                push_diagnostic(
+                let link_text = render_link_destination(file, &candidate, &resolved, &exists_path);
+                emit_finding(
                     diagnostics,
                     ignored_rules,
-                    DiagnosticPayload {
-                        file,
-                        position: inline.position.as_ref(),
-                        rule: "prefer-links-for-local-paths",
-                        message: format!(
-                            "Local repository path `{}` should use Markdown link syntax under the configured style policy.",
-                            candidate.display_text
+                    mode,
+                    edits,
+                    Finding {
+                        payload: DiagnosticPayload {
+                            file,
+                            position: inline.position.as_ref(),
+                            rule: "prefer-links-for-local-paths",
+                            message: format!(
+                                "Local repository path `{}` should use Markdown link syntax under the configured style policy.",
+                                candidate.display_text
+                            ),
+                            fixable: true,
+                            severity: Severity::Error,
+                        },
+                        edit: edit_from_position(
+                            inline.position.as_ref(),
+                            format!("[{}]({link_text})", candidate.display_text),
                         ),
-                        fixable: true,
-                        severity: Severity::Error,
                     },
                 );
-                if mode == Mode::Fix {
-                    let link_text =
-                        render_link_destination(file, &candidate, &resolved, &exists_path);
-                    record_edit(
-                        edits,
-                        inline.position.as_ref(),
-                        format!("[{}]({link_text})", candidate.display_text),
-                    );
-                }
             }
         }
     } else if config.report_ambiguous_inline_code && looks_path_adjacent(value) {
-        push_diagnostic(
+        emit_finding(
             diagnostics,
             ignored_rules,
-            DiagnosticPayload {
-                file,
-                position: inline.position.as_ref(),
-                rule: "ambiguous-inline-code",
-                message: format!(
-                    "Inline code `{value}` looks path-adjacent but is not a clear repository-local path."
-                ),
-                fixable: false,
-                severity: Severity::Warning,
+            mode,
+            edits,
+            Finding {
+                payload: DiagnosticPayload {
+                    file,
+                    position: inline.position.as_ref(),
+                    rule: "ambiguous-inline-code",
+                    message: format!(
+                        "Inline code `{value}` looks path-adjacent but is not a clear repository-local path."
+                    ),
+                    fixable: false,
+                    severity: Severity::Warning,
+                },
+                edit: None,
             },
         );
     }
@@ -214,20 +229,25 @@ fn lint_link_node(
             return Ok(());
         }
         if !exists {
-            push_diagnostic(
+            emit_finding(
                 diagnostics,
                 ignored_rules,
-                DiagnosticPayload {
-                    file,
-                    position: link.position.as_ref(),
-                    rule: "unresolved-local-path",
-                    message: format!(
-                        "Local repository link `[{}]({})` does not resolve within the repository.",
-                        label_text(&link.children),
-                        candidate.display_text
-                    ),
-                    fixable: false,
-                    severity: Severity::Error,
+                mode,
+                edits,
+                Finding {
+                    payload: DiagnosticPayload {
+                        file,
+                        position: link.position.as_ref(),
+                        rule: "unresolved-local-path",
+                        message: format!(
+                            "Local repository link `[{}]({})` does not resolve within the repository.",
+                            label_text(&link.children),
+                            candidate.display_text
+                        ),
+                        fixable: false,
+                        severity: Severity::Error,
+                    },
+                    edit: None,
                 },
             );
             return Ok(());
@@ -239,29 +259,50 @@ fn lint_link_node(
                 &resolved.repo_relative_path,
             )
         {
-            push_diagnostic(
+            let inline_text = render_repo_relative(&resolved, &exists_path);
+            emit_finding(
                 diagnostics,
                 ignored_rules,
-                DiagnosticPayload {
-                    file,
-                    position: link.position.as_ref(),
-                    rule: "prefer-backticks-for-local-paths",
-                    message: format!(
-                        "Local repository link `[{}]({})` should use backticks under the configured style policy.",
-                        label_text(&link.children),
-                        candidate.display_text
-                    ),
-                    fixable: true,
-                    severity: Severity::Error,
+                mode,
+                edits,
+                Finding {
+                    payload: DiagnosticPayload {
+                        file,
+                        position: link.position.as_ref(),
+                        rule: "prefer-backticks-for-local-paths",
+                        message: format!(
+                            "Local repository link `[{}]({})` should use backticks under the configured style policy.",
+                            label_text(&link.children),
+                            candidate.display_text
+                        ),
+                        fixable: true,
+                        severity: Severity::Error,
+                    },
+                    edit: edit_from_position(link.position.as_ref(), format!("`{inline_text}`")),
                 },
             );
-            if mode == Mode::Fix {
-                let inline_text = render_repo_relative(&resolved, &exists_path);
-                record_edit(edits, link.position.as_ref(), format!("`{inline_text}`"));
-            }
         }
     }
     Ok(())
+}
+
+fn emit_finding(
+    diagnostics: &mut Vec<Diagnostic>,
+    ignored_rules: &std::collections::BTreeSet<String>,
+    mode: Mode,
+    edits: &mut Vec<Edit>,
+    finding: Finding<'_>,
+) {
+    if ignored_rules.contains(finding.payload.rule) {
+        return;
+    }
+    let edit = finding.edit;
+    push_diagnostic(diagnostics, finding.payload);
+    if mode == Mode::Fix
+        && let Some(edit) = edit
+    {
+        edits.push(edit);
+    }
 }
 
 fn children_mut(node: &Node) -> Option<&Vec<Node>> {
@@ -287,58 +328,42 @@ fn children_mut(node: &Node) -> Option<&Vec<Node>> {
     }
 }
 
-fn record_edit(
-    edits: &mut Vec<Edit>,
+fn edit_from_position(
     position: Option<&markdown::unist::Position>,
     replacement: String,
-) {
-    let Some(position) = position else {
-        return;
-    };
-    edits.push(Edit {
-        start_char: position.start.offset,
-        end_char: position.end.offset,
+) -> Option<Edit> {
+    let position = position?;
+    Some(Edit {
+        start_offset: position.start.offset,
+        end_offset: position.end.offset,
         replacement,
-    });
+    })
 }
 
 fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
     let mut sorted: Vec<_> = edits.iter().collect();
-    sorted.sort_by(|left, right| right.start_char.cmp(&left.start_char));
+    sorted.sort_by(|left, right| right.start_offset.cmp(&left.start_offset));
     let mut rewritten = source.to_string();
 
     for window in sorted.windows(2) {
         let earlier = window[1];
         let later = window[0];
-        if earlier.end_char > later.start_char {
+        if earlier.end_offset > later.start_offset {
             return Err(anyhow!(
-                "overlapping fix edits at character offsets {}..{} and {}..{}",
-                earlier.start_char,
-                earlier.end_char,
-                later.start_char,
-                later.end_char
+                "overlapping fix edits at byte offsets {}..{} and {}..{}",
+                earlier.start_offset,
+                earlier.end_offset,
+                later.start_offset,
+                later.end_offset
             ));
         }
     }
 
     for edit in sorted {
-        let start = char_offset_to_byte_index(source, edit.start_char)?;
-        let end = char_offset_to_byte_index(source, edit.end_char)?;
-        rewritten.replace_range(start..end, &edit.replacement);
+        rewritten.replace_range(edit.start_offset..edit.end_offset, &edit.replacement);
     }
 
     Ok(rewritten)
-}
-
-fn char_offset_to_byte_index(source: &str, char_offset: usize) -> Result<usize> {
-    if char_offset == source.chars().count() {
-        return Ok(source.len());
-    }
-    source
-        .char_indices()
-        .nth(char_offset)
-        .map(|(byte_offset, _)| byte_offset)
-        .ok_or_else(|| anyhow!("character offset {char_offset} is out of bounds"))
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String> {

@@ -1,6 +1,0 @@
-exclude = [
-    "tests/**",
-]
-
-[per-file-ignores]
-"README.md" = ["prefer-backticks-for-local-paths"]

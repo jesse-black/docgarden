@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGENTS.md Authoring"
+  short_description: "Create and edit dispatcher-style AGENTS.md files"
+  default_prompt: "Use $agents-md-authoring to create or revise AGENTS.md using progressive disclosure, task-oriented routing, and concise Always/Never repo invariants."

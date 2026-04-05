@@ -101,7 +101,7 @@ mod tests {
 
     fn markers<'a>() -> &'a [RootMarker<'a>] {
         &[
-            RootMarker::File("dglint.toml"),
+            RootMarker::File("docgarden.toml"),
             RootMarker::File("pyproject.toml"),
             RootMarker::Directory(".git"),
         ]
@@ -164,7 +164,7 @@ mod tests {
         let repo = temp.path().join("repo");
         let nested = repo.join("src/bin");
         fs::create_dir_all(&nested)?;
-        touch(&repo.join("dglint.toml"))?;
+        touch(&repo.join("docgarden.toml"))?;
 
         let root = find_root_by_markers(&nested, markers());
 

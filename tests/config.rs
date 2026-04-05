@@ -9,8 +9,14 @@ use common::fixture_repo;
 fn json_output_is_uncolored() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--json", "--color", "always"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args([
+            "lint",
+            root.to_str().unwrap(),
+            "--json",
+            "--color",
+            "always",
+        ])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
@@ -23,8 +29,8 @@ fn json_output_is_uncolored() {
 fn color_always_forces_ansi_in_human_output() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
-        .args([root.to_str().unwrap(), "--color", "always"])
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "always"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("\u{1b}[31merror\u{1b}[0m"));
@@ -34,15 +40,16 @@ fn color_always_forces_ansi_in_human_output() {
 fn explicit_config_path_is_echoed_in_fix_hint() {
     let (_temp, root) = fixture_repo("backticks");
 
-    Command::new(env!("CARGO_BIN_EXE_dglint"))
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args([
+            "lint",
             root.to_str().unwrap(),
             "--config",
-            root.join("dglint.toml").to_str().unwrap(),
+            root.join("docgarden.toml").to_str().unwrap(),
             "--color",
             "never",
         ])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("--config dglint.toml"));
+        .stdout(predicate::str::contains("--config docgarden.toml"));
 }

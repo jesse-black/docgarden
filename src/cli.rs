@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, ValueEnum};
+use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
@@ -11,20 +11,48 @@ use crate::lint::{Mode, lint_file, summarize};
 use crate::root::{RootMarker, infer_repository_root};
 
 #[derive(Parser, Debug)]
-#[command(name = "dglint")]
-#[command(about = "Doc Gardening Linter")]
+#[command(name = "docgarden")]
+#[command(about = "Repository knowledge tooling for agentic engineering repositories")]
 pub struct Args {
-    #[arg(default_value = ".", num_args = 0..)]
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    #[command(about = "Lint repository knowledge without modifying files")]
+    Lint(LintArgs),
+    #[command(about = "Apply deterministic safe rewrites")]
+    Fix(LintArgs),
+    #[command(about = "Reserved placeholder for future repository initialization")]
+    Init,
+    #[command(about = "Reserved namespace for future skill workflows")]
+    Skill,
+}
+
+#[derive(ClapArgs, Debug)]
+struct LintArgs {
+    #[arg(
+        default_value = ".",
+        num_args = 0..,
+        help = "Repository root, directories, or Markdown files to lint"
+    )]
     targets: Vec<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
     config: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Emit machine-readable diagnostics as JSON")]
     json: bool,
-    #[arg(long)]
-    fix: bool,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Ignore .gitignore and related exclude files during discovery"
+    )]
     no_gitignore: bool,
-    #[arg(long, value_enum, default_value_t = ColorChoice::Auto)]
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = ColorChoice::Auto,
+        help = "Control colored human-readable output"
+    )]
     color: ColorChoice,
 }
 
@@ -37,7 +65,19 @@ enum ColorChoice {
 
 pub fn run() -> Result<()> {
     let args = Args::parse();
-    let mode = if args.fix { Mode::Fix } else { Mode::Check };
+    match args.command {
+        Command::Lint(args) => execute_lint(args, Mode::Check),
+        Command::Fix(args) => execute_lint(args, Mode::Fix),
+        Command::Init => bail!(
+            "`docgarden init` is reserved for future repository initialization work and is not implemented yet"
+        ),
+        Command::Skill => bail!(
+            "`docgarden skill` is reserved for future skill workflows and is not implemented yet"
+        ),
+    }
+}
+
+fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
     execute(
         args.targets,
         args.config,
@@ -66,7 +106,7 @@ fn execute(
         &resolved_targets,
         config_path.as_deref(),
         &[
-            RootMarker::File("dglint.toml"),
+            RootMarker::File("docgarden.toml"),
             RootMarker::Directory(".git"),
         ],
     )?;
@@ -165,7 +205,7 @@ fn print_fix_hint(
             .join(", ")
     );
     println!(
-        "Run `dglint {} --fix{config_suffix}` to apply fixes.",
+        "Run `docgarden fix {}{config_suffix}` to apply fixes.",
         render_targets(targets)
     );
 }

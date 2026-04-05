@@ -79,7 +79,7 @@ impl Config {
         let config_path = if let Some(path) = explicit_config {
             Some(path.to_path_buf())
         } else {
-            let candidate = repository_root.join("dglint.toml");
+            let candidate = repository_root.join("docgarden.toml");
             if candidate.exists() {
                 Some(candidate)
             } else {
@@ -174,7 +174,7 @@ mod tests {
         let nested = repository_root.join("docs");
         fs::create_dir_all(&nested).unwrap();
         fs::write(
-            nested.join("dglint.toml"),
+            nested.join("docgarden.toml"),
             "local-reference-style = \"links\"\n",
         )
         .unwrap();
@@ -198,7 +198,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
         fs::create_dir_all(&repository_root).unwrap();
-        let config_path = repository_root.join("dglint.toml");
+        let config_path = repository_root.join("docgarden.toml");
         fs::write(
             &config_path,
             r#"

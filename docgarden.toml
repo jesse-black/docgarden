@@ -1,0 +1,11 @@
+exclude = [
+    "tests/**",
+]
+
+[per-file-ignores]
+# Allow local links in README.md because it is human facing documentation
+"README.md" = ["prefer-backticks-for-local-paths"]
+# Allow unresolved local paths as docs/exec-plans/completed/ is for archival only
+"docs/exec-plans/completed/**" = ["unresolved-local-path"]
+# Allow unresolved local paths as references is for clippings of external sources for reference only
+"docs/references/**" = ["unresolved-local-path"]

@@ -34,6 +34,8 @@ Format and envelope are simple and strict. Each ExecPlan must be one single fenc
 
 When writing an ExecPlan to a Markdown (.md) file where the content of the file *is only* the single ExecPlan, you should omit the triple backticks.
 
+When an ExecPlan needs to mention a hypothetical, planned, or example repository path that does not exist in the current tree, prefer an indented code block instead of an inline backticked live path. For short inline hypotheticals, use a double-backtick code span so the example reads as illustrative rather than as a live repository reference.
+
 Write in plain prose. Prefer sentences over lists. Avoid checklists, tables, and long enumerations unless brevity would obscure meaning. Checklists are permitted only in the `Progress` section, where they are mandatory. Narrative sections must remain prose-first.
 
 ## Guidelines
