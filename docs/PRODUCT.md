@@ -29,7 +29,7 @@ The product is built around a small set of workflows:
 - enforce size limits on high-traffic auto-loaded files such as `AGENTS.md` so agents spend fewer tokens on entry-point context
 - enforce YAML front matter used for agent navigation and repository operations, including fields such as `description`, `owner`, and `last_reviewed`
 - enforce cross-linking so repository knowledge remains discoverable through file references instead of hidden in isolated documents
-- enforce a consistent style policy for repository-local references: inline backticks or Markdown links
+- enforce a consistent style policy for repository-local references: inline backticks or Markdown links; in agent-first repositories, backticks can be a strong default because agents often emit them naturally and they avoid the extra token cost of path-repeating Markdown labels
 - apply safe autofixes for rules that can be rewritten mechanically
 - tune scanning and rule behavior with `docgarden.toml`
 - suppress specific rules for specific files when a repository intentionally makes an exception

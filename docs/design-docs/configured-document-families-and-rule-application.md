@@ -117,6 +117,36 @@ A conceptual example:
 
 This keeps exceptions and positive policy in one configuration family instead of splitting them across unrelated tables.
 
+## Repository-Wide Defaults
+
+Configured document families and rule-application entries are not a complete replacement for repo-wide defaults.
+
+Some policy choices are foundational enough that repositories should be able to state them once at the top level instead of expressing them indirectly through a catch-all family or a broad rule entry. A local path style default is the clearest example: repositories may want to say "this is a backticks repo" or "this is a links repo" as a global convention, then override that default only for selected families.
+
+The current design direction should therefore be layered:
+
+- repository-wide defaults establish the main posture for the repo
+- configured document families describe which document groups exist
+- rule-application entries refine or override behavior for narrower scopes
+
+More specific scopes should win over the repo-wide default when they conflict.
+
+For the path-style tradeoffs behind that example, see `docs/design-docs/path-style-policy.md`.
+
+A conceptual example:
+
+    path_style = "backticks"
+
+    [[documents]]
+    name = "references"
+    match = "docs/references/**"
+    kind = "reference"
+
+    [[rules]]
+    match = "references"
+    disable = ["prefer-backticks-for-local-paths", "prefer-links-for-local-paths"]
+    reason = "Imported source-derived docs are not normalized for repo-authored style."
+
 ## `reason` For Exceptions
 
 Exception-oriented configuration should likely support a `reason` field.
