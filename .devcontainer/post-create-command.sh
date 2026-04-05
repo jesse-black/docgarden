@@ -20,3 +20,9 @@ if ! grep -Eq '^[[:space:]]*experimental-features[[:space:]]*=.*\bnix-command\b.
 fi
 
 nix run "path:${SCRIPT_DIR}#homeConfigurations.vscode.activationPackage"
+
+export PATH="${HOME}/.cargo/bin:${PATH}"
+
+if ! command -v covgate >/dev/null 2>&1; then
+  cargo install covgate --locked
+fi

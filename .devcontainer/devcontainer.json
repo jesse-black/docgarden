@@ -10,6 +10,9 @@
 		"HOME_LOCAL_NIX": "${containerWorkspaceFolder}/.devcontainer/local.nix",
 		"WORKSPACE_FOLDER": "${containerWorkspaceFolder}"
 	},
+	"remoteEnv": {
+		"PATH": "/home/vscode/.cargo/bin:${containerEnv:PATH}"
+	},
 	"postCreateCommand": "bash .devcontainer/post-create-command.sh",
 	"customizations": {
 		"vscode": {
