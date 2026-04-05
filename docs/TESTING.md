@@ -80,4 +80,4 @@ As a rule of thumb:
 
 ## Documentation Check
 
-After updating this document or other repository docs, run `docgarden` against the changed files so stale repository-local references and example-path mistakes are caught locally.
+After updating this document or other repository docs, dogfood the current CLI shape explicitly: run `docgarden lint` against the changed files so stale repository-local references and example-path mistakes are caught locally, and use `docgarden fix` only when you intend to apply safe rewrites.

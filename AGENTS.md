@@ -15,7 +15,7 @@
 - In this repository, live repository-local path mentions in prose should normally use backticked repo-relative paths such as `docs/PLANS.md`. Keep Markdown links for external destinations or for local references whose label adds meaning beyond repeating the path.
 - When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
 - Keep live repository references in normal prose only when they are intended to resolve and be linted.
-- After updating documentation, run `docgarden` on the changed files before finishing so hypothetical examples and stale references are caught locally.
+- After updating documentation, run `docgarden lint` on the changed files before finishing so hypothetical examples and stale references are caught locally. Use `docgarden fix` only when you want the tool to apply safe rewrites.
 
 ## Rust Workflow
 - Run `cargo xtask validate`.
