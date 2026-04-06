@@ -97,26 +97,22 @@ These should be treated as provisional reference points for future `AGENTS.md` d
 
 ### Configuration Direction
 
-A path-pattern-only configuration is a reasonable starting point, but it is probably not the final shape.
+Context-budget limits should use the shared configuration model in `docs/design-docs/configuration.md` rather than a separate `[[limits]]` table.
 
-For example, a configuration like this is easy to understand:
+A small example:
 
-    [[limits]]
-    match = ".agents/skills/*/SKILL.md"
-    max_lines = 500
-    max_tokens = 5000
+    [[rules]]
+    match = "skills"
+    rule = "context-budget"
+    max-lines = 500
+    max-tokens = 5000
 
-    [[limits]]
+    [[rules]]
     match = "AGENTS.md"
-    max_tokens = 1200
+    rule = "context-budget"
+    max-tokens = 1200
 
-But this leaves an open design issue: `docgarden` is also expected to grow skill-oriented commands such as:
-
-    docgarden skill match <QUERY>
-
-Those commands will likely need their own configuration for locating skill directories and identifying which files count as the main skill document. If `docgarden` already knows where skills live for matching and discovery, budget checks for the main skill file should probably reuse that same skill-directory configuration rather than requiring users to repeat path globs in multiple places.
-
-So the final configuration shape needs more workshopping around shared skill configuration.
+The important point is that limit fields are rule options scoped by the same family or path targeting layer as other rule behavior. That lets budget checks reuse configured skill and document families instead of requiring users to repeat path globs in a feature-specific configuration table.
 
 ### Skill-Aware Configuration Questions
 

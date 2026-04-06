@@ -1,4 +1,4 @@
-# Configured Document Families And Rule Application
+# Configuration
 
 ## Purpose
 
@@ -116,6 +116,31 @@ A conceptual example:
     enable = ["frontmatter", "matchable-metadata", "context-budget"]
 
 This keeps exceptions and positive policy in one configuration family instead of splitting them across unrelated tables.
+
+Rule-specific options should also live in this layer instead of growing separate top-level tables for each feature.
+
+For example, context-budget limits should be expressed as configuration for the `context-budget` rule, not as a separate `[[limits]]` table with its own scoping model:
+
+    [[rules]]
+    match = "skills"
+    rule = "context-budget"
+    max-lines = 500
+    max-tokens = 5000
+    severity = "warn"
+
+    [[rules]]
+    match = "AGENTS.md"
+    rule = "context-budget"
+    max-tokens = 1200
+    severity = "error"
+
+    [[rules]]
+    match = "references"
+    rule = "context-budget"
+    enabled = false
+    reason = "Imported source-derived docs preserve source fidelity over compactness."
+
+The exact field names are still open, but the direction is that rule behavior and rule options share the same targeting layer. This lets budget checks reuse configured document families, keeps severity and exception reasons close to the rule they affect, and avoids a second path-pattern language that would duplicate `[[documents]]` and `[[rules]]`.
 
 ## Repository-Wide Defaults
 

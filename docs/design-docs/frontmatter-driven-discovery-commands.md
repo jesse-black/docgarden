@@ -6,7 +6,7 @@ This document is a working design draft for metadata-driven discovery commands i
 
 The goal is to make repository knowledge discoverable without requiring handwritten index-style files as the default navigation mechanism. If repositories adopt standardized YAML front matter with fields such as `title` and `description`, `docgarden` should be able to derive useful catalog and matching views directly from that metadata.
 
-The product should describe these commands in terms of configured document families and configured search roots, not in terms of this repository's current directory layout. Repo-local paths such as `docs/references/` or `.agents/skills` are examples of configuration, not universal product conventions. The configuration model itself is split into `docs/design-docs/configured-document-families-and-rule-application.md`.
+The product should describe these commands in terms of configured document families and configured search roots, not in terms of this repository's current directory layout. Repo-local paths such as `docs/references/` or `.agents/skills` are examples of configuration, not universal product conventions. The configuration model itself is split into `docs/design-docs/configuration.md`.
 
 ## Proposed Commands
 
