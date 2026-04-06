@@ -90,6 +90,18 @@ A repository-local example might look like:
 
 The important point is not the final syntax. The important point is that the repository defines portable concepts first, then features use those concepts.
 
+For initial implementation, `match` can stay a single string. If real repositories need one family or rule entry to cover multiple disjoint patterns, the compatible future direction is to let `match` accept either a scalar string or a list of strings, with list entries treated as OR'd matchers:
+
+    [[documents]]
+    name = "agent-guidance"
+    match = ["AGENTS.md", ".agents/skills/*/SKILL.md"]
+
+    [[rules]]
+    match = ["README.md", "docs/**/*.md"]
+    disable = ["prefer-backticks-for-local-paths"]
+
+Internally, `docgarden` can normalize both forms to a list after parsing so the rest of the implementation does not need to care which TOML shape was used.
+
 ## Rule-Application Layer
 
 The second configuration layer should describe how rule sets apply to families or paths.

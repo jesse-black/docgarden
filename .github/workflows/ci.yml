@@ -19,7 +19,7 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@v2
         with:
-          tool: covgate
+          tool: covgate@0.1.4-rc.0
       - name: Format
         run: cargo fmt --check
       - name: Clippy

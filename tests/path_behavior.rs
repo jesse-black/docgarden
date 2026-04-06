@@ -241,6 +241,140 @@ fn ambiguous_inline_code_can_be_enabled_explicitly() {
 }
 
 #[test]
+fn rule_application_disables_unresolved_paths_for_document_family_only() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs/references")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[documents]]
+name = "references"
+match = "docs/references/**"
+
+[[rules]]
+match = "references"
+disable = ["unresolved-local-path"]
+reason = "Imported references may contain source-derived paths."
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/references/source.md"),
+        "[Missing](missing.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "[Missing](missing.md)\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-local-path").count(1))
+        .stdout(predicate::str::contains("README.md"))
+        .stdout(predicate::str::contains("docs/references/source.md").not());
+}
+
+#[test]
+fn rule_application_path_disable_suppresses_style_but_not_unresolved_paths() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+local-reference-style = "backticks"
+
+[[rules]]
+match = "README.md"
+disable = ["prefer-backticks-for-local-paths"]
+reason = "README stays human-facing."
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [Missing](missing.md).\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-local-path"))
+        .stdout(predicate::str::contains("prefer-backticks-for-local-paths").not());
+}
+
+#[test]
+fn rule_application_enables_ambiguous_inline_code_for_matching_paths_only() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+match = "docs/**"
+enable = ["ambiguous-inline-code"]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "Example crate: `crates/base_db`.\n",
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "Example crate: `crates/base_db`.\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ambiguous-inline-code").count(1))
+        .stdout(predicate::str::contains("docs/guide.md"))
+        .stdout(predicate::str::contains("README.md").not());
+}
+
+#[test]
+fn rule_application_local_reference_style_override_is_scoped() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+local-reference-style = "backticks"
+
+[[rules]]
+match = "docs/**"
+local-reference-style = "links"
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("docs/real.md"), "# Real\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "See `./real.md` for the current guide.\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "See `docs/real.md` for the current guide.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("prefer-links-for-local-paths"))
+        .stdout(predicate::str::contains("docs/guide.md"))
+        .stdout(predicate::str::contains("README.md").not());
+}
+
+#[test]
 fn glob_pattern_inline_code_is_ignored() {
     let temp = tempdir().unwrap();
     let root = temp.path();

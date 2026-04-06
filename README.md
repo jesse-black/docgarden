@@ -63,6 +63,34 @@ Shared lint and fix flags:
 * `--no-gitignore`: Ignore `.gitignore`, `.ignore`, and related git exclude files during discovery.
 * `--color <auto|always|never>`: Control colored human-readable output.
 
+### Configuration
+
+`docgarden.toml` can define document families once, then apply existing lint rules to those families or to repository-relative path patterns:
+
+```toml
+local-reference-style = "backticks"
+
+[[documents]]
+name = "references"
+match = "docs/references/**"
+kind = "reference"
+
+[[rules]]
+match = "references"
+disable = ["unresolved-local-path"]
+reason = "Imported references may preserve source-derived paths."
+
+[[rules]]
+match = "docs/**"
+enable = ["ambiguous-inline-code"]
+
+[[rules]]
+match = "README.md"
+local-reference-style = "links"
+```
+
+The supported rule names today are `unresolved-local-path`, `prefer-links-for-local-paths`, `prefer-backticks-for-local-paths`, and `ambiguous-inline-code`. Legacy keys such as `[per-file-ignores]`, `local-reference-style`, and `report-ambiguous-inline-code` continue to work.
+
 ### Examples
 
 **Lint the entire repository:**
