@@ -23,6 +23,20 @@ The classifier therefore needs a narrow definition of "strong path signal" for b
 
 Markdown links do not have that ambiguity. Once an author writes a local Markdown link destination, the tool should evaluate whether the destination is a valid local link target under link rules rather than reusing the backtick classifier’s ambiguity heuristics.
 
+## Why This Repository Started With Backticks
+
+This repository started with backticked local paths as the default style because that is the form agents often generate instinctively when naming repository files in prose.
+
+That default also aligned with the repository's token-efficiency goals. When the visible label would simply repeat the destination, backticks are usually a cheaper and more compact representation than Markdown links while still remaining mechanically legible to agents and humans.
+
+So the original backtick-first posture was not meant as a universal Markdown preference. It was a pragmatic starting point for an agent-oriented repository where:
+
+- agents naturally emit backticked file paths in prose
+- repeated path labels in Markdown links add avoidable token cost
+- many local references function more like code-like path mentions than reader-oriented hyperlink text
+
+`docgarden` still supports a configurable reference style because different repositories may reasonably prefer links, but the backtick classification rules should preserve the rationale for why backticks were the initial default here.
+
 ## Core Classification Rule
 
 A backticked token should be treated as a definite local path only when it carries a strong path signal. In v1, the strong path signals are:

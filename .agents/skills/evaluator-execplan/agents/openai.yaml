@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evaluator ExecPlan"
+  short_description: "Validate plan completion skeptically"
+  default_prompt: "Use $evaluator-execplan to independently validate whether an ExecPlan is actually complete and ready to move to docs/exec-plans/completed/."

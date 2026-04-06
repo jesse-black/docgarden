@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generator ExecPlan"
+  short_description: "Implement with strict plan breadcrumbs"
+  default_prompt: "Use $generator-execplan to continue work from an active ExecPlan and keep the plan updated as a living handoff artifact."

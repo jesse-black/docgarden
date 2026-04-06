@@ -14,6 +14,7 @@ Brief guide to tooling available to an agent running either in a Codex Cloud env
 
 - Core CLI/build tools: `git`, `curl`, `jq`, `ripgrep`, `fd`, `zip/unzip`, `build-essential`
 - Rust workflows: `rustup`, `cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`, `cargo llvm-cov`
+- Repo dogfooding: prefer `cargo run -- lint ...` and `cargo run -- fix ...` from the repository root instead of assuming an installed `docgarden` binary on `PATH`
 
 ### Installed in devcontainer and bootstrapped for Codex Cloud/Jules
 
