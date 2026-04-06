@@ -569,4 +569,28 @@ max-lines = 500
             .to_string();
         assert!(error.contains("failed to parse"));
     }
+
+    #[test]
+    fn local_reference_style_reports_invalid_match_pattern() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+match = "{docs,README.md"
+local-reference-style = "links"
+"#,
+        )
+        .unwrap();
+        let config = Config::load(&repository_root, None).unwrap();
+
+        let error = config
+            .local_reference_style_for_path("README.md")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("invalid rule match pattern {docs,README.md"));
+    }
 }
