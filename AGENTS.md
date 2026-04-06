@@ -7,6 +7,8 @@
 - `docs/TOOLS.md` – Brief guide to tooling available to agents in this environment. *Use for environment capabilities and local tool discovery.*
 - `docs/IDEAS.md` – Backlog of future `docgarden` rule ideas and repository-knowledge checks that are intentionally not committed ExecPlan scope yet. *Use for plausible next rule families that are not yet scheduled work.*
 - `docs/PLANS.md` – Execution plan authoring and maintenance rules. *Use when creating, updating, or completing ExecPlans in `docs/exec-plans/`.*
+- `docs/EXECPLAN_PERSONAS.md` – Shared operating contract for the planner, generator, and evaluator ExecPlan skills. *Use when deciding who may rewrite an active plan, what breadcrumbs implementation must leave behind, and what evidence is required before a plan can be closed.*
+- `.agents/skills/README.md` – Index of repository-local skills and likely request aliases. *Use when a task sounds like a specialized workflow and you need to discover the matching local skill.*
 - `src/` – Rust code for the `docgarden` linter. *Use for implementation details once the relevant repository-knowledge doc has identified the area to change.*
 
 ## Documentation Guidance
@@ -16,7 +18,7 @@
 - In this repository, live repository-local path mentions in prose should normally use backticked repo-relative paths such as `docs/PLANS.md`. Keep Markdown links for external destinations or for local references whose label adds meaning beyond repeating the path.
 - When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
 - Keep live repository references in normal prose only when they are intended to resolve and be linted.
-- After updating documentation, run `docgarden lint` on the changed files before finishing so hypothetical examples and stale references are caught locally. Use `docgarden fix` only when you want the tool to apply safe rewrites.
+- After updating documentation, run `cargo run -- lint <changed-files> --color never` from the repository root before finishing so hypothetical examples and stale references are caught locally during repo dogfooding. Use `cargo run -- fix <targets> --color never` only when you want the tool to apply safe rewrites.
 
 ## Rust Workflow
 - Run `cargo xtask validate`.

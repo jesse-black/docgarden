@@ -50,7 +50,7 @@ Every user-visible CLI switch, subcommand, or repository-walking behavior must h
 - Cover path-resolution and repository-layout scenarios in `tests/path_behavior.rs`.
 - Prefer copied fixtures from `tests/test-repos/` when the scenario represents a realistic repository state that should stay easy to inspect.
 - Prefer temporary directories created inside the test when the scenario is small, highly specific, or easier to express procedurally than as a checked-in fixture.
-- When fix behavior is involved, assert both the rewritten file contents and a second `docgarden lint` pass so idempotence is proven.
+- When fix behavior is involved, assert both the rewritten file contents and a second lint pass so idempotence is proven. For repository dogfooding in this repo, use `cargo run -- lint ...` rather than assuming the `docgarden` binary is already installed on `PATH`.
 
 CLI integration tests are the right home for:
 
@@ -80,4 +80,4 @@ As a rule of thumb:
 
 ## Documentation Check
 
-After updating this document or other repository docs, dogfood the current CLI shape explicitly: run `docgarden lint` against the changed files so stale repository-local references and example-path mistakes are caught locally, and use `docgarden fix` only when you intend to apply safe rewrites.
+After updating this document or other repository docs, dogfood the current CLI shape explicitly from the repository root: run `cargo run -- lint <changed-files> --color never` so stale repository-local references and example-path mistakes are caught locally, and use `cargo run -- fix <targets> --color never` only when you intend to apply safe rewrites.

@@ -10,6 +10,12 @@ These skills should follow the Agent Skills spec and keep repository conventions
   Common request aliases: `agents md skill`, `agents.md skill`, `rewrite agents.md`, `author agents guide`
 - `dependabot-updates` (`.agents/skills/dependabot-updates/SKILL.md`)
   Common request aliases: `dependabot skill`, `dependabot`, `dependency bump skill`
+- `planner-execplan` (`.agents/skills/planner-execplan/SKILL.md`)
+  Common request aliases: `planner execplan`, `execplan planner`, `planner skill`, `create exec plan`, `revise exec plan`, `rescope exec plan`
+- `generator-execplan` (`.agents/skills/generator-execplan/SKILL.md`)
+  Common request aliases: `generator execplan`, `execplan generator`, `generator skill`, `continue exec plan`, `implement exec plan`, `resume plan work`
+- `evaluator-execplan` (`.agents/skills/evaluator-execplan/SKILL.md`)
+  Common request aliases: `evaluator execplan`, `execplan evaluator`, `evaluator skill`, `validate exec plan`, `close exec plan`, `reopen exec plan`
 
 ## Registering a skill
 1. Add a `` `SKILL.md` `` at `.agents/skills/<skill-name>/SKILL.md`.
