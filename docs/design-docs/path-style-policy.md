@@ -52,14 +52,10 @@ Weaknesses:
 - not clickable in plain Markdown renderers unless tools add special handling
 - can be ambiguous for humans when the same syntax is also used for commands, identifiers, and config keys
 
-An important caveat for Obsidian-style workflows is that "make backticks clickable" and "make backticks behave like native wikilinks" are probably different levels of integration.
-
-The public Obsidian plugin API clearly exposes the vault and `MetadataCache`, and plugins can save their own data, but it is not clear from the documented API that a plugin can register a custom link syntax and have it participate in Obsidian's native backlink, graph, and metadata indexing pipeline the same way true internal links do. A forum request asking for a way to add links into `metadataCache` suggests this is a real limitation rather than just a documentation gap. See:
+An Obsidian extension could make backtick paths clickable for human navigation, but that is not the same product surface as native wikilinks. Obsidian's graph, backlinks, and metadata workflows are built around Obsidian's own internal link model. A backtick-path extension would need to maintain its own parallel navigation model unless Obsidian exposes a way to add nonstandard links into the native metadata cache. Relevant references:
 
 - https://github.com/obsidianmd/obsidian-api
 - https://forum.obsidian.md/t/api-method-to-add-link-and-have-it-parsed-into-metadatacache/72046
-
-So an Obsidian extension for backtick paths may still be very useful for human navigation, but it may need to maintain a parallel plugin-managed system rather than hooking backtick paths into the same IndexedDB-backed relationship model that powers native wikilinks.
 
 Backticks are especially attractive for agent-first repositories where many references function more like symbolic path mentions than like human-targeted navigation affordances.
 
@@ -84,7 +80,7 @@ Markdown links are strongest when the label adds meaning beyond repeating the pa
 
 ## Wikilinks
 
-Wiki-style links are common in tools such as Obsidian and in knowledge-base workflows inspired by personal wiki systems.
+Wiki-style links are the native representation for Obsidian-style Markdown wikis and LLM-maintained wiki workflows like `docs/references/llm-wiki.md`.
 
 Strengths:
 
@@ -92,69 +88,67 @@ Strengths:
 - highly aligned with wiki-oriented graph navigation and backlink workflows
 - familiar to users building Obsidian-native or Zettelkasten-like knowledge systems
 - enables a human user to open the repository in Obsidian and navigate it as a wiki-like knowledge base
-- aligns with the workflow described in `docs/references/llm-wiki.md`, where the wiki is browsed in Obsidian as the "IDE" while the LLM maintains the files
+- aligns with the workflow described in `docs/references/llm-wiki.md`, where Obsidian is the human-facing IDE and the LLM maintains an interlinked Markdown wiki
 
 Weaknesses:
 
 - not part of standard Markdown
-- constrained by parser support: the `markdown-rs` library used by `docgarden` has a closed-as-not-planned issue for core wikilink support ([wooorm/markdown-rs#62](https://github.com/wooorm/markdown-rs/issues/62)), so native support would likely require workarounds or future extension hooks rather than a straightforward core-parser option
+- constrained by parser support: the `markdown-rs` library used by `docgarden` has a closed-as-not-planned issue for core wikilink support ([wooorm/markdown-rs#62](https://github.com/wooorm/markdown-rs/issues/62)), so native support requires workarounds or future extension hooks rather than a straightforward core-parser option
 - less portable across editors, renderers, and repository-hosting environments
 - usually requires repository-specific parsing and resolution semantics
 - typically encodes page identity rather than literal repository path identity
 - requires a resolution layer that maps page identity, basename, title, or alias to an actual file path rather than directly naming the repository path in the link text
 
-Wikilinks are therefore appealing for some repository knowledge systems, but they are a broader product decision than simply choosing between backticks and standard Markdown links.
+Wikilinks are therefore not a third spelling of repository paths. They represent a different model: page identity in a Markdown wiki.
 
 ### Path To Enabling Wikilinks
 
-Supporting wikilinks in `docgarden` would likely require more than a parser tweak.
+Supporting wikilinks in `docgarden` requires more than a parser tweak.
 
 #### Parser And AST Support
 
-There is an open issue about custom plugins or extensions in `markdown-rs` ([wooorm/markdown-rs#32](https://github.com/wooorm/markdown-rs/issues/32)), which suggests a possible future path, but there do not appear to be immediate plans to add that capability in the core library today.
+There is an open issue about custom plugins or extensions in `markdown-rs` ([wooorm/markdown-rs#32](https://github.com/wooorm/markdown-rs/issues/32)). That is the most plausible upstream path for proper parser integration, but `docgarden` should not model wikilinks as a near-term parser-flag change.
 
 That said, `markdown-rs` is an active open source project with explicit contribution guidance in the repository, so if wikilink support becomes important enough for `docgarden`, one possible path would be to contribute the extension-hook capability discussed in [wooorm/markdown-rs#32](https://github.com/wooorm/markdown-rs/issues/32) and then build a wikilinks plugin or equivalent integration on top of it.
 
 #### Local Resolution Cache Or Index
 
-Even with parser support, `docgarden` could not treat wikilinks as ordinary repository-path strings.
+Even with parser support, `docgarden` cannot treat wikilinks as ordinary repository-path strings.
 
-It would need a local cache or index that can resolve wiki identity to actual files. At minimum, that likely means tracking some combination of:
+It would need a local cache or index that can resolve wiki identity to actual files. At minimum, that means tracking some combination of:
 
 - canonical page title
 - basename or stem
 - configured aliases
 - file path
 - built-in scope or future named group
-- maybe headings or section anchors if deep wikilinks are ever in scope
+- headings or section anchors if deep wikilinks are in scope
 
-That index would need to be built deterministically from repository contents and configuration, not from an editor-private database. In practice, this probably means `docgarden` would scan configured scopes, parse front matter and maybe selected headings, and build its own mapping layer for link resolution, rename checks, and ambiguity detection.
+That index must be built deterministically from repository contents and configuration, not from an editor-private database. In practice, `docgarden` would scan configured scopes, parse front matter and selected headings, and build its own mapping layer for link resolution, rename checks, and ambiguity detection.
 
 #### Agent Ergonomics
 
 Wikilinks also create an agent-usage problem.
 
-Agents can read and emit raw Markdown, but they cannot mechanically follow a wikilink such as `[[Path Style Policy]]` unless they also have a tool or local index that resolves that identity to a concrete file path. Backticks and Markdown links are directly actionable from the filesystem alone; wikilinks are not.
+Agents can read and emit raw Markdown, but they cannot mechanically follow a wikilink such as `[[Path Style Policy]]` unless they also have a tool or local index that resolves that identity to a concrete file path. Backticks and Markdown links are directly actionable from the filesystem alone; wikilinks require wiki-aware navigation support.
 
-So if `docgarden` ever supports wikilinks, it would likely also need to provide tool-level support for resolving them, listing candidates, and maybe rendering canonical targets for agent use. Otherwise the repository could be pleasant for a human inside Obsidian while still being awkward for agents operating only on raw files.
-
-This also creates a useful skepticism about the workflow described in `docs/references/llm-wiki.md`. The gist strongly suggests an Obsidian-oriented environment, but it does not explain how agents navigate and maintain wikilinks without a supporting tool of their own. That absence does not prove Karpathy is not using wikilinks, but it does mean the public description leaves an implementation gap that `docgarden` would need to solve explicitly if it wanted first-class wikilink support.
+The LLM wiki reference points at [`qmd`](https://github.com/tobi/qmd) as one example of that support layer. `qmd` is a local Markdown search and retrieval tool with CLI and MCP surfaces for agent use. It is useful inspiration because it treats navigation as an agent tool problem, not only as a Markdown syntax problem.
 
 Two plausible implementation directions are:
 
 - a gitignored local cache plus a resolver command such as a future `docgarden` subcommand that maps wikilink identity to file path
 - a persisted on-filesystem index or database file that agents can read or query directly
 
-Both approaches are technically workable, but both also weaken one of the nicest properties of backticks and Markdown links: those forms are self-describing and directly actionable from the repository filesystem without extra repository-specific tooling.
+Both approaches are technically workable, but both give up one of the nicest properties of backticks and Markdown links: those forms are self-describing and directly actionable from the repository filesystem without extra repository-specific tooling.
 
-So the main cost of wikilinks is not only parser work or cache maintenance. It is also reduced default agent legibility. A repository that adopts wikilinks would likely need to teach agents, probably through `AGENTS.md` or equivalent repo guidance:
+So the main cost of wikilinks is not only parser work or cache maintenance. It is also reduced default agent legibility. A repository that adopts wikilinks needs to teach agents through `AGENTS.md` or equivalent repo guidance:
 
 - that wikilinks are part of the repository convention
 - how to resolve them
 - which tool or file to consult
 - when any local cache or index must be refreshed
 
-That makes wikilinks feel like a higher-complexity opt-in mode rather than a natural default for generic agent workflows.
+That makes wikilinks a higher-complexity opt-in mode rather than a natural default for generic agent workflows.
 
 ## Current Product Boundary
 
@@ -166,7 +160,14 @@ That boundary is pragmatic:
 - both forms can be linted and autofixed mechanically in a repository-local way
 - both map cleanly onto the current product focus on repo-relative path integrity
 
-Wikilinks are not just another spelling of the same feature. Supporting them would likely require explicit decisions about syntax, resolution rules, portability, and whether the product is still enforcing repository paths or has expanded into wiki-page identity.
+Wikilinks are not just another spelling of the same feature. Supporting them would require explicit decisions about syntax, resolution rules, portability, and whether the product is still enforcing repository paths or has expanded into wiki-page identity.
+
+The product question is therefore:
+
+- Is `docgarden` a repository knowledge-base linter for git repos, where local references primarily mean repo-relative paths?
+- Or is `docgarden` also a Markdown wiki tool for Obsidian-style knowledge bases, where local references primarily mean wiki page identities?
+
+Those use cases overlap, but they optimize for different workflows. A repository knowledge base wants portable, filesystem-obvious references that agents can inspect and modify with standard shell tools. An Obsidian knowledge base wants graph navigation, backlinks, aliases, page identities, and wiki-aware tooling.
 
 ## Raw Sources Versus Repo-Authored Docs
 
@@ -186,13 +187,14 @@ The current design direction is:
 - keep `backticks` and `links` as the actively supported style-policy options
 - preserve the repository's rationale for starting with backticks in agent-first, token-sensitive docs
 - treat Markdown links as the main alternative for repositories that prioritize explicit navigation or rendered readability
-- treat wikilinks as a separate future design topic rather than as an immediate third style option
+- treat wikilinks as a separate product-scope decision rather than as an immediate third style option
 - avoid applying style rewrites to imported raw-source paths such as `docs/references/`
 
 ## Open Questions
 
-- Should `docgarden` continue to model style policy only as `backticks` versus `links`, or should it eventually grow a more general path-style enum that could include wikilinks?
-- If wikilinks are ever supported, should they resolve to repository paths, document identities, or scope-specific titles?
+- Should `docgarden` stay focused on repository knowledge bases, or should it also become a Markdown wiki tool for Obsidian-style knowledge bases?
+- If wikilinks are supported, should they live behind a separate wiki mode rather than inside the ordinary repository-path style policy?
+- Should wikilink resolution use document identities, scope-specific titles, aliases, or explicit repository paths as the canonical target model?
 - Should repositories be able to define different path-style policies for different configured scopes?
 - Should style policy be enforced only in repo-authored docs by default, with imported-reference scopes automatically exempted from rewrites?
 - How much rendered-document ergonomics should matter relative to token efficiency in the default product posture?
