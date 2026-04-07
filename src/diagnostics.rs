@@ -69,7 +69,7 @@ pub fn ignored_rules_for_path(
         let mut builder = GitignoreBuilder::new(root);
         builder
             .add_line(None, pattern)
-            .with_context(|| format!("invalid per-file-ignores pattern {pattern}"))?;
+            .with_context(|| format!("invalid ignored-rule pattern {pattern}"))?;
         let matcher = builder.build()?;
         if matcher.matched(relative_path, false).is_ignore() {
             for entry in entries {
@@ -163,5 +163,20 @@ mod tests {
         let ignored = ignored_rules_for_path(Path::new("/tmp/repo"), &rules, "README.md").unwrap();
 
         assert!(ignored.is_empty());
+    }
+
+    #[test]
+    fn ignored_rules_report_invalid_patterns() {
+        let mut rules = BTreeMap::new();
+        rules.insert(
+            "{docs,README.md".to_string(),
+            vec!["unresolved-local-path".to_string()],
+        );
+
+        let error = ignored_rules_for_path(Path::new("/tmp/repo"), &rules, "README.md")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("invalid ignored-rule pattern {docs,README.md"));
     }
 }

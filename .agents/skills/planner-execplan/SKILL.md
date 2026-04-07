@@ -42,6 +42,12 @@ Read enough repo and plan context to distinguish:
 
 Do not let unresolved chat context remain outside the plan when it changes what success means.
 
+Separate the user's goal from the proposed mechanism. Do not treat a suggested implementation path as settled scope until you have checked that it is actually needed.
+
+Prefer the simplest plan that satisfies the goal. If the likely plan adds a new abstraction, overloaded meaning, or extra migration work, push back and offer the simpler alternative.
+
+Stop and ask the human when an unresolved choice would shape product semantics. Do not silently decide ambiguous behavior just to keep planning moving. Record the answer in the ExecPlan before implementation proceeds.
+
 ### 2. Write for evaluator judgment
 
 Define "done" in language an evaluator can verify independently.
@@ -56,6 +62,8 @@ Prefer:
 Avoid generator-friendly wording such as "clean up auth flow" or "finish the migration."
 
 Write acceptance criteria clearly enough that needless complexity is visible during review, not hidden behind vague success language.
+
+Include negative cases for ambiguity-prone behavior. If the plan relies on a fallback, precedence rule, or overloaded meaning, make that behavior explicit and testable.
 
 ### 3. Use existing ExecPlan sections first
 

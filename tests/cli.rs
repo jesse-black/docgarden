@@ -203,7 +203,7 @@ fn config_can_opt_out_of_gitignore_support() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
-    fs::write(root.join("docgarden.toml"), "respect-gitignore = false\n").unwrap();
+    fs::write(root.join("docgarden.toml"), "respect_gitignore = false\n").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
@@ -264,11 +264,7 @@ fn fix_preserves_unrelated_readme_formatting() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(
-        root.join("docgarden.toml"),
-        "local-reference-style = \"backticks\"\n",
-    )
-    .unwrap();
+    fs::write(root.join("docgarden.toml"), "path_style = \"backticks\"\n").unwrap();
     fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
     fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
     let readme = root.join("README.md");
@@ -307,17 +303,18 @@ fn fix_preserves_unrelated_readme_formatting() {
 }
 
 #[test]
-fn fix_respects_per_file_ignores_for_readme_style_rules() {
+fn fix_respects_rule_disable_for_readme_style_rules() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
         root.join("docgarden.toml"),
         concat!(
-            "local-reference-style = \"backticks\"\n",
+            "path_style = \"backticks\"\n",
             "\n",
-            "[per-file-ignores]\n",
-            "\"README.md\" = [\"prefer-backticks-for-local-paths\"]\n",
+            "[[rules]]\n",
+            "path = \"README.md\"\n",
+            "disable = [\"prefer-backticks-for-local-paths\"]\n",
         ),
     )
     .unwrap();
@@ -346,11 +343,7 @@ fn fix_handles_multibyte_text_before_rewrites_without_corruption() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(
-        root.join("docgarden.toml"),
-        "local-reference-style = \"backticks\"\n",
-    )
-    .unwrap();
+    fs::write(root.join("docgarden.toml"), "path_style = \"backticks\"\n").unwrap();
     fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
     fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
     let readme = root.join("README.md");

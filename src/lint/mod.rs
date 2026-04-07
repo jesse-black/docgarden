@@ -40,6 +40,19 @@ struct Finding<'a> {
     edit: Option<Edit>,
 }
 
+#[derive(Clone, Copy)]
+struct FilePolicy {
+    local_reference_style: LocalReferenceStyle,
+    report_ambiguous_inline_code: bool,
+}
+
+struct WalkState<'a> {
+    diagnostics: &'a mut Vec<Diagnostic>,
+    ignored_rules: &'a std::collections::BTreeSet<String>,
+    mode: Mode,
+    edits: &'a mut Vec<Edit>,
+}
+
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
     let relative_path = relative_path(&config.repository_root, path)?;
     let ignored_rules = ignored_rules_for_path(
@@ -47,6 +60,11 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         &config.per_file_ignores,
         &relative_path,
     )?;
+    let policy = FilePolicy {
+        local_reference_style: config.local_reference_style_for_path(&relative_path)?,
+        report_ambiguous_inline_code: config
+            .report_ambiguous_inline_code_for_path(&relative_path)?,
+    };
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let tree = to_mdast(&source, &ParseOptions::gfm())
@@ -54,15 +72,13 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
     let mut diagnostics = Vec::new();
     let mut edits = Vec::new();
 
-    walk_node(
-        config,
-        &relative_path,
-        &tree,
-        &mut diagnostics,
-        &ignored_rules,
+    let mut state = WalkState {
+        diagnostics: &mut diagnostics,
+        ignored_rules: &ignored_rules,
         mode,
-        &mut edits,
-    )?;
+        edits: &mut edits,
+    };
+    walk_node(config, policy, &relative_path, &tree, &mut state)?;
 
     if mode == Mode::Fix && !edits.is_empty() {
         let rewritten = apply_edits(&source, &edits)?;
@@ -77,19 +93,17 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
 
 fn walk_node(
     config: &Config,
+    policy: FilePolicy,
     file: &str,
     node: &Node,
-    diagnostics: &mut Vec<Diagnostic>,
-    ignored_rules: &std::collections::BTreeSet<String>,
-    mode: Mode,
-    edits: &mut Vec<Edit>,
+    state: &mut WalkState<'_>,
 ) -> Result<()> {
     match node {
         Node::InlineCode(_) => {
-            lint_inline_code_node(config, file, node, diagnostics, ignored_rules, mode, edits)?;
+            lint_inline_code_node(config, policy, file, node, state)?;
         }
         Node::Link(_) => {
-            lint_link_node(config, file, node, diagnostics, ignored_rules, mode, edits)?;
+            lint_link_node(config, policy, file, node, state)?;
             return Ok(());
         }
         _ => {}
@@ -97,7 +111,7 @@ fn walk_node(
 
     if let Some(children) = children_mut(node) {
         for child in children {
-            walk_node(config, file, child, diagnostics, ignored_rules, mode, edits)?;
+            walk_node(config, policy, file, child, state)?;
         }
     }
 
@@ -106,12 +120,10 @@ fn walk_node(
 
 fn lint_inline_code_node(
     config: &Config,
+    policy: FilePolicy,
     file: &str,
     node: &Node,
-    diagnostics: &mut Vec<Diagnostic>,
-    ignored_rules: &std::collections::BTreeSet<String>,
-    mode: Mode,
-    edits: &mut Vec<Edit>,
+    state: &mut WalkState<'_>,
 ) -> Result<()> {
     let Some(inline) = (match node {
         Node::InlineCode(inline) => Some(inline),
@@ -129,10 +141,10 @@ fn lint_inline_code_node(
             }
             if !exists {
                 emit_finding(
-                    diagnostics,
-                    ignored_rules,
-                    mode,
-                    edits,
+                    state.diagnostics,
+                    state.ignored_rules,
+                    state.mode,
+                    state.edits,
                     Finding {
                         payload: DiagnosticPayload {
                             file,
@@ -150,13 +162,13 @@ fn lint_inline_code_node(
                 );
                 return Ok(());
             }
-            if config.local_reference_style == LocalReferenceStyle::Links {
+            if policy.local_reference_style == LocalReferenceStyle::Links {
                 let link_text = render_link_destination(file, &candidate, &resolved, &exists_path);
                 emit_finding(
-                    diagnostics,
-                    ignored_rules,
-                    mode,
-                    edits,
+                    state.diagnostics,
+                    state.ignored_rules,
+                    state.mode,
+                    state.edits,
                     Finding {
                         payload: DiagnosticPayload {
                             file,
@@ -177,12 +189,12 @@ fn lint_inline_code_node(
                 );
             }
         }
-    } else if config.report_ambiguous_inline_code && looks_path_adjacent(value) {
+    } else if policy.report_ambiguous_inline_code && looks_path_adjacent(value) {
         emit_finding(
-            diagnostics,
-            ignored_rules,
-            mode,
-            edits,
+            state.diagnostics,
+            state.ignored_rules,
+            state.mode,
+            state.edits,
             Finding {
                 payload: DiagnosticPayload {
                     file,
@@ -203,12 +215,10 @@ fn lint_inline_code_node(
 
 fn lint_link_node(
     config: &Config,
+    policy: FilePolicy,
     file: &str,
     node: &Node,
-    diagnostics: &mut Vec<Diagnostic>,
-    ignored_rules: &std::collections::BTreeSet<String>,
-    mode: Mode,
-    edits: &mut Vec<Edit>,
+    state: &mut WalkState<'_>,
 ) -> Result<()> {
     let Some(link) = (match node {
         Node::Link(link) => Some(link),
@@ -230,10 +240,10 @@ fn lint_link_node(
         }
         if !exists {
             emit_finding(
-                diagnostics,
-                ignored_rules,
-                mode,
-                edits,
+                state.diagnostics,
+                state.ignored_rules,
+                state.mode,
+                state.edits,
                 Finding {
                     payload: DiagnosticPayload {
                         file,
@@ -252,7 +262,7 @@ fn lint_link_node(
             );
             return Ok(());
         }
-        if config.local_reference_style == LocalReferenceStyle::Backticks
+        if policy.local_reference_style == LocalReferenceStyle::Backticks
             && label_equivalent(
                 &link.children,
                 &candidate.display_text,
@@ -261,10 +271,10 @@ fn lint_link_node(
         {
             let inline_text = render_repo_relative(&resolved, &exists_path);
             emit_finding(
-                diagnostics,
-                ignored_rules,
-                mode,
-                edits,
+                state.diagnostics,
+                state.ignored_rules,
+                state.mode,
+                state.edits,
                 Finding {
                     payload: DiagnosticPayload {
                         file,
@@ -400,12 +410,13 @@ mod tests {
             include: Vec::new(),
             exclude: Vec::new(),
             per_file_ignores: BTreeMap::new(),
+            local_reference_style_overrides: Vec::new(),
             local_reference_style: LocalReferenceStyle::Backticks,
             known_extensions: default_extensions(),
             special_filenames: default_special_filenames(),
             config_path: None,
             config_was_explicit: false,
-            report_ambiguous_inline_code: false,
+            ambiguous_inline_code_patterns: Vec::new(),
             respect_gitignore: true,
         }
     }

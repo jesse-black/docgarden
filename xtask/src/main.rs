@@ -24,9 +24,9 @@ fn validate() -> Result<()> {
             "--json",
             "--output-path",
             "target/coverage.json",
-            "--fail-under-regions=90",
         ],
     )?;
+    run("covgate", &["check", "target/coverage.json"])?;
     run("cargo-machete", &["."])?;
     run("cargo-deny", &["check"])?;
     Ok(())

@@ -2,10 +2,17 @@ exclude = [
     "tests/**",
 ]
 
-[per-file-ignores]
-# Allow local links in README.md because it is human facing documentation
-"README.md" = ["prefer-backticks-for-local-paths"]
-# Allow unresolved local paths as docs/exec-plans/completed/ is for archival only
-"docs/exec-plans/completed/**" = ["unresolved-local-path"]
-# Allow unresolved local paths as references is for clippings of external sources for reference only
-"docs/references/**" = ["unresolved-local-path"]
+[[rules]]
+path = "README.md"
+disable = ["prefer-backticks-for-local-paths"]
+reason = "Allow local links in README.md because it is human-facing documentation."
+
+[[rules]]
+path = "docs/exec-plans/completed/**"
+disable = ["unresolved-local-path"]
+reason = "Completed ExecPlans are archival records and may preserve historical paths."
+
+[[rules]]
+path = "docs/references/**"
+disable = ["unresolved-local-path"]
+reason = "References are clippings of external sources and may preserve source-derived paths."

@@ -161,7 +161,7 @@ These forms should classify as ambiguous inline code by default:
 These forms should not be classified as local paths:
 
     `cargo fmt`
-    `local-reference-style`
+    `path_style`
     `RuleId::AmbiguousInlineCode`
 
 ## Implications For Dogfooding

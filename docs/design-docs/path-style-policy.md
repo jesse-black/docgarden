@@ -125,10 +125,10 @@ It would need a local cache or index that can resolve wiki identity to actual fi
 - basename or stem
 - configured aliases
 - file path
-- document family or scope
+- built-in scope or future named group
 - maybe headings or section anchors if deep wikilinks are ever in scope
 
-That index would need to be built deterministically from repository contents and configuration, not from an editor-private database. In practice, this probably means `docgarden` would scan the configured document families, parse front matter and maybe selected headings, and build its own mapping layer for link resolution, rename checks, and ambiguity detection.
+That index would need to be built deterministically from repository contents and configuration, not from an editor-private database. In practice, this probably means `docgarden` would scan configured scopes, parse front matter and maybe selected headings, and build its own mapping layer for link resolution, rename checks, and ambiguity detection.
 
 #### Agent Ergonomics
 
@@ -176,8 +176,8 @@ In this repository, files under `docs/references/` are local captures of externa
 
 This distinction matters for future configuration:
 
-- repo-authored document families may opt into a strict path-style policy
-- imported reference families may require provenance checks while relaxing path-style rewrites
+- repo-authored scopes may opt into a strict path-style policy
+- imported reference scopes may require provenance checks while relaxing path-style rewrites
 
 ## Initial Design Direction
 
@@ -187,12 +187,12 @@ The current design direction is:
 - preserve the repository's rationale for starting with backticks in agent-first, token-sensitive docs
 - treat Markdown links as the main alternative for repositories that prioritize explicit navigation or rendered readability
 - treat wikilinks as a separate future design topic rather than as an immediate third style option
-- avoid applying style rewrites to imported raw-source families such as `docs/references/`
+- avoid applying style rewrites to imported raw-source paths such as `docs/references/`
 
 ## Open Questions
 
 - Should `docgarden` continue to model style policy only as `backticks` versus `links`, or should it eventually grow a more general path-style enum that could include wikilinks?
-- If wikilinks are ever supported, should they resolve to repository paths, document identities, or family-scoped titles?
-- Should repositories be able to define different path-style policies for different configured document families?
-- Should style policy be enforced only in repo-authored docs by default, with imported-reference families automatically exempted from rewrites?
+- If wikilinks are ever supported, should they resolve to repository paths, document identities, or scope-specific titles?
+- Should repositories be able to define different path-style policies for different configured scopes?
+- Should style policy be enforced only in repo-authored docs by default, with imported-reference scopes automatically exempted from rewrites?
 - How much rendered-document ergonomics should matter relative to token efficiency in the default product posture?
