@@ -4,10 +4,10 @@
 
 This document is a working draft for standardized YAML front matter in agent-oriented Markdown documents that `docgarden` may validate across repositories.
 
-The draft starts with two document families:
+The draft starts with two scopes:
 
-- `references` for externally sourced material
-- `skills` for Agent Skills files
+- imported references for externally sourced material
+- skills under the configured skills directory
 
 ## Naming Convention
 
@@ -17,9 +17,9 @@ For external schemas, preserve the field names defined by that schema. For examp
 
 ## Validation Direction
 
-`docgarden` should lint required front matter fields for document families that opt into front matter requirements.
+`docgarden` should lint required front matter fields for scopes that opt into front matter requirements.
 
-Those requirements should vary by document family rather than forcing one universal schema across all Markdown files. Different document types have different needs:
+Those requirements should vary by scope rather than forcing one universal schema across all Markdown files. Different document types have different needs:
 
 - some first-party repository docs may require fields such as `description`, `owner`, or `last_reviewed`
 - imported external references may require provenance-focused fields such as `title`, `source`, `retrieved`, and `last_reviewed`
@@ -79,12 +79,12 @@ Use the `skills` schema for files that implement the Agent Skills specification.
 
 - This draft does not yet define a canonical `docgarden` schema for first-party design docs, plans, or generated documents.
 - This draft treats `skills` as an external schema based on the Agent Skills specification rather than a `docgarden`-owned vocabulary.
-- External-schema fields such as `allowed-tools` or `applyTo` should not be generalized into unrelated document families without an explicit design decision.
-- Required-field linting should be driven by document family, not by a one-size-fits-all Markdown policy.
+- External-schema fields such as `allowed-tools` or `applyTo` should not be generalized into unrelated scopes without an explicit design decision.
+- Required-field linting should be driven by explicit scopes, not by a one-size-fits-all Markdown policy.
 
 ## Open Questions
 
-- What first-party document families should exist beyond `references`, and which of them should require front matter at all?
+- What first-party scopes should exist beyond imported references, and which of them should require front matter at all?
 - Should `AGENTS.md` explicitly remain front-matter-free by default, or should front matter be optional but discouraged there?
 - Does an `owner` field create enough value to justify its maintenance cost for repo-authored docs?
 - If `owner` exists, what does ownership mean for an agent-oriented repository? Is it a human team, a repository area, a workflow, or something else?

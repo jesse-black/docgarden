@@ -52,7 +52,7 @@ This should be documented as an approximation for agent context cost, not as a u
 - mechanical
 - file-local
 - configurable
-- scoped by document family or path pattern
+- scoped by built-in scope or path pattern
 
 The first measurable checks should be:
 
@@ -75,7 +75,7 @@ They:
 
 This is especially valuable for high-traffic agent-facing entry points such as `AGENTS.md` and skill main files.
 
-### Document-Family Policy
+### Scope Policy
 
 Different file types should be able to carry different budget defaults.
 
@@ -86,7 +86,7 @@ Examples:
 - imported external references may need looser or disabled budget checks because fidelity to source material matters more than aggressive trimming
 - execution plans may need a different budget model because self-containment is part of their purpose
 
-This implies that budget rules should be driven by document family, path, or both.
+This implies that budget rules should be driven by built-in scope, path, or both.
 
 For `AGENTS.md`, the current external reference points are still softer than the Agent Skills defaults for skill files, but they are directionally useful:
 
@@ -102,17 +102,17 @@ Context-budget limits should use the shared configuration model in `docs/design-
 A small example:
 
     [[rules]]
-    match = "skills"
+    scope = "skills"
     rule = "context-budget"
     max-lines = 500
     max-tokens = 5000
 
     [[rules]]
-    match = "AGENTS.md"
+    path = "AGENTS.md"
     rule = "context-budget"
     max-tokens = 1200
 
-The important point is that limit fields are rule options scoped by the same family or path targeting layer as other rule behavior. That lets budget checks reuse configured skill and document families instead of requiring users to repeat path globs in a feature-specific configuration table.
+The important point is that limit fields are rule options scoped by the same targeting layer as other rule behavior. That lets budget checks reuse built-in scopes such as skills without requiring a feature-specific configuration table.
 
 ### Skill-Aware Configuration Questions
 
@@ -120,7 +120,7 @@ Open questions for the configuration model:
 
 - Should there be a top-level skill-directory configuration that both skill commands and budget checks reuse?
 - Should skill main-file detection be based on path patterns, explicit skill roots, or both?
-- Should budget defaults be attached to document families such as `skill_main_file` rather than raw globs?
+- Should budget defaults be attached to built-in scopes such as `skill_main_file` rather than raw globs?
 - How should repositories override defaults for one skill collection without affecting another?
 
 ### Severity And Enforcement
@@ -137,7 +137,7 @@ This remains preliminary and should not be treated as settled policy yet.
 
 ## Open Questions
 
-- Which document families should ship with built-in defaults beyond skill main files?
+- Which built-in scopes should ship with defaults beyond skill main files?
 - Should imported external references have no default budget checks because source fidelity matters more than compactness?
 - Should `AGENTS.md` get a built-in default budget, and if so, should it be token-based, line-based, or both?
 - How should budget rules interact with generated files or files intentionally exempted through configuration?

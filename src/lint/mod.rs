@@ -416,7 +416,6 @@ mod tests {
             special_filenames: default_special_filenames(),
             config_path: None,
             config_was_explicit: false,
-            report_ambiguous_inline_code: false,
             ambiguous_inline_code_patterns: Vec::new(),
             respect_gitignore: true,
         }

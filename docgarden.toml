@@ -2,26 +2,17 @@ exclude = [
     "tests/**",
 ]
 
-[[documents]]
-name = "completed-execplans"
-match = "docs/exec-plans/completed/**"
-
-[[documents]]
-name = "references"
-match = "docs/references/**"
-kind = "reference"
-
 [[rules]]
-match = "README.md"
+path = "README.md"
 disable = ["prefer-backticks-for-local-paths"]
 reason = "Allow local links in README.md because it is human-facing documentation."
 
 [[rules]]
-match = "completed-execplans"
+path = "docs/exec-plans/completed/**"
 disable = ["unresolved-local-path"]
 reason = "Completed ExecPlans are archival records and may preserve historical paths."
 
 [[rules]]
-match = "references"
+path = "docs/references/**"
 disable = ["unresolved-local-path"]
 reason = "References are clippings of external sources and may preserve source-derived paths."

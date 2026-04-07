@@ -65,31 +65,26 @@ Shared lint and fix flags:
 
 ### Configuration
 
-`docgarden.toml` can define document families once, then apply existing lint rules to those families or to repository-relative path patterns:
+`docgarden.toml` can apply existing lint rules to repository-relative paths or gitignore-style path patterns:
 
 ```toml
-local-reference-style = "backticks"
-
-[[documents]]
-name = "references"
-match = "docs/references/**"
-kind = "reference"
+path_style = "backticks"
 
 [[rules]]
-match = "references"
+path = "docs/references/**"
 disable = ["unresolved-local-path"]
 reason = "Imported references may preserve source-derived paths."
 
 [[rules]]
-match = "docs/**"
+path = "docs/**"
 enable = ["ambiguous-inline-code"]
 
 [[rules]]
-match = "README.md"
-local-reference-style = "links"
+path = "README.md"
+path_style = "links"
 ```
 
-The supported rule names today are `unresolved-local-path`, `prefer-links-for-local-paths`, `prefer-backticks-for-local-paths`, and `ambiguous-inline-code`. Legacy keys such as `[per-file-ignores]`, `local-reference-style`, and `report-ambiguous-inline-code` continue to work.
+The supported rule names today are `unresolved-local-path`, `prefer-links-for-local-paths`, `prefer-backticks-for-local-paths`, and `ambiguous-inline-code`.
 
 ### Examples
 
