@@ -511,6 +511,38 @@ max_tokens = 1000
 }
 
 #[test]
+fn context_budget_later_matching_limit_can_reenable_after_disable() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_tokens = 1
+
+[[rules]]
+path = "README.md"
+disable = ["max_tokens"]
+reason = "Temporarily disable token budget."
+
+[[rules]]
+path = "README.md"
+max_tokens = 1
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "alpha beta gamma\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("error  max_tokens"));
+}
+
+#[test]
 fn context_budget_fix_does_not_rewrite_over_budget_files() {
     let temp = tempdir().unwrap();
     let root = temp.path();

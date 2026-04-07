@@ -29,6 +29,8 @@ The evaluator owns independent review findings. The evaluator reviews the branch
 
 The orchestrator owns lifecycle coordination and closeout. The orchestrator sequences planner, generator, and evaluator work; decides whether evaluator findings block closeout, require generator fixes, or require planner rescoping; records closeout outcomes in the plan; and moves a plan to `docs/exec-plans/completed/` when closeout is justified.
 
+The orchestrator does not replace the other personas. It uses `planner-execplan`, `generator-execplan`, and `evaluator-execplan` as required sub-skills for their phases. If the runtime cannot load those sub-skills or cannot run a clean-room evaluator when one is required, the orchestrator should stop and ask for the missing capability rather than silently self-reviewing or closing the plan.
+
 ## Rewrite and Change-Control Rules
 
 Once implementation has started, only the planner may substantially rewrite:
@@ -55,7 +57,7 @@ This contract is about responsibility, not runtime shape. A single agent may fol
 
 The ExecPlan is the handoff artifact. If a role works in a separate context, accepted requirements, progress, discoveries, and evaluation evidence must be written into the plan rather than left in chat history. The evaluator records review findings and evidence directly; the orchestrator records final closeout outcomes.
 
-The evaluator should usually work from a cleaner context than the generator. Give the evaluator the current ExecPlan, repository state or diff, validation commands and outputs, and any generator handoff note.
+The evaluator should usually work from a cleaner context than the generator. When using `orchestrator-execplan`, the evaluator phase should use a fresh context or subagent when the runtime supports it. Give the evaluator the current ExecPlan, repository state or diff, validation commands and outputs, and any generator handoff note.
 
 ## Handoff and Sections
 

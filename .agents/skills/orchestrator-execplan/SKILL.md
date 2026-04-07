@@ -1,11 +1,23 @@
 ---
 name: orchestrator-execplan
-description: Coordinate the full ExecPlan lifecycle across planner, generator, and evaluator personas. Use when an agent needs to run a plan-driven project end to end, spawn or delegate clean-room evaluation, decide whether evaluator findings block closeout, record final evaluator results, or move an ExecPlan from `docs/exec-plans/active/` to `docs/exec-plans/completed/`.
+description: Coordinate the ExecPlan lifecycle across required planner, generator, and evaluator sub-skills. Use when an agent needs to run a plan-driven project end to end, delegate clean-room evaluation, decide whether findings block closeout, or move an ExecPlan to completed.
 ---
 
 # Orchestrator ExecPlan
 
 Use this skill when one agent is coordinating the lifecycle of an ExecPlan rather than acting as the planner, generator, or evaluator directly.
+
+This skill is the controller, not a substitute for the persona skills. The core loop is mandatory. If you cannot load a required sub-skill, delegate to a clean-room evaluator, or continue without crossing role boundaries, stop and ask the user instead of improvising.
+
+## Required Sub-Skills
+
+Use these sub-skills as the phase owners:
+
+- `$planner-execplan` for plan creation, revision, and rescoping
+- `$generator-execplan` for implementation and ready-for-evaluation handoff
+- `$evaluator-execplan` for independent branch review and findings recorded in the ExecPlan
+
+Do not assume that mentioning a sub-skill in this file loads it automatically. At the start of each phase, explicitly load or invoke the required sub-skill. If the runtime cannot do that from inside this skill, ask the user to relaunch with the required sub-skills named directly.
 
 ## Core Loop
 
@@ -16,6 +28,13 @@ Run the personas in order and keep their responsibilities separate:
 3. Spawn or request a clean-room evaluator using `$evaluator-execplan`. Frame the task as branch review: review the current PR branch/worktree closing out the ExecPlan, record findings in the ExecPlan, and return findings first.
 4. Decide what happens next from the evaluator result. Record any closeout outcome in the ExecPlan and move the plan only when closeout is justified.
 
+Keep a visible phase log as you work:
+
+- `Planner phase`: decision-complete, rescope needed, or blocked
+- `Generator phase`: ready for evaluation, implementation needed, or blocked
+- `Evaluator phase`: completed, findings recorded, or blocked on clean-room review
+- `Orchestrator closeout`: completed, stays active, or rescope needed
+
 ## You Own
 
 As orchestrator, you own:
@@ -23,7 +42,7 @@ As orchestrator, you own:
 - sequencing planner, generator, and evaluator work
 - keeping persona boundaries intact
 - deciding whether evaluator findings are blocking, non-blocking, or require planner rescoping
-- recording evaluator findings or outcomes in the ExecPlan
+- confirming evaluator findings are recorded and recording closeout outcomes in the ExecPlan
 - moving a completed plan to `docs/exec-plans/completed/`
 
 You do not own:
@@ -31,18 +50,6 @@ You do not own:
 - inventing acceptance criteria without the planner
 - implementing plan scope without the generator
 - weakening evaluator findings so the plan can close
-
-## Evaluator Prompt
-
-Use a clean-room prompt that asks for review, not closeout. Adapt this shape:
-
-```text
-Use $evaluator-execplan to review the current PR branch closing out <plan path>.
-
-Inspect the diff and run whatever validation you need. Record findings and evidence in the ExecPlan, then return a findings-first review summary with commands run and artifacts inspected. Do not move the plan or edit closeout state.
-```
-
-Prefer giving the evaluator raw context: the ExecPlan path, branch/base branch, relevant validation outputs, and any generator handoff note. Do not provide the expected answer or your own suspected bug unless the human explicitly asks for a targeted review.
 
 ## Closeout Rules
 

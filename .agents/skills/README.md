@@ -17,7 +17,7 @@ These skills should follow the Agent Skills spec and keep repository conventions
 - `evaluator-execplan` (`.agents/skills/evaluator-execplan/SKILL.md`)
   Common request aliases: `evaluator execplan`, `execplan evaluator`, `evaluator skill`, `validate exec plan`, `review exec plan`, `review current branch`
 - `orchestrator-execplan` (`.agents/skills/orchestrator-execplan/SKILL.md`)
-  Common request aliases: `orchestrator execplan`, `execplan orchestrator`, `orchestrator skill`, `run execplan lifecycle`, `close exec plan`
+  Common request aliases: `orchestrator execplan`, `execplan orchestrator`, `orchestrator skill`, `run execplan lifecycle`, `run execplan lifecycle with subagents`, `clean-room evaluator`, `close exec plan`
 
 ## Registering a skill
 1. Add a `` `SKILL.md` `` at `.agents/skills/<skill-name>/SKILL.md`.

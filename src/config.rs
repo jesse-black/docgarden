@@ -264,11 +264,18 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
         let disabled_rules = rule.disable.unwrap_or_default();
         if !disabled_rules.is_empty() {
             validate_rule_list("disable", &disabled_rules, is_known_rule)?;
-            applications
-                .per_file_ignores
-                .entry(pattern.clone())
-                .or_default()
-                .extend(disabled_rules.clone());
+            let global_ignored_rules: Vec<String> = disabled_rules
+                .iter()
+                .filter(|rule| !matches!(rule.as_str(), "max_tokens" | "max_lines"))
+                .cloned()
+                .collect();
+            if !global_ignored_rules.is_empty() {
+                applications
+                    .per_file_ignores
+                    .entry(pattern.clone())
+                    .or_default()
+                    .extend(global_ignored_rules);
+            }
         }
         if let Some(enabled_rules) = rule.enable {
             validate_rule_list("enable", &enabled_rules, is_supported_enabled_rule)?;
