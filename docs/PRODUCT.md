@@ -45,6 +45,7 @@ Capabilities that are clearly part of the current product:
 - diagnostics for unresolved local paths
 - diagnostics and autofixes for style-policy mismatches between backticks and links
 - optional warnings for ambiguous inline code that looks path-adjacent
+- explicit line-count and token-budget diagnostics configured with `max_lines` and `max_tokens`
 - human-readable output and JSON output for automation
 
 Durable product inputs that exist today:
@@ -57,7 +58,7 @@ Durable product inputs that exist today:
 
 These capabilities fit the product direction but should not be described as already complete:
 
-- file size and token-budget rules for high-traffic docs such as `AGENTS.md`
+- generated or built-in default budget policy for high-traffic docs such as `AGENTS.md`
 - YAML front matter enforcement for `description`, `owner`, `last_reviewed`, and similar fields that improve agent routing and repository operations
 - freshness checks for repository knowledge documents
 - cross-linking enforcement across the repository knowledge graph

@@ -27,9 +27,9 @@ In `docgarden`, that suggests the following default checks for skill main files:
 
 These defaults should be treated as defaults, not hard-coded universal policy. Repositories may need to override them, but `docgarden` can ship them as a strong built-in starting point for skill files.
 
-## Preliminary Working Ideas
+## Current Direction
 
-The rest of this document is still exploratory.
+The first implementation is explicit-config only. It supports path-targeted `max_lines` and `max_tokens` rules, counts the complete Markdown file, defaults configured budget diagnostics to errors, and lets entries use `severity = "warn"` for warning-only adoption.
 
 ### Tokenizer Decision
 
@@ -47,14 +47,14 @@ This should be documented as an approximation for agent context cost, not as a u
 
 ### Rule Model
 
-`docgarden` should support context-budget checks that are:
+`docgarden` supports context-budget checks that are:
 
 - mechanical
 - file-local
 - configurable
-- scoped by built-in scope or path pattern
+- targeted by repository-relative path pattern
 
-The first measurable checks should be:
+The first measurable checks are:
 
 - line count
 - token count
@@ -86,7 +86,7 @@ Examples:
 - imported external references may need looser or disabled budget checks because fidelity to source material matters more than aggressive trimming
 - execution plans may need a different budget model because self-containment is part of their purpose
 
-This implies that budget rules should be driven by built-in scope, path, or both.
+This implies that budget rules should be driven by repository-relative paths and path patterns, not named target aliases.
 
 For `AGENTS.md`, the current external reference points are still softer than the Agent Skills defaults for skill files, but they are directionally useful:
 
@@ -102,43 +102,58 @@ Context-budget limits should use the shared configuration model in `docs/design-
 A small example:
 
     [[rules]]
-    scope = "skills"
-    rule = "context-budget"
-    max-lines = 500
-    max-tokens = 5000
+    path = ".agents/skills/**/SKILL.md"
+    max_lines = 500
+    max_tokens = 5000
 
     [[rules]]
     path = "AGENTS.md"
-    rule = "context-budget"
-    max-tokens = 1200
+    max_tokens = 1200
 
-The important point is that limit fields are rule options scoped by the same targeting layer as other rule behavior. That lets budget checks reuse built-in scopes such as skills without requiring a feature-specific configuration table.
+The important point is that limit fields are rule options targeted by the same path layer as other rule behavior. Setting `max_tokens` or `max_lines` is enough to enable the corresponding budget check for that path pattern. A separate `rule = "context-budget"` field would add ceremony without selecting any behavior that the limit fields do not already identify.
+
+If built-in defaults later apply a token or line budget automatically, repositories can opt out through the existing disable list:
+
+    [[rules]]
+    path = "docs/references/**"
+    disable = ["max_tokens", "max_lines"]
+    reason = "Imported source-derived docs preserve source fidelity over compactness."
 
 ### Skill-Aware Configuration Questions
 
 Open questions for the configuration model:
 
-- Should there be a top-level skill-directory configuration that both skill commands and budget checks reuse?
-- Should skill main-file detection be based on path patterns, explicit skill roots, or both?
-- Should budget defaults be attached to built-in scopes such as `skill_main_file` rather than raw globs?
+- Should context-budget implementation wait for `skills_dir`, or should the first version require explicit path patterns for skill main files?
+- Should skill main-file detection use the configured `skills_dir` plus the Agent Skills main-file filename convention once `skills_dir` exists?
 - How should repositories override defaults for one skill collection without affecting another?
 
 ### Severity And Enforcement
 
-Another open question is whether budgets should default to warnings or errors.
+Explicit context-budget limits default to errors.
 
-A plausible direction is:
+The configured entry's `severity` applies to every budget field in that `[[rules]]` entry. If a repository wants token limits to be errors and line limits to be warnings for the same path, it can use two entries with the same path:
 
-- high-traffic files such as `AGENTS.md` may justify error-level enforcement
-- skill main-file defaults may start as warnings so repositories can adopt them gradually
-- imported references may opt out or use warning-only budgets
+    [[rules]]
+    path = "AGENTS.md"
+    max_tokens = 1200
 
-This remains preliminary and should not be treated as settled policy yet.
+    [[rules]]
+    path = "AGENTS.md"
+    max_lines = 150
+    severity = "warn"
+
+### Agent Entry-Point Defaults
+
+Agent entry-point files such as `AGENTS.md`, Claude guidance files, and Gemini guidance files are good candidates for budget checks because they are often loaded early and repeatedly.
+
+The safer initial direction is to let `docgarden init` generate explicit default entries rather than shipping broad built-in defaults for every possible agent entry point. An interactive TUI could ask which agents the repository wants to configure for, while non-interactive flows could use command-line switches. That keeps the resulting policy visible in `docgarden.toml` and avoids surprising repositories that carry large Claude or Gemini guidance files for reasons unrelated to Codex-style context loading.
+
+Built-in defaults remain more defensible for skill main files because the Agent Skills specification already provides line and token limits. Even there, the implementation should make override and opt-out behavior explicit through path-targeted rules.
 
 ## Open Questions
 
-- Which built-in scopes should ship with defaults beyond skill main files?
+- Should any built-in defaults ship beyond skill main files, or should agent entry-point defaults always be generated by `docgarden init`?
 - Should imported external references have no default budget checks because source fidelity matters more than compactness?
-- Should `AGENTS.md` get a built-in default budget, and if so, should it be token-based, line-based, or both?
+- Should `AGENTS.md`, Claude guidance files, and Gemini guidance files get init-generated token budgets, line budgets, or both?
 - How should budget rules interact with generated files or files intentionally exempted through configuration?
 - How should skill-file limits balance usefulness and simplicity when repositories may contain both local/generated skills and imported skills from external sources?
