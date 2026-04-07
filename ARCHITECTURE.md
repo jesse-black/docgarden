@@ -59,6 +59,7 @@ The config model currently controls:
 - per-file ignored rules
 - the local reference style policy: `backticks` or `links`
 - whether path-adjacent inline code should produce warnings
+- explicit file-level context budgets through `max_tokens` and `max_lines`
 
 `src/defaults.rs` contains the stable built-in defaults for scan patterns, known extensions, and special filenames. Keeping these defaults separate makes the policy surface easy to review without reading the rest of the linter.
 
@@ -70,18 +71,22 @@ The config model currently controls:
 
 ### Lint engine
 
-`src/lint/mod.rs` owns the AST walk and the high-level lint rules. It reads the Markdown source, parses it with `markdown`, traverses the tree, emits diagnostics, and writes the file back when fix mode made an allowed rewrite.
+`src/lint/mod.rs` owns lint orchestration. It reads the Markdown source, parses it with `markdown`, invokes file-level rule hooks, walks the AST for node-level rules, emits diagnostics, and writes the file back when fix mode made an allowed rewrite.
 
-Today the lint engine focuses on repository-local reference correctness and style:
+Today the lint engine focuses on repository-local reference correctness, style, and explicit context-budget checks:
 
 - `unresolved-local-path`
 - `prefer-links-for-local-paths`
 - `prefer-backticks-for-local-paths`
 - `ambiguous-inline-code`
+- `max_tokens`
+- `max_lines`
 
 `src/lint/references.rs` contains the path-oriented logic that decides whether a string looks like a repository-local reference, resolves it relative to the current file or repository root, normalizes paths, and renders replacement text for fixes.
 
-`src/lint/reporting.rs` is a small adapter that turns rule findings plus source positions into final diagnostics while respecting per-file ignored rules.
+`src/lint/rules/` contains rule-family modules. `src/lint/rules/local_paths.rs` evaluates the current repository-local path rules for Markdown inline-code and link nodes. `src/lint/rules/file.rs` evaluates file-level rules that inspect a complete Markdown source file rather than one AST node, including explicit token and line budgets.
+
+`src/lint/reporting.rs` is a small adapter that turns rule findings plus source positions into final diagnostics. Per-file ignored rules and fix collection are handled in `src/lint/mod.rs` so diagnostics and edits share the same suppression path.
 
 As the product grows into broader repository-knowledge checks such as front matter, cross-linking, freshness, or size limits, that work should fit into this layer as additional deterministic rule families rather than introducing a separate interpretation engine.
 

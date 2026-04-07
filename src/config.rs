@@ -7,6 +7,7 @@ use ignore::gitignore::GitignoreBuilder;
 use serde::Deserialize;
 
 use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special_filenames};
+use crate::diagnostics::Severity;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -49,7 +50,29 @@ pub struct RuleConfig {
     #[serde(default)]
     pub path_style: Option<LocalReferenceStyle>,
     #[serde(default)]
+    pub max_tokens: Option<usize>,
+    #[serde(default)]
+    pub max_lines: Option<usize>,
+    #[serde(default)]
+    pub severity: Option<RuleSeverity>,
+    #[serde(default)]
     pub reason: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuleSeverity {
+    Error,
+    Warn,
+}
+
+impl From<RuleSeverity> for Severity {
+    fn from(value: RuleSeverity) -> Self {
+        match value {
+            RuleSeverity::Error => Severity::Error,
+            RuleSeverity::Warn => Severity::Warning,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +88,7 @@ pub struct Config {
     pub config_path: Option<PathBuf>,
     pub config_was_explicit: bool,
     pub ambiguous_inline_code_patterns: Vec<String>,
+    pub context_budget_rules: Vec<ContextBudgetRule>,
     pub respect_gitignore: bool,
 }
 
@@ -72,6 +96,26 @@ pub struct Config {
 pub struct LocalReferenceStyleOverride {
     pub pattern: String,
     pub style: LocalReferenceStyle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BudgetLimit {
+    pub limit: usize,
+    pub severity: RuleSeverity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContextBudgetRule {
+    pub pattern: String,
+    pub max_tokens: Option<BudgetLimit>,
+    pub max_lines: Option<BudgetLimit>,
+    pub disable: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct EffectiveContextBudgets {
+    pub max_tokens: Option<BudgetLimit>,
+    pub max_lines: Option<BudgetLimit>,
 }
 
 impl Config {
@@ -147,6 +191,7 @@ impl Config {
             config_path,
             config_was_explicit,
             ambiguous_inline_code_patterns: rule_applications.ambiguous_inline_code_patterns,
+            context_budget_rules: rule_applications.context_budget_rules,
             respect_gitignore: parsed.respect_gitignore,
         })
     }
@@ -172,6 +217,28 @@ impl Config {
         }
         Ok(false)
     }
+
+    pub fn context_budgets_for_path(&self, relative_path: &str) -> Result<EffectiveContextBudgets> {
+        let mut budgets = EffectiveContextBudgets::default();
+        for entry in &self.context_budget_rules {
+            if !pattern_matches(&self.repository_root, &entry.pattern, relative_path)? {
+                continue;
+            }
+            if entry.disable.contains("max_tokens") {
+                budgets.max_tokens = None;
+            }
+            if entry.disable.contains("max_lines") {
+                budgets.max_lines = None;
+            }
+            if let Some(limit) = entry.max_tokens {
+                budgets.max_tokens = Some(limit);
+            }
+            if let Some(limit) = entry.max_lines {
+                budgets.max_lines = Some(limit);
+            }
+        }
+        Ok(budgets)
+    }
 }
 
 #[derive(Default)]
@@ -179,6 +246,7 @@ struct RuleApplications {
     per_file_ignores: BTreeMap<String, Vec<String>>,
     local_reference_style_overrides: Vec<LocalReferenceStyleOverride>,
     ambiguous_inline_code_patterns: Vec<String>,
+    context_budget_rules: Vec<ContextBudgetRule>,
 }
 
 fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
@@ -193,13 +261,14 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
             bail!("rule reason must not be empty");
         }
         let pattern = rule.path;
-        if let Some(disabled_rules) = rule.disable {
+        let disabled_rules = rule.disable.unwrap_or_default();
+        if !disabled_rules.is_empty() {
             validate_rule_list("disable", &disabled_rules, is_known_rule)?;
             applications
                 .per_file_ignores
                 .entry(pattern.clone())
                 .or_default()
-                .extend(disabled_rules);
+                .extend(disabled_rules.clone());
         }
         if let Some(enabled_rules) = rule.enable {
             validate_rule_list("enable", &enabled_rules, is_supported_enabled_rule)?;
@@ -215,10 +284,43 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
         if let Some(style) = rule.path_style {
             applications
                 .local_reference_style_overrides
-                .push(LocalReferenceStyleOverride { pattern, style });
+                .push(LocalReferenceStyleOverride {
+                    pattern: pattern.clone(),
+                    style,
+                });
+        }
+        if rule.max_tokens.is_some() || rule.max_lines.is_some() || !disabled_rules.is_empty() {
+            let severity = rule.severity.unwrap_or(RuleSeverity::Error);
+            let max_tokens = rule
+                .max_tokens
+                .map(|limit| budget_limit("max_tokens", limit, severity))
+                .transpose()?;
+            let max_lines = rule
+                .max_lines
+                .map(|limit| budget_limit("max_lines", limit, severity))
+                .transpose()?;
+            let disabled_budget_rules: BTreeSet<String> = disabled_rules
+                .into_iter()
+                .filter(|rule| matches!(rule.as_str(), "max_tokens" | "max_lines"))
+                .collect();
+            if max_tokens.is_some() || max_lines.is_some() || !disabled_budget_rules.is_empty() {
+                applications.context_budget_rules.push(ContextBudgetRule {
+                    pattern,
+                    max_tokens,
+                    max_lines,
+                    disable: disabled_budget_rules,
+                });
+            }
         }
     }
     Ok(applications)
+}
+
+fn budget_limit(rule: &str, limit: usize, severity: RuleSeverity) -> Result<BudgetLimit> {
+    if limit == 0 {
+        bail!("{rule} must be greater than zero");
+    }
+    Ok(BudgetLimit { limit, severity })
 }
 
 fn validate_rule_list(
@@ -247,6 +349,8 @@ fn is_known_rule(rule: &str) -> bool {
             | "prefer-links-for-local-paths"
             | "prefer-backticks-for-local-paths"
             | "ambiguous-inline-code"
+            | "max_tokens"
+            | "max_lines"
     )
 }
 
@@ -279,7 +383,7 @@ fn normalize_extension(value: &str) -> String {
 mod tests {
     use std::fs;
 
-    use super::{Config, LocalReferenceStyle};
+    use super::{BudgetLimit, Config, LocalReferenceStyle, RuleSeverity};
     use tempfile::TempDir;
 
     #[test]
@@ -412,6 +516,79 @@ path_style = "links"
     }
 
     #[test]
+    fn load_lowers_context_budget_rules_with_entry_level_severity() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "README.md"
+max_tokens = 10
+max_lines = 5
+
+[[rules]]
+path = "README.md"
+max_lines = 20
+severity = "warn"
+
+[[rules]]
+path = "docs/references/**"
+disable = ["max_tokens"]
+reason = "References preserve source fidelity."
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        let readme = config.context_budgets_for_path("README.md").unwrap();
+        assert_eq!(
+            readme.max_tokens,
+            Some(BudgetLimit {
+                limit: 10,
+                severity: RuleSeverity::Error,
+            })
+        );
+        assert_eq!(
+            readme.max_lines,
+            Some(BudgetLimit {
+                limit: 20,
+                severity: RuleSeverity::Warn,
+            })
+        );
+
+        let reference = config
+            .context_budgets_for_path("docs/references/source.md")
+            .unwrap();
+        assert_eq!(reference.max_tokens, None);
+        assert_eq!(reference.max_lines, None);
+    }
+
+    #[test]
+    fn load_rejects_zero_context_budget_limits() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("docgarden.toml");
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "README.md"
+max_tokens = 0
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("max_tokens must be greater than zero"));
+    }
+
+    #[test]
     fn load_rejects_removed_config_shapes() {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
@@ -494,6 +671,51 @@ disable = ["context-budget"]
 path = "docs/**"
 rule = "context-budget"
 max-lines = 500
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "docs/**"
+max-tokens = 500
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+scope = "skills"
+max_tokens = 500
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "docs/**"
+enabled = false
 "#,
         )
         .unwrap();

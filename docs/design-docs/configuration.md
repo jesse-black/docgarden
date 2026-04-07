@@ -94,6 +94,8 @@ For example, context-budget limits should be expressed as rule-specific fields i
 
 The direction is that rule behavior and rule options share the same targeting layer. Use explicit `path` targets rather than one overloaded `match` field, and keep public TOML keys in snake_case.
 
+For context-budget limits, `severity` is entry-level. If an entry includes both `max_tokens` and `max_lines`, the same severity applies to both diagnostics. Repositories that want different severities for the same path can use separate `[[rules]]` entries with the same `path`.
+
 ## Repository-Wide Defaults
 
 Rule-application entries are not a complete replacement for repo-wide defaults.

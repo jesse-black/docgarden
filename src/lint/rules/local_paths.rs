@@ -1,0 +1,170 @@
+use anyhow::Result;
+use markdown::mdast::Node;
+
+use crate::config::LocalReferenceStyle;
+use crate::diagnostics::Severity;
+use crate::lint::references::{
+    ReferenceKind, classify_inline_reference, classify_link_reference, is_external,
+    label_equivalent, label_text, looks_path_adjacent, render_link_destination,
+    render_repo_relative, resolve_candidate,
+};
+use crate::lint::reporting::DiagnosticPayload;
+use crate::lint::{Finding, edit_from_position};
+
+use super::NodeRuleContext;
+
+pub(crate) fn evaluate_node<'a>(
+    context: &NodeRuleContext<'a>,
+    node: &'a Node,
+) -> Result<Vec<Finding<'a>>> {
+    match node {
+        Node::InlineCode(_) => lint_inline_code_node(context, node),
+        Node::Link(_) => lint_link_node(context, node),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn lint_inline_code_node<'a>(
+    context: &NodeRuleContext<'a>,
+    node: &'a Node,
+) -> Result<Vec<Finding<'a>>> {
+    let Some(inline) = (match node {
+        Node::InlineCode(inline) => Some(inline),
+        _ => None,
+    }) else {
+        return Ok(Vec::new());
+    };
+    let value = inline.value.trim();
+    if let Some(candidate) = classify_inline_reference(context.config, value) {
+        if let Some(resolved) = resolve_candidate(context.file, &candidate, ReferenceKind::Backtick)
+        {
+            let exists_path = context
+                .config
+                .repository_root
+                .join(&resolved.repo_relative_path);
+            let exists = exists_path.exists();
+            if !exists && candidate.is_directory_like {
+                return Ok(Vec::new());
+            }
+            if !exists {
+                return Ok(vec![Finding {
+                    payload: DiagnosticPayload {
+                        file: context.file,
+                        position: inline.position.as_ref(),
+                        rule: "unresolved-local-path",
+                        message: format!(
+                            "Local repository path `{}` does not resolve within the repository.",
+                            candidate.display_text
+                        ),
+                        fixable: false,
+                        severity: Severity::Error,
+                    },
+                    edit: None,
+                }]);
+            }
+            if context.policy.local_reference_style == LocalReferenceStyle::Links {
+                let link_text =
+                    render_link_destination(context.file, &candidate, &resolved, &exists_path);
+                return Ok(vec![Finding {
+                    payload: DiagnosticPayload {
+                        file: context.file,
+                        position: inline.position.as_ref(),
+                        rule: "prefer-links-for-local-paths",
+                        message: format!(
+                            "Local repository path `{}` should use Markdown link syntax under the configured style policy.",
+                            candidate.display_text
+                        ),
+                        fixable: true,
+                        severity: Severity::Error,
+                    },
+                    edit: edit_from_position(
+                        inline.position.as_ref(),
+                        format!("[{}]({link_text})", candidate.display_text),
+                    ),
+                }]);
+            }
+        }
+    } else if context.policy.report_ambiguous_inline_code && looks_path_adjacent(value) {
+        return Ok(vec![Finding {
+            payload: DiagnosticPayload {
+                file: context.file,
+                position: inline.position.as_ref(),
+                rule: "ambiguous-inline-code",
+                message: format!(
+                    "Inline code `{value}` looks path-adjacent but is not a clear repository-local path."
+                ),
+                fixable: false,
+                severity: Severity::Warning,
+            },
+            edit: None,
+        }]);
+    }
+    Ok(Vec::new())
+}
+
+fn lint_link_node<'a>(context: &NodeRuleContext<'a>, node: &'a Node) -> Result<Vec<Finding<'a>>> {
+    let Some(link) = (match node {
+        Node::Link(link) => Some(link),
+        _ => None,
+    }) else {
+        return Ok(Vec::new());
+    };
+    let destination = link.url.trim();
+    if is_external(destination) {
+        return Ok(Vec::new());
+    }
+    if let Some(candidate) = classify_link_reference(context.config, destination)
+        && let Some(resolved) = resolve_candidate(context.file, &candidate, ReferenceKind::Link)
+    {
+        let exists_path = context
+            .config
+            .repository_root
+            .join(&resolved.repo_relative_path);
+        let exists = exists_path.exists();
+        if !exists && candidate.is_directory_like {
+            return Ok(Vec::new());
+        }
+        if !exists {
+            return Ok(vec![Finding {
+                payload: DiagnosticPayload {
+                    file: context.file,
+                    position: link.position.as_ref(),
+                    rule: "unresolved-local-path",
+                    message: format!(
+                        "Local repository link `[{}]({})` does not resolve within the repository.",
+                        label_text(&link.children),
+                        candidate.display_text
+                    ),
+                    fixable: false,
+                    severity: Severity::Error,
+                },
+                edit: None,
+            }]);
+        }
+        if context.policy.local_reference_style == LocalReferenceStyle::Backticks
+            && label_equivalent(
+                &link.children,
+                &candidate.display_text,
+                &resolved.repo_relative_path,
+            )
+        {
+            let inline_text = render_repo_relative(&resolved, &exists_path);
+            return Ok(vec![Finding {
+                payload: DiagnosticPayload {
+                    file: context.file,
+                    position: link.position.as_ref(),
+                    rule: "prefer-backticks-for-local-paths",
+                    message: format!(
+                        "Local repository link `[{}]({})` should use backticks under the configured style policy.",
+                        label_text(&link.children),
+                        candidate.display_text
+                    ),
+                    fixable: true,
+                    severity: Severity::Error,
+                },
+                edit: edit_from_position(link.position.as_ref(), format!("`{inline_text}`")),
+            }]);
+        }
+    }
+    Ok(Vec::new())
+}

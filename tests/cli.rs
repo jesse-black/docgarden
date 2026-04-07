@@ -368,3 +368,173 @@ fn fix_handles_multibyte_text_before_rewrites_without_corruption() {
     let rewritten = fs::read_to_string(readme).unwrap();
     assert_eq!(rewritten, expected);
 }
+
+#[test]
+fn context_budget_reports_max_tokens_as_error_by_default() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_tokens = 1
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "alpha beta gamma\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("error  max_tokens"))
+        .stdout(predicate::str::contains("File has"))
+        .stdout(predicate::str::contains(
+            "which exceeds configured max_tokens = 1.",
+        ))
+        .stdout(predicate::str::contains("fixable").not());
+}
+
+#[test]
+fn context_budget_warn_severity_does_not_fail_lint() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_lines = 1
+severity = "warn"
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "first\nsecond\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("warning  max_lines"))
+        .stdout(predicate::str::contains(
+            "File has 2 lines, which exceeds configured max_lines = 1.",
+        ));
+}
+
+#[test]
+fn context_budget_disable_suppresses_one_budget_rule() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_tokens = 1
+max_lines = 1
+
+[[rules]]
+path = "README.md"
+disable = ["max_tokens"]
+reason = "Only line length is enforced here."
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "alpha beta gamma\nsecond line\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("max_lines"))
+        .stdout(predicate::str::contains("max_tokens").not());
+}
+
+#[test]
+fn context_budget_duplicate_path_entries_can_split_severity() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_tokens = 1
+
+[[rules]]
+path = "README.md"
+max_lines = 1
+severity = "warn"
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "alpha beta gamma\nsecond line\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("error  max_tokens"))
+        .stdout(predicate::str::contains("warning  max_lines"));
+}
+
+#[test]
+fn context_budget_later_matching_limit_wins() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_tokens = 1
+
+[[rules]]
+path = "README.md"
+max_tokens = 1000
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "alpha beta gamma\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("max_tokens").not());
+}
+
+#[test]
+fn context_budget_fix_does_not_rewrite_over_budget_files() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "README.md"
+max_lines = 1
+"#,
+    )
+    .unwrap();
+    let readme = root.join("README.md");
+    let original = "first\nsecond\n";
+    fs::write(&readme, original).unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["fix", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("max_lines"))
+        .stdout(predicate::str::contains("fixable").not());
+
+    let rewritten = fs::read_to_string(readme).unwrap();
+    assert_eq!(rewritten, original);
+}

@@ -27,9 +27,9 @@ In `docgarden`, that suggests the following default checks for skill main files:
 
 These defaults should be treated as defaults, not hard-coded universal policy. Repositories may need to override them, but `docgarden` can ship them as a strong built-in starting point for skill files.
 
-## Preliminary Working Ideas
+## Current Direction
 
-The rest of this document is still exploratory.
+The first implementation is explicit-config only. It supports path-targeted `max_lines` and `max_tokens` rules, counts the complete Markdown file, defaults configured budget diagnostics to errors, and lets entries use `severity = "warn"` for warning-only adoption.
 
 ### Tokenizer Decision
 
@@ -47,14 +47,14 @@ This should be documented as an approximation for agent context cost, not as a u
 
 ### Rule Model
 
-`docgarden` should support context-budget checks that are:
+`docgarden` supports context-budget checks that are:
 
 - mechanical
 - file-local
 - configurable
 - targeted by repository-relative path pattern
 
-The first measurable checks should be:
+The first measurable checks are:
 
 - line count
 - token count
@@ -129,15 +129,18 @@ Open questions for the configuration model:
 
 ### Severity And Enforcement
 
-Another open question is whether budgets should default to warnings or errors.
+Explicit context-budget limits default to errors.
 
-A plausible direction is:
+The configured entry's `severity` applies to every budget field in that `[[rules]]` entry. If a repository wants token limits to be errors and line limits to be warnings for the same path, it can use two entries with the same path:
 
-- high-traffic files such as `AGENTS.md` may justify error-level enforcement
-- skill main-file defaults may start as warnings so repositories can adopt them gradually
-- imported references may opt out or use warning-only budgets
+    [[rules]]
+    path = "AGENTS.md"
+    max_tokens = 1200
 
-This remains preliminary and should not be treated as settled policy yet.
+    [[rules]]
+    path = "AGENTS.md"
+    max_lines = 150
+    severity = "warn"
 
 ### Agent Entry-Point Defaults
 

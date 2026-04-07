@@ -1,6 +1,6 @@
 # Modularize Lint Rule Execution
 
-Save this in-progress ExecPlan at `docs/exec-plans/active/modularize-lint-rules.md`. Move it into `docs/exec-plans/completed/` when the work is complete.
+This completed ExecPlan lives at `docs/exec-plans/completed/modularize-lint-rules.md`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds. Maintain this document in accordance with `docs/PLANS.md`.
 
@@ -13,10 +13,12 @@ The visible proof is behavioral parity plus easier extension. A novice should be
 ## Progress
 
 - [x] (2026-04-02 00:00Z) Authored the initial ExecPlan in `docs/exec-plans/active/modularize-lint-rules.md`.
-- [ ] Capture the current lint pipeline in tests that prove diagnostics and fixes still share the same finding path after modularization.
-- [ ] Introduce a stable internal rule interface and extract the current local-path rules out of `src/lint/mod.rs`.
-- [ ] Preserve byte-accurate fix application, per-file ignore behavior, and current CLI output while moving logic into rule modules.
-- [ ] Update repository documentation that describes the lint architecture and validate the resulting documentation and Rust code paths.
+- [x] (2026-04-07 00:53Z) Refreshed this plan with the context-budget dependency: modularization now must leave a clear file-level rule path for `docs/exec-plans/active/context-budget-limits.md`.
+- [x] (2026-04-07 00:54Z) Confirmed the regression contract already exists and passes: ignored style rules do not fix README links, multibyte rewrites are stable, and link labels are linted as one link node.
+- [x] (2026-04-07 00:56Z) Extracted local-path rule evaluation into `src/lint/rules/local_paths.rs` and added the file-level rule hook in `src/lint/rules/file.rs`; `cargo check` and `cargo test lint:: --lib -- --nocapture` passed.
+- [x] (2026-04-07 00:57Z) Preserved byte-accurate fix application, per-file ignore behavior, and current CLI output while moving logic into rule modules; `cargo test --test cli -- --nocapture` and `cargo test --test path_behavior -- --nocapture` passed.
+- [x] (2026-04-07 01:00Z) Updated `ARCHITECTURE.md` for the new rule-module boundary and file-level hook; `cargo test`, targeted doc linting, and `cargo xtask validate` passed. This plan is ready for evaluator review.
+- [x] (2026-04-07 01:07Z) Independent evaluator review passed against `main`; the plan is being moved to `docs/exec-plans/completed/`.
 
 ## Surprises & Discoveries
 
@@ -28,6 +30,12 @@ The visible proof is behavioral parity plus easier extension. A novice should be
 
 - Observation: the current architecture document still says `src/lint/reporting.rs` respects per-file ignores, but the refactor moved that decision into `src/lint/mod.rs`.
   Evidence: `src/lint/reporting.rs` now only constructs `Diagnostic` values, while `src/lint/mod.rs` performs the ignore check before pushing diagnostics or edits.
+
+- Observation: context-budget rules are a near-term downstream consumer and they are file-level rather than AST-node-local.
+  Evidence: `docs/exec-plans/active/context-budget-limits.md` requires `max_tokens` and `max_lines` diagnostics for complete Markdown files at line 1, column 1. The modularization must not leave future rules with only node-level extension points.
+
+- Observation: the initial concrete-step command that listed two `cargo test` filters in one invocation is not accepted by Cargo.
+  Evidence: `cargo test fix_respects_rule_disable_for_readme_style_rules fix_handles_multibyte_text_before_rewrites_without_corruption -- --nocapture` failed with `unexpected argument`. Running the filters separately passed.
 
 ## Decision Log
 
@@ -43,9 +51,15 @@ The visible proof is behavioral parity plus easier extension. A novice should be
   Rationale: users and future contributors think in terms of rules such as `unresolved-local-path` or `prefer-backticks-for-local-paths`, not in terms of `InlineCode` versus `Link` dispatch. A rule-family layout makes new checks easier to place and test.
   Date/Author: 2026-04-02 / Codex
 
+- Decision: include a simple file-level rule hook in the modularized lint pipeline.
+  Rationale: the next planned rule family, context-budget limits, evaluates the complete Markdown source instead of one inline-code or link node. Adding the hook during modularization avoids immediately reopening the traversal design or deepening `src/lint/mod.rs`.
+  Date/Author: 2026-04-07 / Planner
+
 ## Outcomes & Retrospective
 
-No implementation work has been completed yet. The intended outcome is an internal rule architecture that keeps today’s behavior unchanged while making future deterministic lint rules cheaper to add, review, and test.
+The completed work keeps today’s local-path behavior unchanged while making room for future deterministic rule families. The local-path rule family now lives in `src/lint/rules/local_paths.rs`, and `src/lint/rules/file.rs` provides an empty file-level rule hook for the context-budget follow-up plan. `src/lint/mod.rs` still owns parsing, traversal, ignore handling, fix collection, and source rewriting. Focused unit tests, integration tests, targeted doc linting, and `cargo xtask validate` passed before closeout.
+
+2026-04-07 evaluator outcome: Passed clean-room review against `main` with no blocking findings. Evidence reviewed: `docs/PLANS.md`; the completed plan text; `git diff` and source reads for `src/lint/mod.rs`, `src/lint/rules/local_paths.rs`, `src/lint/rules/file.rs`, and `ARCHITECTURE.md`; `cargo test fix_respects_rule_disable_for_readme_style_rules -- --nocapture`; `cargo test fix_handles_multibyte_text_before_rewrites_without_corruption -- --nocapture`; `cargo test ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link -- --nocapture`; `cargo test --test cli -- --nocapture`; `cargo test --test path_behavior -- --nocapture`; `cargo test`; `cargo run -- lint docs/exec-plans/active/modularize-lint-rules.md docs/exec-plans/active/context-budget-limits.md ARCHITECTURE.md --color never`; and `cargo xtask validate`. The new file-level hook is present, local-path logic is isolated, and the architecture doc now explains the rule-module boundary.
 
 ## Context and Orientation
 
@@ -68,13 +82,15 @@ Once the tests define the contract, introduce a shared internal rule surface und
     src/lint/rules/mod.rs
     src/lint/rules/local_paths.rs
 
-The shared interface should be simple enough for a novice to follow. A practical design is for traversal code in `src/lint/mod.rs` to build a lightweight rule context containing the `Config`, current repository-relative file path, the current AST node, and any source-position helpers, then ask the rule module for zero or more `Finding` values. Keep the existing `Finding` and `Edit` concepts, even if their exact type names move.
+The shared interface should be simple enough for a novice to follow. A practical design is for traversal code in `src/lint/mod.rs` to build a lightweight node-rule context containing the `Config`, current file policy, current repository-relative file path, and current AST node, then ask the local-path rule module for zero or more `Finding` values. Keep the existing `Finding` and `Edit` concepts, even if their exact type names move.
+
+Also include a lightweight file-rule context containing the `Config`, current file policy, repository-relative path, and complete source text. It does not need to have a real rule implementation in this plan, but the pipeline should call a file-rule entry point once per file before or after the AST traversal. The initial file-rule module may return an empty vector. This is the extension point that `docs/exec-plans/active/context-budget-limits.md` will use for `max_tokens` and `max_lines` without adding another large branch to `src/lint/mod.rs`.
 
 Perform the extraction in small steps. First, move the current link and inline-code path logic into a dedicated local-path rule module while keeping `src/lint/mod.rs` responsible for traversal and `emit_finding`. Do not change behavior at the same time as the move. After that compiles and tests pass, decide whether to split further into smaller helpers inside the rule module. For example, one helper can handle unresolved paths and another style-policy rewrites, but they should still live under the same rule family because they share resolution and rendering helpers from `src/lint/references.rs`.
 
 After the first extraction, clean up module boundaries. `src/lint/reporting.rs` should remain a pure adapter from source position to `Diagnostic`, or its responsibilities should be renamed clearly if that proves awkward. Avoid a half-state where ignore handling is described as “reporting” even though it actually belongs to finding emission. If the move reveals a better boundary, update names and documentation in the same change so the code and architecture text match.
 
-Finally, update `ARCHITECTURE.md` to explain the new rule-module boundary precisely. The architecture document must describe where traversal lives, where rule families live, and where fix application stays centralized. If the implementation introduces a new internal interface or trait, define it in plain language in the architecture document and in this plan’s `Interfaces and Dependencies` section.
+Finally, update `ARCHITECTURE.md` to explain the new rule-module boundary precisely. The architecture document must describe where traversal lives, where node-level rule families live, where file-level rule families plug in, and where fix application stays centralized. If the implementation introduces a new internal interface or trait, define it in plain language in the architecture document and in this plan’s `Interfaces and Dependencies` section.
 
 ## Concrete Steps
 
@@ -82,7 +98,7 @@ Work from the repository root of this checkout.
 
 1. Add or tighten tests before moving code.
 
-    cargo test fix_respects_per_file_ignores_for_readme_style_rules -- --nocapture
+    cargo test fix_respects_rule_disable_for_readme_style_rules -- --nocapture
     cargo test fix_handles_multibyte_text_before_rewrites_without_corruption -- --nocapture
     cargo test ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link -- --nocapture
 
@@ -124,7 +140,9 @@ Second, the end-to-end CLI behavior must remain unchanged for existing user work
 
 Third, the module boundary must become observable in the source tree. A novice should be able to open `src/lint/mod.rs` and see traversal plus finding emission orchestration, then open a dedicated rule module under `src/lint/` and find the current local-path rule logic there. If the extraction is successful, adding another rule family should no longer require pasting large blocks into `src/lint/mod.rs`.
 
-Fourth, the repository documentation must describe the new structure accurately. `ARCHITECTURE.md` should say where rule families live, where traversal lives, and where edits are applied.
+Fourth, the repository documentation must describe the new structure accurately. `ARCHITECTURE.md` should say where rule families live, where traversal lives, where file-level rules plug in, and where edits are applied.
+
+Fifth, the modularization must support the next context-budget plan without another structural refactor. A file-level rule entry point should exist and be invoked once per linted file even if it initially returns no findings. The evaluator should be able to inspect the code and see where a future context-budget rule can receive the complete source text and return normal findings.
 
 ## Idempotence and Recovery
 
@@ -139,17 +157,33 @@ Expected high-level source-tree shape after the first successful milestone:
     src/lint/mod.rs
     src/lint/references.rs
     src/lint/reporting.rs
+    src/lint/rules/file.rs
     src/lint/rules/mod.rs
     src/lint/rules/local_paths.rs
 
 Expected ownership after modularization:
 
     src/lint/mod.rs: parse source, walk AST, invoke rule modules, collect findings, apply edits
+    src/lint/rules/file.rs: evaluate file-level rule families; initially an empty hook for context-budget follow-up work
     src/lint/rules/local_paths.rs: evaluate unresolved-path, prefer-links, prefer-backticks, and ambiguous-inline-code findings
     src/lint/references.rs: classify and resolve repository-local path candidates, render replacement text
     src/lint/reporting.rs: convert finding payload plus source position into final Diagnostic values
 
 An acceptable focused proof after the refactor is a short read of `src/lint/mod.rs` that shows no large blocks of path-rule-specific branching beyond dispatch into the rule module.
+
+Validation evidence collected during implementation:
+
+    cargo test fix_respects_rule_disable_for_readme_style_rules -- --nocapture
+    cargo test fix_handles_multibyte_text_before_rewrites_without_corruption -- --nocapture
+    cargo test ignored_style_rule_in_readme_still_lints_backticked_link_as_one_link -- --nocapture
+    cargo test lint:: --lib -- --nocapture
+    cargo test --test cli -- --nocapture
+    cargo test --test path_behavior -- --nocapture
+    cargo test
+    cargo run -- lint docs/exec-plans/active/modularize-lint-rules.md docs/exec-plans/active/context-budget-limits.md ARCHITECTURE.md --color never
+    cargo xtask validate
+
+The first `cargo xtask validate` run failed at covgate because the new files were not visible to diff coverage and because an intermediate loop helper left uncovered changed regions in `src/lint/mod.rs`. Adding intent-to-add entries with `git add -N` and factoring finding emission through `emit_findings` resolved the coverage failure. The final validation passed with diff region coverage of 94.71 percent.
 
 ## Interfaces and Dependencies
 
@@ -157,22 +191,36 @@ Keep the implementation inside the existing crate and continue using the `markdo
 
 By the end of this work, the lint layer should expose one explicit internal interface for rule evaluation. One acceptable shape is:
 
-    pub(crate) struct RuleContext<'a> {
+    pub(crate) struct NodeRuleContext<'a> {
         pub(crate) config: &'a Config,
+        pub(crate) policy: FilePolicy,
         pub(crate) file: &'a str,
-        pub(crate) node: &'a Node,
     }
 
     pub(crate) fn evaluate_local_path_rules(
-        context: &RuleContext<'_>,
+        context: &NodeRuleContext<'_>,
+        node: &Node,
     ) -> Result<Vec<Finding<'_>>>
+
+For file-level rules, expose a similarly small context:
+
+    pub(crate) struct FileRuleContext<'a> {
+        pub(crate) config: &'a Config,
+        pub(crate) policy: FilePolicy,
+        pub(crate) file: &'a str,
+        pub(crate) source: &'a str,
+    }
+
+    pub(crate) fn evaluate_file_rules(context: &FileRuleContext<'_>) -> Result<Vec<Finding<'_>>>
 
 Another acceptable shape is a small trait:
 
     pub(crate) trait Rule {
-        fn evaluate(&self, context: &RuleContext<'_>) -> Result<Vec<Finding<'_>>>;
+        fn evaluate(&self, context: &NodeRuleContext<'_>) -> Result<Vec<Finding<'_>>>;
     }
 
-The exact interface can change, but the final design must satisfy four constraints. It must keep one traversal, it must return findings that can feed both diagnostics and fixes, it must allow rule modules to stay focused on rule evaluation rather than file writing, and it must be simple enough that a novice contributor can add a new deterministic rule family by copying the local-path module pattern.
+The exact interface can change, but the final design must satisfy five constraints. It must keep one traversal, it must return findings that can feed both diagnostics and fixes, it must allow rule modules to stay focused on rule evaluation rather than file writing, it must provide a file-level rule hook for context budgets, and it must be simple enough that a novice contributor can add a new deterministic rule family by copying the local-path module pattern.
 
 Revision note: Created this plan to turn the recent detection-to-fix pipeline refactor into a durable module boundary before more rule families accumulate inside `src/lint/mod.rs`.
+
+Revision note: 2026-04-07 / Planner refreshed this plan before implementation to account for the new context-budget ExecPlan. The key addition is a file-level rule hook so `max_tokens` and `max_lines` can be added after modularization without another traversal redesign.

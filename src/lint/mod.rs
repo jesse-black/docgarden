@@ -6,16 +6,12 @@ use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
 use crate::config::{Config, LocalReferenceStyle};
-use crate::diagnostics::{Diagnostic, FixSummary, Severity, ignored_rules_for_path};
+use crate::diagnostics::{Diagnostic, FixSummary, ignored_rules_for_path};
 
 mod references;
 mod reporting;
+mod rules;
 
-use references::{
-    ReferenceKind, classify_inline_reference, classify_link_reference, is_external,
-    label_equivalent, label_text, looks_path_adjacent, render_link_destination,
-    render_repo_relative, resolve_candidate,
-};
 use reporting::{DiagnosticPayload, push_diagnostic};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -29,21 +25,21 @@ pub struct LintResult {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct Edit {
-    start_offset: usize,
-    end_offset: usize,
-    replacement: String,
+pub(crate) struct Edit {
+    pub(crate) start_offset: usize,
+    pub(crate) end_offset: usize,
+    pub(crate) replacement: String,
 }
 
-struct Finding<'a> {
-    payload: DiagnosticPayload<'a>,
-    edit: Option<Edit>,
+pub(crate) struct Finding<'a> {
+    pub(crate) payload: DiagnosticPayload<'a>,
+    pub(crate) edit: Option<Edit>,
 }
 
 #[derive(Clone, Copy)]
-struct FilePolicy {
-    local_reference_style: LocalReferenceStyle,
-    report_ambiguous_inline_code: bool,
+pub(crate) struct FilePolicy {
+    pub(crate) local_reference_style: LocalReferenceStyle,
+    pub(crate) report_ambiguous_inline_code: bool,
 }
 
 struct WalkState<'a> {
@@ -71,13 +67,21 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         .map_err(|error| anyhow!("failed to parse {}: {}", path.display(), error))?;
     let mut diagnostics = Vec::new();
     let mut edits = Vec::new();
+    let ignored_rules = &ignored_rules;
 
     let mut state = WalkState {
         diagnostics: &mut diagnostics,
-        ignored_rules: &ignored_rules,
+        ignored_rules,
         mode,
         edits: &mut edits,
     };
+    let file_context = rules::file::FileRuleContext {
+        config,
+        policy,
+        file: &relative_path,
+        source: &source,
+    };
+    emit_findings(&mut state, rules::file::evaluate_file_rules(&file_context)?);
     walk_node(config, policy, &relative_path, &tree, &mut state)?;
 
     if mode == Mode::Fix && !edits.is_empty() {
@@ -98,15 +102,15 @@ fn walk_node(
     node: &Node,
     state: &mut WalkState<'_>,
 ) -> Result<()> {
-    match node {
-        Node::InlineCode(_) => {
-            lint_inline_code_node(config, policy, file, node, state)?;
-        }
-        Node::Link(_) => {
-            lint_link_node(config, policy, file, node, state)?;
-            return Ok(());
-        }
-        _ => {}
+    let context = rules::NodeRuleContext {
+        config,
+        policy,
+        file,
+    };
+    emit_findings(state, rules::local_paths::evaluate_node(&context, node)?);
+
+    if matches!(node, Node::Link(_)) {
+        return Ok(());
     }
 
     if let Some(children) = children_mut(node) {
@@ -115,184 +119,6 @@ fn walk_node(
         }
     }
 
-    Ok(())
-}
-
-fn lint_inline_code_node(
-    config: &Config,
-    policy: FilePolicy,
-    file: &str,
-    node: &Node,
-    state: &mut WalkState<'_>,
-) -> Result<()> {
-    let Some(inline) = (match node {
-        Node::InlineCode(inline) => Some(inline),
-        _ => None,
-    }) else {
-        return Ok(());
-    };
-    let value = inline.value.trim();
-    if let Some(candidate) = classify_inline_reference(config, value) {
-        if let Some(resolved) = resolve_candidate(file, &candidate, ReferenceKind::Backtick) {
-            let exists_path = config.repository_root.join(&resolved.repo_relative_path);
-            let exists = exists_path.exists();
-            if !exists && candidate.is_directory_like {
-                return Ok(());
-            }
-            if !exists {
-                emit_finding(
-                    state.diagnostics,
-                    state.ignored_rules,
-                    state.mode,
-                    state.edits,
-                    Finding {
-                        payload: DiagnosticPayload {
-                            file,
-                            position: inline.position.as_ref(),
-                            rule: "unresolved-local-path",
-                            message: format!(
-                                "Local repository path `{}` does not resolve within the repository.",
-                                candidate.display_text
-                            ),
-                            fixable: false,
-                            severity: Severity::Error,
-                        },
-                        edit: None,
-                    },
-                );
-                return Ok(());
-            }
-            if policy.local_reference_style == LocalReferenceStyle::Links {
-                let link_text = render_link_destination(file, &candidate, &resolved, &exists_path);
-                emit_finding(
-                    state.diagnostics,
-                    state.ignored_rules,
-                    state.mode,
-                    state.edits,
-                    Finding {
-                        payload: DiagnosticPayload {
-                            file,
-                            position: inline.position.as_ref(),
-                            rule: "prefer-links-for-local-paths",
-                            message: format!(
-                                "Local repository path `{}` should use Markdown link syntax under the configured style policy.",
-                                candidate.display_text
-                            ),
-                            fixable: true,
-                            severity: Severity::Error,
-                        },
-                        edit: edit_from_position(
-                            inline.position.as_ref(),
-                            format!("[{}]({link_text})", candidate.display_text),
-                        ),
-                    },
-                );
-            }
-        }
-    } else if policy.report_ambiguous_inline_code && looks_path_adjacent(value) {
-        emit_finding(
-            state.diagnostics,
-            state.ignored_rules,
-            state.mode,
-            state.edits,
-            Finding {
-                payload: DiagnosticPayload {
-                    file,
-                    position: inline.position.as_ref(),
-                    rule: "ambiguous-inline-code",
-                    message: format!(
-                        "Inline code `{value}` looks path-adjacent but is not a clear repository-local path."
-                    ),
-                    fixable: false,
-                    severity: Severity::Warning,
-                },
-                edit: None,
-            },
-        );
-    }
-    Ok(())
-}
-
-fn lint_link_node(
-    config: &Config,
-    policy: FilePolicy,
-    file: &str,
-    node: &Node,
-    state: &mut WalkState<'_>,
-) -> Result<()> {
-    let Some(link) = (match node {
-        Node::Link(link) => Some(link),
-        _ => None,
-    }) else {
-        return Ok(());
-    };
-    let destination = link.url.trim();
-    if is_external(destination) {
-        return Ok(());
-    }
-    if let Some(candidate) = classify_link_reference(config, destination)
-        && let Some(resolved) = resolve_candidate(file, &candidate, ReferenceKind::Link)
-    {
-        let exists_path = config.repository_root.join(&resolved.repo_relative_path);
-        let exists = exists_path.exists();
-        if !exists && candidate.is_directory_like {
-            return Ok(());
-        }
-        if !exists {
-            emit_finding(
-                state.diagnostics,
-                state.ignored_rules,
-                state.mode,
-                state.edits,
-                Finding {
-                    payload: DiagnosticPayload {
-                        file,
-                        position: link.position.as_ref(),
-                        rule: "unresolved-local-path",
-                        message: format!(
-                            "Local repository link `[{}]({})` does not resolve within the repository.",
-                            label_text(&link.children),
-                            candidate.display_text
-                        ),
-                        fixable: false,
-                        severity: Severity::Error,
-                    },
-                    edit: None,
-                },
-            );
-            return Ok(());
-        }
-        if policy.local_reference_style == LocalReferenceStyle::Backticks
-            && label_equivalent(
-                &link.children,
-                &candidate.display_text,
-                &resolved.repo_relative_path,
-            )
-        {
-            let inline_text = render_repo_relative(&resolved, &exists_path);
-            emit_finding(
-                state.diagnostics,
-                state.ignored_rules,
-                state.mode,
-                state.edits,
-                Finding {
-                    payload: DiagnosticPayload {
-                        file,
-                        position: link.position.as_ref(),
-                        rule: "prefer-backticks-for-local-paths",
-                        message: format!(
-                            "Local repository link `[{}]({})` should use backticks under the configured style policy.",
-                            label_text(&link.children),
-                            candidate.display_text
-                        ),
-                        fixable: true,
-                        severity: Severity::Error,
-                    },
-                    edit: edit_from_position(link.position.as_ref(), format!("`{inline_text}`")),
-                },
-            );
-        }
-    }
     Ok(())
 }
 
@@ -312,6 +138,18 @@ fn emit_finding(
         && let Some(edit) = edit
     {
         edits.push(edit);
+    }
+}
+
+fn emit_findings(state: &mut WalkState<'_>, findings: Vec<Finding<'_>>) {
+    for finding in findings {
+        emit_finding(
+            state.diagnostics,
+            state.ignored_rules,
+            state.mode,
+            state.edits,
+            finding,
+        );
     }
 }
 
@@ -338,7 +176,7 @@ fn children_mut(node: &Node) -> Option<&Vec<Node>> {
     }
 }
 
-fn edit_from_position(
+pub(crate) fn edit_from_position(
     position: Option<&markdown::unist::Position>,
     replacement: String,
 ) -> Option<Edit> {
@@ -417,6 +255,7 @@ mod tests {
             config_path: None,
             config_was_explicit: false,
             ambiguous_inline_code_patterns: Vec::new(),
+            context_budget_rules: Vec::new(),
             respect_gitignore: true,
         }
     }
