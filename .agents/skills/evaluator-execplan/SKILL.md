@@ -1,94 +1,65 @@
 ---
 name: evaluator-execplan
-description: Independently validate whether an ExecPlan has actually been accomplished and whether it is ready to close. Use when an agent needs to review plan completion, judge readiness to move a plan from `docs/exec-plans/active/` to `docs/exec-plans/completed/`, reopen a plan that was closed too early, or write skeptical evidence-based completion findings.
+description: Review the current PR branch or worktree for an ExecPlan and record findings. Use when an agent needs a findings-first code review of branch changes associated with an ExecPlan.
 ---
 
 # Evaluator ExecPlan
 
-Use this skill when the question is whether the work is actually complete.
+Use this skill when the task is to review the current PR branch or worktree that is closing out an ExecPlan.
 
 ## Read first
 
-Before judging completion, read:
+Before reviewing, read:
 
-- `docs/PLANS.md`
 - the current ExecPlan
-
-Then inspect the repository state and validation evidence independently. Do not rely on the generator's summary as proof.
+- the implementation diff or current branch/worktree state
 
 ## You own
 
 As evaluator, you own:
 
-- completion judgment
-- independent validation against the current ExecPlan
-- deciding whether the plan stays active, is reopened, or may move to completed
+- findings-first code review
+- independent inspection of the branch diff and the relevant ExecPlan
+- identifying bugs, regressions, missing tests, plan mismatches, and unnecessary complexity
+- recording review findings and evidence in the ExecPlan
 
-Only the evaluator may:
+You do not own:
 
-- say the plan is complete
-- move the plan from `docs/exec-plans/active/` to `docs/exec-plans/completed/`
+- moving plans between active and completed
+- editing closeout state or outcome sections in the ExecPlan
+- rewriting acceptance criteria so the implementation passes
 
-## Review posture
+## Reviewer Persona
 
-Be skeptical.
+Act like a code reviewer, not a closeout assistant. Start from the diff, follow the code paths, and ask what could be wrong.
 
-Prefer:
-
-- concrete findings
-- explicit unmet criteria over broad praise
-- repeatable evidence
-- edge-case probing
-- attention to avoidable complexity
+Use the ExecPlan as context for intent, not as a checklist that narrows the review. Passing tests are evidence, not proof. If something seems too complex for the change, call it out like any other review finding.
 
 Do not:
 
-- soften criteria to fit what was built
+- soften the review to fit what was built
 - accept vague "it should be fine" reasoning
-- confuse "generator says ready" with "completion proved"
-- ignore avoidable complexity just because the code now works
+- perform plan movement or closeout bookkeeping
+
+## Review Scope
+
+For branch review, compare the current PR or topic branch against `main` by default. If `main` is not available, use the configured base branch and state the fallback. Include unstaged or staged worktree changes when they appear to be part of the plan closeout.
+
+If the plan itself seems wrong or stale, report that as a finding. Do not rewrite the plan criteria yourself.
 
 ## Output
 
-Use a normal code-review findings format.
+Use a normal code-review findings format. Put `Findings` first and order them by severity.
 
-Put `Findings` first and order them by severity.
+Add `Validation` or `Evidence` with commands run, manual checks performed, and artifacts inspected.
 
-Add `Validation` or `Evidence` when useful, especially for commands run, manual checks performed, or artifacts inspected.
-
-End with a short closeout action:
-
-- leave active
-- move back to active
-- move to completed
-
-Fail the review if any critical criterion remains unmet.
-Also fail when the behavior works but the solution is still more complex than necessary.
-
-For branch review, compare the current PR or topic branch against `main` by default. If `main` is not available, use the configured base branch and state the fallback.
-
-Record the result in the ExecPlan:
-
-- blocking findings go into the plan before leaving it active
-- successful closeout gets a concise `Outcomes & Retrospective` entry with the evidence used
-- do not add a new review section unless the existing plan sections are insufficient or the plan already has one
-
-## Reopen behavior
-
-If the work is incomplete:
-
-- leave the plan in `docs/exec-plans/active/`, or move it back there if it was closed too early
-- append specific findings tied to plan criteria
-- state what must change before the next evaluation pass
-
-Do not rewrite the acceptance criteria to make the plan pass. If the criteria themselves are wrong, hand the plan back to `$planner-execplan`.
+Record the review result in the ExecPlan. Findings should be specific and actionable. If there are no findings, record only a concise evaluator note with the evidence reviewed; do not add closeout language or move the plan.
 
 ## Quality bar
 
 A good evaluator answer makes these things unambiguous:
 
-- whether the plan passed or failed
-- which criteria were checked
+- whether findings remain
 - what evidence was actually reviewed
-- what gaps still block closure
-- whether the solution is appropriately simple or still contains avoidable complexity
+- what risks, if any, remain
+- whether the solution is appropriately simple

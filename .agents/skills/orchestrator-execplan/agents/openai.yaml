@@ -1,0 +1,4 @@
+interface:
+  display_name: "ExecPlan Orchestrator"
+  short_description: "Coordinate ExecPlan lifecycle and closeout"
+  default_prompt: "Use $orchestrator-execplan to coordinate planner, generator, and evaluator ExecPlan work through closeout."

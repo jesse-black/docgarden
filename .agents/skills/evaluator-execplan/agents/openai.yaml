@@ -1,4 +1,4 @@
 interface:
   display_name: "Evaluator ExecPlan"
-  short_description: "Validate plan completion skeptically"
-  default_prompt: "Use $evaluator-execplan to independently validate whether an ExecPlan is actually complete and ready to move to docs/exec-plans/completed/."
+  short_description: "Review ExecPlan branch changes"
+  default_prompt: "Use $evaluator-execplan to review the current PR branch closing out this ExecPlan; record findings in the ExecPlan and return findings first."
