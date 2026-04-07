@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is a working design draft for how `docgarden` should configure repository-wide conventions and scoped rule behavior.
+This document is a working design draft for how `docgarden` should configure repository-wide conventions and path-targeted rule behavior.
 
 The main goal is to avoid baking one repository's directory layout into product behavior while keeping the configuration model as small as the current product needs.
 
@@ -15,7 +15,7 @@ For near-term features, the most concrete case is skills:
 - `docgarden skills list` and `docgarden skills match <QUERY>` need to know where repository-local skills live.
 - Skills validation rules should apply automatically to that same directory.
 
-Other future areas may need scoped configuration too, including front matter validation, context-budget defaults, imported-reference policy, and optional curated indexes. Those future needs are not enough by themselves to justify a broad generic grouping layer today.
+Other future areas may need path-targeted configuration too, including front matter validation, context-budget defaults, imported-reference policy, and optional curated indexes. Those future needs are not enough by themselves to justify a broad generic grouping layer today.
 
 ## Core Direction
 
@@ -25,7 +25,7 @@ For skills, that means a top-level skills directory setting rather than requirin
 
     skills_dir = ".agents/skills"
 
-That single setting should be enough for `docgarden skills ...` commands and for default skills validation. Internally, `docgarden` may treat that directory as the built-in skills scope, but users should not have to define that scope twice.
+That single setting should be enough for `docgarden skills ...` commands and for default skills validation. Internally, `docgarden` may derive skill-file paths from that directory, but users should not have to define the same directory twice.
 
 ## Why Not Generic Groups First
 
@@ -47,7 +47,7 @@ That concern is real, but it is not enough to justify a generic grouping layer b
 
 ## Rule-Application Layer
 
-The rule-application layer should describe how rule behavior applies to explicit scopes.
+The rule-application layer should describe how rule behavior applies to explicit repository-relative paths and path patterns.
 
 This is broader than a narrow `[[ignore]]` table.
 
@@ -56,7 +56,7 @@ The product likely needs a way to:
 - enable rules
 - disable rules
 - override defaults
-- scope behavior to a path subset or built-in scope
+- apply behavior to a path subset
 
 That suggests a general rule-application table, perhaps something like `[[rules]]`, rather than a config model that can only express ignores.
 
@@ -67,48 +67,45 @@ A conceptual example:
     disable = ["unresolved-local-path"]
 
     [[rules]]
-    scope = "skills"
+    path = ".agents/skills/**/SKILL.md"
     enable = ["skill-validation"]
 
 This keeps exceptions and positive policy in one place instead of splitting them across unrelated tables.
 
 Rule-specific options should also live in this layer instead of growing separate top-level tables for each feature.
 
-For example, context-budget limits should be expressed as configuration for the `context-budget` rule, not as a separate `[[limits]]` table with its own scoping model:
+For example, context-budget limits should be expressed as rule-specific fields in `[[rules]]`, not as a separate `[[limits]]` table with its own targeting model. Setting `max_tokens` or `max_lines` is enough to enable the corresponding budget check for that path pattern:
 
     [[rules]]
-    scope = "skills"
-    rule = "context-budget"
-    max-lines = 500
-    max-tokens = 5000
+    path = ".agents/skills/**/SKILL.md"
+    max_lines = 500
+    max_tokens = 5000
     severity = "warn"
 
     [[rules]]
     path = "AGENTS.md"
-    rule = "context-budget"
-    max-tokens = 1200
+    max_tokens = 1200
     severity = "error"
 
     [[rules]]
     path = "docs/references/**"
-    rule = "context-budget"
-    enabled = false
+    disable = ["max_tokens", "max_lines"]
     reason = "Imported source-derived docs preserve source fidelity over compactness."
 
-The exact field names are still open, but the direction is that rule behavior and rule options share the same targeting layer. Prefer explicit target fields such as `path` and `scope` over one overloaded `match` field.
+The direction is that rule behavior and rule options share the same targeting layer. Use explicit `path` targets rather than one overloaded `match` field, and keep public TOML keys in snake_case.
 
 ## Repository-Wide Defaults
 
 Rule-application entries are not a complete replacement for repo-wide defaults.
 
-Some policy choices are foundational enough that repositories should be able to state them once at the top level instead of expressing them indirectly through broad rule entries. A local path style default is the clearest example: repositories may want to say "this is a backticks repo" or "this is a links repo" as a global convention, then override that default only for selected paths or built-in scopes.
+Some policy choices are foundational enough that repositories should be able to state them once at the top level instead of expressing them indirectly through broad rule entries. A local path style default is the clearest example: repositories may want to say "this is a backticks repo" or "this is a links repo" as a global convention, then override that default only for selected paths.
 
 The current design direction should therefore be layered:
 
 - repository-wide defaults establish the main posture for the repo
 - rule-application entries refine or override behavior for narrower scopes
 
-More specific scopes should win over the repo-wide default when they conflict.
+More specific path patterns should win over the repo-wide default when they conflict.
 
 For the path-style tradeoffs behind that example, see `docs/design-docs/path-style-policy.md`.
 
@@ -125,7 +122,7 @@ A conceptual example:
 
 Exception-oriented configuration should likely support a `reason` field.
 
-This is especially valuable when a repository disables or relaxes rules for a path or built-in scope. A short human-readable reason makes the policy easier to review, easier for agents to preserve intentionally, and easier to revisit later when the repository evolves.
+This is especially valuable when a repository disables or relaxes rules for a path pattern. A short human-readable reason makes the policy easier to review, easier for agents to preserve intentionally, and easier to revisit later when the repository evolves.
 
 The strongest case for `reason` is disable or override behavior, not ordinary default rule application.
 
@@ -144,7 +141,7 @@ The current design direction is:
 
 ## Relationship To Discovery Commands
 
-Discovery commands should depend on explicit repository conventions rather than reinventing their own scope configuration.
+Discovery commands should depend on explicit repository conventions rather than reinventing their own targeting configuration.
 
 That means:
 
@@ -156,13 +153,13 @@ This keeps command behavior portable across repositories with different structur
 
 ## Relationship To Front Matter Policy
 
-Front matter validation should reuse explicit scopes.
+Front matter validation should reuse explicit repository conventions and path-targeted rule configuration.
 
 That means the product can say things like:
 
 - files under the configured skills directory use the Agent Skills schema
 - imported-reference paths require provenance fields
-- some scopes require no front matter by default
+- some paths require no front matter by default
 
 This is cleaner than attaching schema behavior to arbitrary path conventions scattered across features, but it does not require a generic grouping layer as the first implementation.
 
@@ -172,12 +169,12 @@ Imported-reference behavior should avoid hard-coded directories.
 
 In this repository, `docs/references/` is one example. Another repository might use a different path entirely.
 
-The first useful configuration may be a narrow imported-reference path setting or path-scoped rules.
+The first useful configuration may be a narrow imported-reference path setting or path-targeted rules.
 
 ## Open Questions
 
 - Should the skills directory key be named `skills_dir`, `skills_root`, or something else?
-- What is the first feature that truly needs user-defined groups beyond built-in scopes such as skills?
-- Should rule-application entries use separate fields such as `path` and `scope` instead of an overloaded `match` field?
+- What is the first feature that truly needs user-defined groups beyond explicit path patterns?
+- Should rule-application entries continue to require `path` as the only public target field?
 - Should `reason` be optional but recommended for disable or override entries, or required for any configuration that relaxes enforcement?
-- Should broader discovery configuration use named groups, explicit roots, or built-in scopes?
+- Should broader discovery configuration use named groups, explicit roots, or path patterns?
