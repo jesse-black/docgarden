@@ -3,6 +3,16 @@ exclude = [
 ]
 
 [[rules]]
+path = "AGENTS.md"
+max_lines = 100
+max_tokens = 1000
+
+[[rules]]
+path = "SKILL.md"
+max_lines = 500
+max_tokens = 5000
+
+[[rules]]
 path = "README.md"
 disable = ["prefer-backticks-for-local-paths"]
 reason = "Allow local links in README.md because it is human-facing documentation."
@@ -15,4 +25,4 @@ reason = "Completed ExecPlans are archival records and may preserve historical p
 [[rules]]
 path = "docs/references/**"
 disable = ["unresolved-local-path"]
-reason = "References are clippings of external sources and may preserve source-derived paths."
+reason = "References are clippings of external sources and must remain untouched."
