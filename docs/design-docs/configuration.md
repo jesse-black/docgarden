@@ -27,6 +27,28 @@ For skills, that means a top-level skills directory setting rather than requirin
 
 That single setting should be enough for `docgarden skills ...` commands and for default skills validation. Internally, `docgarden` may derive skill-file paths from that directory, but users should not have to define the same directory twice.
 
+## Scan Selection
+
+Scan selection should stay separate from rule application.
+
+Top-level `include` and `exclude` settings decide which Markdown files enter the lint run at all. They are repository-relative path patterns, not document-family declarations and not rule exceptions.
+
+A conceptual example:
+
+    include = ["docs/**", "README.md", "AGENTS.md", "*.md"]
+    exclude = ["docs/references/**", "docs/generated/**"]
+
+Use `exclude` for files that should not be linted by `docgarden`, such as generated output or source-derived material that is intentionally outside the repository-authored documentation contract.
+
+Use `[[rules]].disable` instead when a file should still be discovered and linted, but a specific rule should not apply:
+
+    [[rules]]
+    path = "docs/references/**"
+    disable = ["unresolved-local-path"]
+    reason = "Imported source-derived docs may contain external or hypothetical paths."
+
+This distinction matters because excluded files disappear from all lint checks, while rule disables preserve the file in discovery and relax only the named behavior.
+
 ## Why Not Generic Groups First
 
 A top-level configuration key such as `raw_directory = "docs/references"` is easy to understand at first, but it does not scale well.
@@ -72,6 +94,17 @@ A conceptual example:
 
 This keeps exceptions and positive policy in one place instead of splitting them across unrelated tables.
 
+Rule entries may also need their own `exclude` field. This is different from the top-level `exclude`: it narrows only that one rule entry after discovery has already selected the file. The file remains linted by other rules.
+
+A conceptual example:
+
+    [[rules]]
+    path = "**/*.md"
+    exclude = ["AGENTS.md"]
+    max_tokens = 5000
+
+That entry applies the token budget to Markdown files except `AGENTS.md`, while `AGENTS.md` can still be checked for local paths, front matter constraints, or any other matching rule entries.
+
 Rule-specific options should also live in this layer instead of growing separate top-level tables for each feature.
 
 For example, context-budget limits should be expressed as rule-specific fields in `[[rules]]`, not as a separate `[[limits]]` table with its own targeting model. Setting `max_tokens` or `max_lines` is enough to enable the corresponding budget check for that path pattern:
@@ -86,6 +119,12 @@ For example, context-budget limits should be expressed as rule-specific fields i
     path = "AGENTS.md"
     max_tokens = 1200
     severity = "error"
+
+    [[rules]]
+    path = "docs/**"
+    exclude = ["docs/references/**"]
+    max_lines = 300
+    severity = "warn"
 
     [[rules]]
     path = "docs/references/**"
@@ -165,6 +204,37 @@ That means the product can say things like:
 
 This is cleaner than attaching schema behavior to arbitrary path conventions scattered across features, but it does not require a generic grouping layer as the first implementation.
 
+Field-level front matter requirements should use a nested rule-specific shape rather than many top-level `[[rules]]` fields.
+
+A conceptual example:
+
+    [[rules]]
+    path = ".agents/skills/**/SKILL.md"
+
+    [rules.frontmatter]
+    schema = "agent-skill"
+    required = ["description"]
+
+    [rules.frontmatter.fields.description]
+    max_chars = 1024
+
+For a repository-wide description policy with an `AGENTS.md` exception, split "validate this field when present" from "require this field." That keeps the exception narrow:
+
+    [[rules]]
+    path = "**/*.md"
+
+    [rules.frontmatter.fields.description]
+    max_chars = 1024
+
+    [[rules]]
+    path = "**/*.md"
+    exclude = ["AGENTS.md"]
+
+    [rules.frontmatter]
+    required = ["description"]
+
+This means `AGENTS.md` may omit `description`, but if it has one, the same `max_chars` constraint still applies. Other Markdown files both require `description` and enforce the character limit.
+
 ## Relationship To Imported References
 
 Imported-reference behavior should avoid hard-coded directories.
@@ -178,5 +248,6 @@ The first useful configuration may be a narrow imported-reference path setting o
 - Should the skills directory key be named `skills_dir`, `skills_root`, or something else?
 - What is the first feature that truly needs user-defined groups beyond explicit path patterns?
 - Should rule-application entries continue to require `path` as the only public target field?
+- Should rule-entry `exclude` accept only repository-relative path patterns, or should it eventually support named targets if user-defined groups are added?
 - Should `reason` be optional but recommended for disable or override entries, or required for any configuration that relaxes enforcement?
 - Should broader discovery configuration use named groups, explicit roots, or path patterns?

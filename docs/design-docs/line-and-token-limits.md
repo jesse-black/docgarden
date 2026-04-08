@@ -1,4 +1,4 @@
-# Context Budget Limits
+# Line and Token Limits
 
 ## Purpose
 
@@ -60,6 +60,49 @@ The first measurable checks are:
 - token count
 
 Other possible measures such as file size or section count are lower priority and should not be assumed yet.
+
+### Count Reporting Subcommand
+
+Budget enforcement should be paired with an informational reporting command so maintainers can inspect file sizes before choosing policy.
+
+The working command shape is:
+
+    docgarden count <targets>
+
+The command should report the same two measures used by context-budget rules:
+
+- line count
+- token count
+
+It should reuse the same Markdown file discovery path as `docgarden lint` so a target such as `docs/` means the same thing in both commands. It should also use the same tokenizer decision as budget enforcement, currently `o200k_base` through `tiktoken-rs`, so the reported token counts match `max_tokens` diagnostics.
+
+The default human output should be a compact table:
+
+    path                                      lines  tokens
+    AGENTS.md                                    25     921
+    docs/design-docs/context-budget-limits.md  184    2360
+
+If the loaded configuration supplies `max_lines` or `max_tokens` for a reported file, the command may include those effective limits as additional columns:
+
+    path              lines  max_lines  tokens  max_tokens
+    AGENTS.md            25        150     921        1200
+
+Filter switches would make the command more useful for exploratory cleanup:
+
+    docgarden count docs/ --min-tokens 5000
+    docgarden count docs/ --min-lines 300
+
+These filters should include only files whose observed count is at least the supplied lower bound. They are ad hoc reporting thresholds, not configuration rules, so they should not be written back into `docgarden.toml` or treated as diagnostics. If both filters are present, the command should probably use OR semantics so users can ask for "files that exceed either of these size signals" in one pass:
+
+    docgarden count docs/ --min-tokens 5000 --min-lines 300
+
+If users need AND semantics later, add an explicit option rather than making the default harder to predict.
+
+The reporting command should be informational by default. Exceeding a configured limit should not make `docgarden count` fail; `docgarden lint` remains the enforcement command. A future option such as `--fail-over-budget` may be useful for scripts, but it should not be required for the first version because it would duplicate existing lint behavior.
+
+The command should support `--json` for machine-readable benchmarking and repository-gardening automation. A minimal JSON record should include the repository-relative path, line count, token count, and any effective configured budget limits that applied to that file.
+
+The name `count` is still provisional. Alternatives such as `budget`, `measure`, or `stats` may be clearer if the command later grows beyond line and token counts. The first implementation should keep the behavior narrow enough that a rename is still cheap before public release.
 
 ### Why Limits Instead Of Structure Rules
 
