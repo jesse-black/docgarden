@@ -4,7 +4,7 @@ This document describes the high-level architecture of `docgarden`.
 
 `docgarden` is a Rust CLI for enforcing mechanical repository-knowledge invariants in agentic engineering repositories.
 
-Today, the implementation is centered on Markdown-local path integrity and style. It scans repository Markdown files, parses them into an AST, classifies repository-local references found in inline code and links, resolves those references against the repository root, and reports or fixes violations according to the configured style policy.
+Today, the implementation is centered on Markdown-local path integrity, style, and explicit context-budget checks. It scans repository Markdown files, parses them into an AST, classifies repository-local references found in inline code and links, resolves those references against the repository root, evaluates configured file-level line and token budgets, and reports or fixes violations according to the configured policy.
 
 This makes `docgarden` part of the repository agent operating system rather than a general-purpose Markdown linter. The tool is intended to support progressive context loading and CI-enforced doc-gardening workflows in repositories that treat in-repo documentation as the system of record. As the rule set expands, new checks should remain deterministic, repository-local, and mechanically enforceable without model inference.
 
@@ -14,11 +14,12 @@ At the highest level, `docgarden` has a simple pipeline:
 
 1. Parse CLI arguments and determine the effective repository root and execution mode.
 2. Load configuration from `docgarden.toml` or built-in defaults.
-3. Discover the Markdown files that should be linted for this invocation.
+3. Discover the Markdown files that should be linted for this invocation, honoring include, exclude, and gitignore policy.
 4. Parse each file into a Markdown AST.
-5. Walk the AST and classify inline code and links that might represent repository-local paths.
-6. Resolve candidate paths against the repository root, emit diagnostics, and optionally apply safe rewrites.
-7. Render diagnostics to text or JSON and exit non-zero when violations remain.
+5. Evaluate file-level rules that need the complete Markdown source.
+6. Walk the AST and classify inline code and links that might represent repository-local paths.
+7. Resolve candidate paths against the repository root, emit diagnostics, and optionally apply safe rewrites.
+8. Render diagnostics to text or JSON and exit non-zero when violations remain.
 
 The tool is intentionally local and repository-scoped. It does not fetch remote state, require LLM support, or depend on Git metadata beyond optionally using `.git` to infer the repository root. Future repository-knowledge checks may broaden what is validated, but they should preserve this same operating model.
 
@@ -39,6 +40,7 @@ The tool is intentionally local and repository-scoped. It does not fetch remote 
 - canonicalizing explicit targets
 - selecting the repository-root markers that should be used for this invocation
 - loading configuration
+- applying command-line overrides such as JSON output, color behavior, and gitignore handling
 - choosing between full discovery and explicit target handling
 - running the linter over each selected file
 - printing diagnostics and fix hints
@@ -55,17 +57,18 @@ If you want to understand the end-to-end control flow of the binary, start here.
 The config model currently controls:
 
 - include and exclude scan patterns
+- whether discovery respects `.gitignore` and related ignore files
 - known file extensions and special filenames used for path classification
 - per-file ignored rules
 - the local reference style policy: `backticks` or `links`
 - whether path-adjacent inline code should produce warnings
-- explicit file-level context budgets through `max_tokens` and `max_lines`
+- path-targeted rule applications, including local-reference style overrides and explicit file-level context budgets through `max_tokens`, `max_lines`, and severity
 
 `src/defaults.rs` contains the stable built-in defaults for scan patterns, known extensions, and special filenames. Keeping these defaults separate makes the policy surface easy to review without reading the rest of the linter.
 
 ### File discovery and diagnostics
 
-`src/discover.rs` handles file selection. It walks the filesystem under the selected roots, applies include and exclude patterns relative to the repository root, and returns a sorted list of files to lint.
+`src/discover.rs` handles file selection. It walks the filesystem under the selected roots, applies include and exclude patterns relative to the repository root, respects configured gitignore behavior through the `ignore` crate, and returns a sorted list of files to lint.
 
 `src/diagnostics.rs` defines the diagnostic payload that the rest of the tool emits, plus the glob-style matcher used for include, exclude, and per-file ignore behavior.
 
@@ -121,6 +124,8 @@ This split keeps the core linter logic testable without coupling it to argument 
 ## Cross-Cutting Concerns
 
 Path normalization and repository relativity appear across several modules. The tool consistently treats the inferred repository root as the frame of reference for discovery, ignore matching, and path existence checks.
+
+Context-budget rules are deterministic file-level checks over the complete Markdown source. Token counts use the `tiktoken-rs` `o200k_base` tokenizer as a mechanical approximation of agent context cost. Budget rules should stay explicit and configuration-driven unless a future product decision adds generated or built-in defaults.
 
 Human-oriented output and machine-oriented output share the same diagnostic model. Text and JSON output differ only at the presentation layer, which helps keep rule behavior consistent across local development and automation use cases.
 
