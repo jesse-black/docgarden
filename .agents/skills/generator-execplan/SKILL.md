@@ -1,6 +1,6 @@
 ---
 name: generator-execplan
-description: Implement from an active ExecPlan while keeping the plan up to date as a living handoff artifact. Use when an agent needs to continue plan-driven work, leave strict breadcrumbs in the ExecPlan, capture requirement changes from human conversation, log rejected experiments and surprises, or prepare work for evaluator review without declaring it complete.
+description: Implement from an active plan or ExecPlan while keeping it up to date. Use when an agent needs to implement the active plan, continue plan-driven work, resume the current plan, or carry out an existing ExecPlan.
 ---
 
 # Generator ExecPlan
@@ -9,72 +9,36 @@ Use this skill when the plan already exists and the task is to execute from it w
 
 ## Read first
 
-Before implementing, read:
+MUST READ before implementing:
 
 - `docs/PLANS.md`
 - the active ExecPlan you are executing
 
-Before retrying any line of work, scan:
-
-- `Progress`
-- `Decision Log`
-- `Surprises & Discoveries`
+`docs/PLANS.md` defines the required ExecPlan structure, lifecycle, and maintenance rules.
 
 ## You own
 
 As generator, you own:
 
-- implementation from the current ExecPlan
-- keeping the plan current while you work
-- leaving enough breadcrumbs for a fresh contributor to resume
+- implementation from the current plan
+- keeping the plan current while you work, not only at the end
+- recording progress and requirement changes as they happen so the ExecPlan remains a live handoff artifact
 - simplifying the solution after feedback changes the approach
 
 You do not own:
 
 - changing acceptance criteria
 - redefining milestones or completion bars
-- moving a plan to `completed/`
+- plan close-out or completion review
 
-## Mandatory breadcrumbs
+## Role boundaries
 
-At every meaningful stopping point, update the ExecPlan with:
+Use the generator when the plan already exists and the task is to implement from it while keeping the living document current according to `docs/PLANS.md`.
 
-- `Progress` timestamps and explicit next steps
-- any requirement changes learned from human conversation
-- rejected approaches when they explain a decision
-- surprises with concrete evidence
-- any mismatch between the plan and reality as a proposed planner delta
+Update the ExecPlan as you go. Do not wait until the end of a long run to write progress back into the plan, and do not leave user-driven requirement changes only in chat context.
 
-Treat the ExecPlan as the handoff artifact, not as a summary to fill in later.
+At every meaningful stopping point, leave the plan in a state that a fresh contributor can resume from after a crash, interruption, or handoff.
 
-## Implementation rules
+If requirements or success criteria change in a way that changes what the plan is asking for, stop and hand the plan back to `planner-execplan` before continuing.
 
-Follow these rules strictly:
-
-- If retrying a previously rejected path, state what new evidence justifies reopening it.
-- If a human request changes scope mid-stream, append a requirement delta before more coding continues.
-- If reality diverges from the plan in a way that changes success criteria, stop and hand the plan back to `$planner-execplan`.
-- When feedback changes the approach, revisit the whole solution shape.
-- Remove or collapse complexity that is no longer needed.
-
-## Ready for evaluation
-
-Your strongest close-out claim is "ready for evaluation."
-
-When you believe the work is ready:
-
-- point to the relevant acceptance criteria
-- point to the evidence the evaluator should inspect
-- call out any known risks or incomplete edges
-- say whether the latest round simplified the solution or only added another fix
-
-Do not mark the plan complete and do not move it to `docs/exec-plans/completed/`.
-
-## Quality bar
-
-A good generator leaves behind an ExecPlan that lets a fresh contributor answer:
-
-- What was tried?
-- What failed?
-- What changed in the requirements?
-- What exactly still needs evaluator judgment?
+When the work is ready for independent review, hand it off to `evaluator-execplan`. Do not turn the generator into the reviewer of its own implementation.

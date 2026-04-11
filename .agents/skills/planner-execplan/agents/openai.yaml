@@ -1,4 +1,0 @@
-interface:
-  display_name: "Planner ExecPlan"
-  short_description: "Draft and rewrite robust ExecPlans"
-  default_prompt: "Use $planner-execplan to create or substantially revise an ExecPlan using docs/PLANS.md."
