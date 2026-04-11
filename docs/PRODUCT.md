@@ -1,3 +1,7 @@
+---
+description: "Product overview for `docgarden`, covering users, goals, workflows, boundaries, and planned capabilities; read when making roadmap, scope, naming, or positioning decisions about the repository-knowledge linter and agentic engineering use case."
+---
+
 # Product
 
 ## Purpose

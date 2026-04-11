@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for the original documentation linter that became `docgarden`, covering repository-local path validation, style enforcement, autofix behavior, and early CLI scope; read when reconstructing the product's initial implementation decisions and constraints."
+---
+
 # Doc Gardening Linter
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.

@@ -1,3 +1,7 @@
+---
+description: "Working design draft for frontmatter-driven discovery commands such as `docgarden list`, `tree`, and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior."
+---
+
 # Frontmatter-Driven Discovery Commands
 
 ## Purpose

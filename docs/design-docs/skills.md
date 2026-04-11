@@ -1,3 +1,7 @@
+---
+description: "Working design draft for the `docgarden skills` subcommand family, including skills discovery, validation scope, and configured skills directories; read when planning skill-related commands, metadata behavior, or agent guidance generation."
+---
+
 # Skills Subcommand
 
 ## Purpose

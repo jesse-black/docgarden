@@ -1,3 +1,7 @@
+---
+description: "Working design for how `docgarden` classifies backticked text as repository-local paths, ambiguous inline code, or ordinary code spans; read when changing path detection heuristics, false-positive handling, or backtick-versus-link lint behavior."
+---
+
 # Backtick Path Classification
 
 ## Purpose

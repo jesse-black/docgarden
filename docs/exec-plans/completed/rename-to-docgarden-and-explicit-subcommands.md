@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for renaming `dglint` to `docgarden` and restoring explicit subcommands such as `lint` and `fix`; read when tracing CLI naming decisions, command-surface changes, or the product shift beyond a narrow linter."
+---
+
 # Rename `dglint` to `docgarden` and Restore Explicit Subcommands
 
 Save this in-progress ExecPlan at `docs/exec-plans/active/rename-to-docgarden-and-explicit-subcommands.md`. Move it into the completed ExecPlan directory when the work is complete.

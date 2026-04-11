@@ -1,3 +1,7 @@
+---
+description: "High-level code map, module boundaries, data flow, and architectural invariants for `docgarden`; read when changing CLI orchestration, configuration loading, lint pipelines, rule execution, or other repository-scoped behavior."
+---
+
 # Architecture
 
 This document describes the high-level architecture of `docgarden`.

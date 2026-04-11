@@ -1,3 +1,7 @@
+---
+description: "Working design draft for `docgarden` configuration, especially repository-wide conventions and path-targeted rule behavior; read when changing config shape, scope selection, rules entries, or other repository policy controls."
+---
+
 # Configuration
 
 ## Purpose

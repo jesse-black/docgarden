@@ -1,3 +1,7 @@
+---
+description: "Canonical testing workflow for `docgarden`, including validation commands, unit-versus-integration guidance, and fixture rules; read when adding features, fixing regressions, addressing review findings, or deciding how to verify repository-local behavior."
+---
+
 # Testing
 
 This document defines the canonical testing process for `docgarden`. Treat it as the default workflow for feature work, regression fixes, and review follow-ups.

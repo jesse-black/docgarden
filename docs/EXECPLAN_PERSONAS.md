@@ -1,3 +1,7 @@
+---
+description: "Shared operating contract for the planner, generator, evaluator, and orchestrator ExecPlan personas; read when creating, updating, implementing, reviewing, or closing ExecPlans and when deciding role separation, evidence capture, and closeout responsibility."
+---
+
 # ExecPlan Persona Contracts
 
 This document defines the shared operating contract for the four repo-local ExecPlan skills:

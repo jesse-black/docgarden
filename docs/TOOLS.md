@@ -1,3 +1,7 @@
+---
+description: "Brief guide to tools, setup commands, and environment capabilities available in this repository, Codex Cloud, and Jules; read when choosing local commands, checking tool availability, or understanding agent runtime differences."
+---
+
 d# Tools
 
 Brief guide to tooling available to an agent running either in a Codex Cloud environment, a Jules environment, or in this repository's devcontainer.
