@@ -1,4 +1,0 @@
-interface:
-  display_name: "Evaluator ExecPlan"
-  short_description: "Review ExecPlan branch changes"
-  default_prompt: "Use $evaluator-execplan to review the current PR branch closing out this ExecPlan; record findings in the ExecPlan and return findings first."

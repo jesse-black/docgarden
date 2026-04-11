@@ -1,10 +1,25 @@
 {
   "version": 1,
   "skills": {
+    "evaluator-execplan": {
+      "source": "jesse-black/execplan-skills",
+      "sourceType": "github",
+      "computedHash": "bb13cab66768ce951cce9f8f2485cfc34a3e08c0c29c1de8149b0dae4f5d18db"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
       "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
+    },
+    "generator-execplan": {
+      "source": "jesse-black/execplan-skills",
+      "sourceType": "github",
+      "computedHash": "991900c92bfc9b3720827ecfc30f376def094b39e70611c895709f2298371f08"
+    },
+    "planner-execplan": {
+      "source": "jesse-black/execplan-skills",
+      "sourceType": "github",
+      "computedHash": "a3f75e109c1cace5d7b93573be4e6941aff2f3c9b33e092ca74420bb1fa125ec"
     }
   }
 }

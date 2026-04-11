@@ -1,6 +1,6 @@
 ---
 name: planner-execplan
-description: Create, revise, reopen, or rescope ExecPlans in this repository using `docs/PLANS.md`. Use when an agent needs to draft a new ExecPlan, substantially rewrite an active plan, convert human conversation into updated plan requirements, or tighten acceptance criteria so completion is evaluator-testable.
+description: Create, update, revise, reopen, or rescope a plan or ExecPlan using `docs/PLANS.md`. Use when an agent needs to create a plan, plan a change, update the plan with new requirements, or rewrite an active ExecPlan.
 ---
 
 # Planner ExecPlan
@@ -9,98 +9,48 @@ Use this skill when the task is to shape the plan itself rather than to implemen
 
 ## Read first
 
-Before drafting or substantially revising any ExecPlan, read:
+MUST READ before drafting or substantially revising any ExecPlan:
 
 - `docs/PLANS.md`
 
+`docs/PLANS.md` defines the required ExecPlan structure, lifecycle, and maintenance rules.
+
 Then read the current ExecPlan, if one already exists, plus the nearby design docs and code context needed to make the plan self-contained.
+
+## Required deliverable
+
+The planner's final deliverable is a repository-local ExecPlan Markdown file, not only a chat summary.
+
+When creating a new ExecPlan, write it to the repo's active ExecPlan location before ending the planner phase. If the repo follows the standard layout, use `docs/exec-plans/active/<descriptive-name>.md`.
+
+Do not hand off to `generator-execplan` until the ExecPlan file exists in the working tree and contains the decision-complete plan.
+
+In your planner response, explicitly name the ExecPlan path you created or updated so the next phase can pick up the right artifact.
 
 ## You own
 
 As planner, you own:
 
 - plan structure
-- milestones
-- non-goals
 - acceptance criteria
-- completion bars
+- major scope and sequencing decisions
+- revising the plan when requirements change
 - converting human conversation into updated plan requirements
 
 Once implementation has started, only the planner may substantially rewrite those parts of the ExecPlan.
 
-## Workflow
+You do not own:
 
-### 1. Build the real context
+- implementation from the current plan
+- review findings on the current branch
+- declaring the work complete just because implementation seems close
 
-Read enough repo and plan context to distinguish:
+## Role boundaries
 
-- stable requirements
-- open questions
-- hypotheses
-- experiments already tried
-- decisions that are provisional versus frozen
+Use the planner when the task is to create, rewrite, reopen, or rescope the plan itself.
 
-Do not let unresolved chat context remain outside the plan when it changes what success means.
+Do not use the planner to continue implementation from an existing plan; use `generator-execplan` for that. Do not use the planner to perform completion review or close-out validation; use `evaluator-execplan` for that.
 
-Separate the user's goal from the proposed mechanism. Do not treat a suggested implementation path as settled scope until you have checked that it is actually needed.
+When requirements or success criteria change in a way that affects what "done" means, hand the plan back to the planner and revise the ExecPlan file before more implementation continues.
 
-Prefer the simplest plan that satisfies the goal. If the likely plan adds a new abstraction, overloaded meaning, or extra migration work, push back and offer the simpler alternative.
-
-Stop and ask the human when an unresolved choice would shape product semantics. Do not silently decide ambiguous behavior just to keep planning moving. Record the answer in the ExecPlan before implementation proceeds.
-
-### 2. Write for evaluator judgment
-
-Define "done" in language an evaluator can verify independently.
-
-Prefer:
-
-- observable behavior
-- explicit commands
-- expected outputs
-- concrete negative cases
-
-Avoid generator-friendly wording such as "clean up auth flow" or "finish the migration."
-
-Write acceptance criteria clearly enough that needless complexity is visible during review, not hidden behind vague success language.
-
-Include negative cases for ambiguity-prone behavior. If the plan relies on a fallback, precedence rule, or overloaded meaning, make that behavior explicit and testable.
-
-### 3. Use existing ExecPlan sections first
-
-Prefer the sections already defined by `docs/PLANS.md`.
-
-Use them consistently:
-
-- choices and rejected approaches go in `Decision Log`
-- surprising facts go in `Surprises & Discoveries`
-- progress and next steps go in `Progress`
-- completion evidence goes in `Validation and Acceptance`
-
-Add another section only when the plan has a specific need that these sections cannot cover.
-
-### 4. Preserve history
-
-Do not silently replace earlier intent.
-
-When material changes occur:
-
-- update the relevant sections across the whole plan
-- add a revision note explaining what changed and why
-- update `Decision Log`
-- keep rejected directions visible when they are important to avoiding churn
-
-### 5. Keep role boundaries intact
-
-Do not mark the plan complete just because implementation seems close. Your job is to make the plan decision-complete and evaluator-testable.
-
-If the task is implementation from an existing plan, use `$generator-execplan` instead.
-If the task is completion review or close-out validation, use `$evaluator-execplan` instead.
-
-## Quality bar
-
-A good planner output makes these questions easy to answer from the ExecPlan alone:
-
-- What exactly is being built or changed?
-- Which decisions constrain implementation?
-- What evidence will prove completion?
-- What must happen if the user changes the requirement mid-stream?
+The planner's job is to make the plan decision-complete, persist it as the active ExecPlan artifact, and leave it ready for implementation and later evaluation, following `docs/PLANS.md`.
