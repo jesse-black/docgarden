@@ -1,4 +1,4 @@
-# Standardized YAML Front Matter
+# Standardized Frontmatter
 
 ## Purpose
 
@@ -21,11 +21,17 @@ For external schemas, preserve the field names defined by that schema. For examp
 
 Those requirements should vary by scope rather than forcing one universal schema across all Markdown files. Different document types have different needs:
 
-- some first-party repository docs may require fields such as `description`, `owner`, or `last_reviewed`
+- first-party repository docs should require `description` on all Markdown documents except `README.md` and any `AGENTS.md`
 - imported external references may require provenance-focused fields such as `title`, `source`, `retrieved`, and `last_reviewed`
 - some files may intentionally require no front matter at all when token efficiency or file role matters more than metadata uniformity
 
-`AGENTS.md` is the clearest example of a file that may intentionally have no required front matter. It is a high-traffic routing document, and any front matter requirement should justify its token cost.
+For first-party repository docs, `description` is the current default requirement because it provides the highest-value discovery and routing signal for agents at the lowest maintenance cost.
+
+`README.md` and any `AGENTS.md` are the clearest exceptions. They are high-traffic entry-point documents, and any front matter requirement there should justify its token cost.
+
+`README.md` also has a separate compatibility concern. GitHub's official documentation describes repository and profile READMEs as Markdown surfaces shown directly to visitors, while GitHub documents YAML front matter separately for GitHub Docs authoring and GitHub Pages or Jekyll sites. That makes front matter in repository `README.md` an uncertain fit for the repository front-page contract, so this draft keeps `README.md` out of the repository-wide requirement.
+
+The decision on requiring `last_reviewed` for first-party repository docs remains pending. It may be valuable for freshness-sensitive scopes, but this draft does not yet require it repository-wide.
 
 ## References
 
@@ -37,7 +43,7 @@ Use the `references` schema for externally sourced material such as local captur
 | `source` | Yes | Canonical external URL for the referenced material. |
 | `description` | Yes | Brief summary of why this reference matters in the repository. |
 | `retrieved` | Yes | Date when the external source was fetched, copied, or reviewed for the local reference. |
-| `last_reviewed` | Yes | Date when someone last checked that the local reference remained faithful and useful. |
+| `last_reviewed` | No | Date when someone last checked that the local reference remained faithful and useful. |
 | `author` | No | Author or publishing organization for the external source. |
 | `license` | No | License name or short reference if reuse terms matter for the local copy. |
 
@@ -77,15 +83,15 @@ Use the `skills` schema for files that implement the Agent Skills specification.
 
 ## Notes
 
-- This draft does not yet define a canonical `docgarden` schema for first-party design docs, plans, or generated documents.
+- This draft does not yet define a full canonical `docgarden` schema for first-party design docs, plans, or generated documents beyond the repository-wide `description` requirement and the explicit `README.md` and `AGENTS.md` exceptions.
 - This draft treats `skills` as an external schema based on the Agent Skills specification rather than a `docgarden`-owned vocabulary.
 - External-schema fields such as `allowed-tools` or `applyTo` should not be generalized into unrelated scopes without an explicit design decision.
 - Required-field linting should be driven by explicit scopes, not by a one-size-fits-all Markdown policy.
 
 ## Open Questions
 
-- What first-party scopes should exist beyond imported references, and which of them should require front matter at all?
-- Should `AGENTS.md` explicitly remain front-matter-free by default, or should front matter be optional but discouraged there?
+- What first-party scopes should exist beyond imported references, and which of them should require fields beyond `description`?
+- Does `last_reviewed` create enough value to justify its maintenance cost for repo-authored docs, and if so, for which scopes?
 - Does an `owner` field create enough value to justify its maintenance cost for repo-authored docs?
 - If `owner` exists, what does ownership mean for an agent-oriented repository? Is it a human team, a repository area, a workflow, or something else?
 - If a skill is loaded to work on a document, should that skill identity ever appear as the `owner`, or is that mixing execution context with long-lived document stewardship?
