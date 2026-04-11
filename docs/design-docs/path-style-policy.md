@@ -1,3 +1,7 @@
+---
+description: "Working design draft for repository-local path presentation styles in Markdown prose, including backticks, Markdown links, and possible future wiki links; read when deciding path style policy, lint tradeoffs, or representation-focused rule boundaries."
+---
+
 # Path Style Policy
 
 ## Purpose

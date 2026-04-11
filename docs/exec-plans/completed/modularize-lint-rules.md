@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for modularizing `docgarden` lint rule execution into smaller rule modules and file-level hooks; read when changing rule architecture, extending deterministic checks, or understanding the current lint pipeline boundaries."
+---
+
 # Modularize Lint Rule Execution
 
 This completed ExecPlan lives at `docs/exec-plans/completed/modularize-lint-rules.md`. The active version lived in repository history while the work was in progress and while the dependent context-budget finding was reopened.

@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for explicit `max_tokens` and `max_lines` context-budget checks in `docgarden`; read when understanding the shipped budget-rule behavior, reopened findings, or the rationale behind path-targeted token and line limits."
+---
+
 # Implement Explicit Context Budget Limits
 
 Save this completed ExecPlan at `docs/exec-plans/completed/context-budget-limits.md`. The active version lived in repository history while the work was in progress and while the recorded finding was reopened.

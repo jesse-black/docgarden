@@ -1,3 +1,7 @@
+---
+description: "Working design draft for a benchmark that measures whether repository knowledge systems and `docgarden` reduce tokens needed for agent task success; read when planning evaluation methodology, task sources, or token-efficiency metrics."
+---
+
 # Benchmark
 
 ## Purpose

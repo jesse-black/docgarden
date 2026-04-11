@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for simplifying `docgarden` configuration to a rules-only, path-targeted shape and removing unshipped document-family abstractions; read when understanding why the current config contract uses `path`, `path_style`, and scoped rule entries."
+---
+
 # Implement Minimal Rules-Only Configuration
 
 This completed ExecPlan lives at `docs/exec-plans/completed/configuration-rule-application.md`.

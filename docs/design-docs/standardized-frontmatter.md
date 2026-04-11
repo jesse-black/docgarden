@@ -1,3 +1,7 @@
+---
+description: "Working design draft for standardized YAML frontmatter in agent-oriented Markdown documents, including first-party `description` requirements, scope-specific schemas, and README or AGENTS exceptions; read when designing frontmatter policy or linting rules."
+---
+
 # Standardized Frontmatter
 
 ## Purpose

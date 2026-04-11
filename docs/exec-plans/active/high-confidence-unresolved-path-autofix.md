@@ -1,3 +1,7 @@
+---
+description: "Active ExecPlan for adding high-confidence autofix support to unresolved local path errors in `docgarden`; read when implementing, reviewing, or resuming search-based path repair behavior for uniquely recoverable broken references."
+---
+
 # Add High-Confidence Unresolved Path Autofix
 
 Save this in-progress ExecPlan at `docs/exec-plans/active/high-confidence-unresolved-path-autofix.md`. Move it into the completed ExecPlan directory when the work is complete.

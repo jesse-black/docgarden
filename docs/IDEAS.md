@@ -1,3 +1,7 @@
+---
+description: "Backlog of candidate `docgarden` rule families, repository-knowledge checks, and future design directions that are not committed ExecPlan scope; read when brainstorming roadmap items, evaluating possible lint features, or choosing the next planning target."
+---
+
 # Linter Ideas
 
 These are candidate rule families and checks for `docgarden` beyond local file-reference style and path-resolution validation. They are grounded in this repository's agentic-engineering model: `AGENTS.md` is a short routing map, `docs/` is the repository knowledge system of record, and deeper context should be discoverable through cross-linked repository documents.
@@ -23,7 +27,7 @@ These are candidate rule families and checks for `docgarden` beyond local file-r
 
 ## Front Matter And Config
 
-- Front matter policy: continue the schema and required-field design work in `docs/design-docs/standardized-yaml-front-matter.md`, including which document families require front matter, which fields are linted for each family, and which files intentionally require none.
+- Front matter policy: continue the schema and required-field design work in `docs/design-docs/standardized-frontmatter.md`, including which document families require front matter, which fields are linted for each family, and which files intentionally require none.
 - Global ignore patterns: allow repositories to exclude whole paths from all linting, such as generated docs or imported third-party material.
 - Per-rule exceptions: allow repositories to skip only selected rules for matching files. For example, `AGENTS.md` might still be checked for structure and path references while skipping frontmatter rules.
 

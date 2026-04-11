@@ -1,3 +1,7 @@
+---
+description: "Working design draft for line-count and token-budget checks in `docgarden`; read when designing context-efficiency limits, default budgets, or rules that keep agent-facing Markdown small and cheap to load."
+---
+
 # Line and Token Limits
 
 ## Purpose
