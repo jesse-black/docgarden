@@ -7,8 +7,6 @@
 - `docs/TOOLS.md` – Brief guide to tooling available to agents in this environment. *Use for environment capabilities and local tool discovery.*
 - `docs/IDEAS.md` – Backlog of future `docgarden` rule ideas and repository-knowledge checks that are intentionally not committed ExecPlan scope yet. *Use for plausible next rule families that are not yet scheduled work.*
 - `docs/PLANS.md` – Execution plan authoring and maintenance rules. *Use when creating, updating, or completing ExecPlans in `docs/exec-plans/`.*
-- `docs/EXECPLAN_PERSONAS.md` – Shared operating contract for the planner, generator, evaluator, and orchestrator ExecPlan skills. *Use when deciding who may rewrite an active plan, what breadcrumbs implementation must leave behind, how review findings are handled, and who owns closeout.*
-- `.agents/skills/README.md` – Index of repository-local skills and likely request aliases. *Use when a task sounds like a specialized workflow and you need to discover the matching local skill.*
 - `src/` – Rust code for the `docgarden` linter. *Use for implementation details once the relevant repository-knowledge doc has identified the area to change.*
 
 ## Documentation Guidance
