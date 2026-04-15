@@ -5,7 +5,6 @@
 - `docs/` – Repository knowledge system of record, including product documentation, execution plans, tool guidance, and supporting references.
 - `docs/PRODUCT.md` – Product overview for `docgarden`, focused on the agentic-engineering and repository-knowledge use case. *Use for product intent, target users, core workflows, and non-goals.*
 - `docs/TOOLS.md` – Brief guide to tooling available to agents in this environment. *Use for environment capabilities and local tool discovery.*
-- `docs/IDEAS.md` – Backlog of future `docgarden` rule ideas and repository-knowledge checks that are intentionally not committed ExecPlan scope yet. *Use for plausible next rule families that are not yet scheduled work.*
 - `docs/PLANS.md` – Execution plan authoring and maintenance rules. *Use when creating, updating, or completing ExecPlans in `docs/exec-plans/`.*
 - `src/` – Rust code for the `docgarden` linter. *Use for implementation details once the relevant repository-knowledge doc has identified the area to change.*
 
