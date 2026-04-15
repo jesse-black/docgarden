@@ -371,7 +371,9 @@ fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bo
         .add_line(None, pattern)
         .with_context(|| format!("invalid rule path pattern {pattern}"))?;
     let matcher = builder.build()?;
-    Ok(matcher.matched(relative_path, false).is_ignore())
+    Ok(matcher
+        .matched_path_or_any_parents(Path::new(relative_path), false)
+        .is_ignore())
 }
 
 fn default_respect_gitignore() -> bool {
@@ -389,6 +391,8 @@ fn normalize_extension(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
+
+    use crate::diagnostics::ignored_rules_for_path;
 
     use super::{BudgetLimit, Config, LocalReferenceStyle, RuleSeverity};
     use tempfile::TempDir;
@@ -519,6 +523,53 @@ path_style = "links"
             !config
                 .report_ambiguous_inline_code_for_path("README.md")
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn path_scoped_settings_match_descendants_of_directory_patterns() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(repository_root.join("docs/references")).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "docs/references"
+disable = ["unresolved-local-path"]
+
+[[rules]]
+path = "docs/references"
+enable = ["ambiguous-inline-code"]
+
+[[rules]]
+path = "docs/references"
+path_style = "links"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(
+            ignored_rules_for_path(
+                &config.repository_root,
+                &config.per_file_ignores,
+                "docs/references/source.md",
+            )
+            .unwrap(),
+            ["unresolved-local-path".to_string()].into_iter().collect()
+        );
+        assert!(
+            config
+                .report_ambiguous_inline_code_for_path("docs/references/source.md")
+                .unwrap()
+        );
+        assert_eq!(
+            config
+                .local_reference_style_for_path("docs/references/source.md")
+                .unwrap(),
+            LocalReferenceStyle::Links
         );
     }
 
