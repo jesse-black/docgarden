@@ -1,4 +1,0 @@
-interface:
-  display_name: "ExecPlan Orchestrator"
-  short_description: "Coordinate ExecPlan lifecycle and closeout"
-  default_prompt: "Use $orchestrator-execplan with required sub-skills $planner-execplan, $generator-execplan, and $evaluator-execplan. You may spawn sub-agents for clean-room evaluation. Run planner, then generator, then a clean-room evaluator review before orchestrator closeout."
