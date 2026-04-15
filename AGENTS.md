@@ -15,7 +15,7 @@
 - In this repository, live repository-local path mentions in prose should normally use backticked repo-relative paths such as `docs/PLANS.md`. Keep Markdown links for external destinations or for local references whose label adds meaning beyond repeating the path.
 - When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
 - Keep live repository references in normal prose only when they are intended to resolve and be linted.
-- After updating documentation, run `cargo run -- lint <changed-files> --color never` from the repository root before finishing so hypothetical examples and stale references are caught locally during repo dogfooding. Use `cargo run -- fix <targets> --color never` only when you want the tool to apply safe rewrites.
+- After updating documentation, run `cargo run -- lint <changed-files>` from the repository root before finishing so hypothetical examples and stale references are caught locally during repo dogfooding. Use `cargo run -- fix <targets>` only when you want the tool to apply safe rewrites.
 
 ## Rust Workflow
 - Run `cargo xtask validate`.
