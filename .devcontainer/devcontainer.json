@@ -20,6 +20,7 @@
 				"openai.chatgpt",
 				"redhat.vscode-yaml",
 				"ms-azuretools.vscode-containers",
+				"anthropic.claude-code",
 				"jnoortheen.nix-ide",
 				"codesmith.markdown-inline-editor-vscode",
 				"yzhang.markdown-all-in-one",
