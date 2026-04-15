@@ -71,7 +71,10 @@ pub fn ignored_rules_for_path(
             .add_line(None, pattern)
             .with_context(|| format!("invalid ignored-rule pattern {pattern}"))?;
         let matcher = builder.build()?;
-        if matcher.matched(relative_path, false).is_ignore() {
+        if matcher
+            .matched_path_or_any_parents(Path::new(relative_path), false)
+            .is_ignore()
+        {
             for entry in entries {
                 ignored.insert(entry.clone());
             }
@@ -163,6 +166,21 @@ mod tests {
         let ignored = ignored_rules_for_path(Path::new("/tmp/repo"), &rules, "README.md").unwrap();
 
         assert!(ignored.is_empty());
+    }
+
+    #[test]
+    fn ignored_rules_match_descendants_of_directory_patterns() {
+        let mut rules = BTreeMap::new();
+        rules.insert(
+            "docs/references".to_string(),
+            vec!["unresolved-local-path".to_string()],
+        );
+
+        let ignored =
+            ignored_rules_for_path(Path::new("/tmp/repo"), &rules, "docs/references/source.md")
+                .unwrap();
+
+        assert!(ignored.contains("unresolved-local-path"));
     }
 
     #[test]

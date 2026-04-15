@@ -248,6 +248,37 @@ reason = "Imported references may contain source-derived paths."
 }
 
 #[test]
+fn rule_application_directory_path_matches_descendants_without_glob_suffix() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs/references")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "docs/references"
+disable = ["unresolved-local-path"]
+reason = "Imported references may contain source-derived paths."
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/references/source.md"),
+        "[Missing](missing.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "[Missing](missing.md)\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-local-path").count(1))
+        .stdout(predicate::str::contains("README.md"))
+        .stdout(predicate::str::contains("docs/references/source.md").not());
+}
+
+#[test]
 fn rule_application_path_disable_suppresses_style_but_not_unresolved_paths() {
     let temp = tempdir().unwrap();
     let root = temp.path();
