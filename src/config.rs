@@ -9,6 +9,21 @@ use serde::Deserialize;
 use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special_filenames};
 use crate::diagnostics::Severity;
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FrontmatterFieldConfig {
+    pub max_chars: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FrontmatterRuleConfig {
+    #[serde(default)]
+    pub required: Vec<String>,
+    #[serde(default)]
+    pub fields: BTreeMap<String, FrontmatterFieldConfig>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum LocalReferenceStyle {
@@ -44,6 +59,8 @@ pub struct FileConfig {
 pub struct RuleConfig {
     pub path: String,
     #[serde(default)]
+    pub exclude: Vec<String>,
+    #[serde(default)]
     pub disable: Option<Vec<String>>,
     #[serde(default)]
     pub enable: Option<Vec<String>>,
@@ -57,6 +74,8 @@ pub struct RuleConfig {
     pub severity: Option<RuleSeverity>,
     #[serde(default)]
     pub reason: Option<String>,
+    #[serde(default)]
+    pub frontmatter: Option<FrontmatterRuleConfig>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -75,26 +94,55 @@ impl From<RuleSeverity> for Severity {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrontmatterRule {
+    pub pattern: String,
+    pub exclude: Vec<String>,
+    pub required: Vec<String>,
+    pub field_max_chars: BTreeMap<String, usize>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct EffectiveFrontmatterPolicy {
+    pub required: Vec<String>,
+    pub field_max_chars: BTreeMap<String, usize>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub repository_root: PathBuf,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
-    pub per_file_ignores: BTreeMap<String, Vec<String>>,
+    pub per_file_ignores: Vec<PerFileIgnoreEntry>,
     pub local_reference_style_overrides: Vec<LocalReferenceStyleOverride>,
     pub local_reference_style: LocalReferenceStyle,
     pub known_extensions: BTreeSet<String>,
     pub special_filenames: BTreeSet<String>,
     pub config_path: Option<PathBuf>,
     pub config_was_explicit: bool,
-    pub ambiguous_inline_code_patterns: Vec<String>,
+    pub ambiguous_inline_code_patterns: Vec<AmbiguousCodeEntry>,
     pub context_budget_rules: Vec<ContextBudgetRule>,
+    pub frontmatter_rules: Vec<FrontmatterRule>,
     pub respect_gitignore: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PerFileIgnoreEntry {
+    pub pattern: String,
+    pub exclude: Vec<String>,
+    pub rules: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AmbiguousCodeEntry {
+    pub pattern: String,
+    pub exclude: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LocalReferenceStyleOverride {
     pub pattern: String,
+    pub exclude: Vec<String>,
     pub style: LocalReferenceStyle,
 }
 
@@ -107,6 +155,7 @@ pub struct BudgetLimit {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextBudgetRule {
     pub pattern: String,
+    pub exclude: Vec<String>,
     pub max_tokens: Option<BudgetLimit>,
     pub max_lines: Option<BudgetLimit>,
     pub disable: BTreeSet<String>,
@@ -192,8 +241,24 @@ impl Config {
             config_was_explicit,
             ambiguous_inline_code_patterns: rule_applications.ambiguous_inline_code_patterns,
             context_budget_rules: rule_applications.context_budget_rules,
+            frontmatter_rules: rule_applications.frontmatter_rules,
             respect_gitignore: parsed.respect_gitignore,
         })
+    }
+
+    pub fn ignored_rules_for_path(&self, relative_path: &str) -> Result<BTreeSet<String>> {
+        let mut ignored = BTreeSet::new();
+        for entry in &self.per_file_ignores {
+            if rule_entry_matches(
+                &self.repository_root,
+                &entry.pattern,
+                &entry.exclude,
+                relative_path,
+            )? {
+                ignored.extend(entry.rules.iter().cloned());
+            }
+        }
+        Ok(ignored)
     }
 
     pub fn local_reference_style_for_path(
@@ -202,7 +267,12 @@ impl Config {
     ) -> Result<LocalReferenceStyle> {
         let mut style = self.local_reference_style;
         for entry in &self.local_reference_style_overrides {
-            if pattern_matches(&self.repository_root, &entry.pattern, relative_path)? {
+            if rule_entry_matches(
+                &self.repository_root,
+                &entry.pattern,
+                &entry.exclude,
+                relative_path,
+            )? {
                 style = entry.style;
             }
         }
@@ -210,8 +280,13 @@ impl Config {
     }
 
     pub fn report_ambiguous_inline_code_for_path(&self, relative_path: &str) -> Result<bool> {
-        for pattern in &self.ambiguous_inline_code_patterns {
-            if pattern_matches(&self.repository_root, pattern, relative_path)? {
+        for entry in &self.ambiguous_inline_code_patterns {
+            if rule_entry_matches(
+                &self.repository_root,
+                &entry.pattern,
+                &entry.exclude,
+                relative_path,
+            )? {
                 return Ok(true);
             }
         }
@@ -221,7 +296,12 @@ impl Config {
     pub fn context_budgets_for_path(&self, relative_path: &str) -> Result<EffectiveContextBudgets> {
         let mut budgets = EffectiveContextBudgets::default();
         for entry in &self.context_budget_rules {
-            if !pattern_matches(&self.repository_root, &entry.pattern, relative_path)? {
+            if !rule_entry_matches(
+                &self.repository_root,
+                &entry.pattern,
+                &entry.exclude,
+                relative_path,
+            )? {
                 continue;
             }
             if entry.disable.contains("max_tokens") {
@@ -239,14 +319,39 @@ impl Config {
         }
         Ok(budgets)
     }
+
+    pub fn frontmatter_policy_for_path(
+        &self,
+        relative_path: &str,
+    ) -> Result<EffectiveFrontmatterPolicy> {
+        let mut policy = EffectiveFrontmatterPolicy::default();
+        for rule in &self.frontmatter_rules {
+            if !rule_entry_matches(
+                &self.repository_root,
+                &rule.pattern,
+                &rule.exclude,
+                relative_path,
+            )? {
+                continue;
+            }
+            if !rule.required.is_empty() {
+                policy.required = rule.required.clone();
+            }
+            for (field, max_chars) in &rule.field_max_chars {
+                policy.field_max_chars.insert(field.clone(), *max_chars);
+            }
+        }
+        Ok(policy)
+    }
 }
 
 #[derive(Default)]
 struct RuleApplications {
-    per_file_ignores: BTreeMap<String, Vec<String>>,
+    per_file_ignores: Vec<PerFileIgnoreEntry>,
     local_reference_style_overrides: Vec<LocalReferenceStyleOverride>,
-    ambiguous_inline_code_patterns: Vec<String>,
+    ambiguous_inline_code_patterns: Vec<AmbiguousCodeEntry>,
     context_budget_rules: Vec<ContextBudgetRule>,
+    frontmatter_rules: Vec<FrontmatterRule>,
 }
 
 fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
@@ -261,6 +366,7 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
             bail!("rule reason must not be empty");
         }
         let pattern = rule.path;
+        let exclude = rule.exclude;
         let disabled_rules = rule.disable.unwrap_or_default();
         if !disabled_rules.is_empty() {
             validate_rule_list("disable", &disabled_rules, is_known_rule)?;
@@ -270,11 +376,11 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
                 .cloned()
                 .collect();
             if !global_ignored_rules.is_empty() {
-                applications
-                    .per_file_ignores
-                    .entry(pattern.clone())
-                    .or_default()
-                    .extend(global_ignored_rules);
+                applications.per_file_ignores.push(PerFileIgnoreEntry {
+                    pattern: pattern.clone(),
+                    exclude: exclude.clone(),
+                    rules: global_ignored_rules,
+                });
             }
         }
         if let Some(enabled_rules) = rule.enable {
@@ -285,7 +391,10 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
             {
                 applications
                     .ambiguous_inline_code_patterns
-                    .push(pattern.clone());
+                    .push(AmbiguousCodeEntry {
+                        pattern: pattern.clone(),
+                        exclude: exclude.clone(),
+                    });
             }
         }
         if let Some(style) = rule.path_style {
@@ -293,6 +402,7 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
                 .local_reference_style_overrides
                 .push(LocalReferenceStyleOverride {
                     pattern: pattern.clone(),
+                    exclude: exclude.clone(),
                     style,
                 });
         }
@@ -312,10 +422,35 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
                 .collect();
             if max_tokens.is_some() || max_lines.is_some() || !disabled_budget_rules.is_empty() {
                 applications.context_budget_rules.push(ContextBudgetRule {
-                    pattern,
+                    pattern: pattern.clone(),
+                    exclude: exclude.clone(),
                     max_tokens,
                     max_lines,
                     disable: disabled_budget_rules,
+                });
+            }
+        }
+        if let Some(fm) = rule.frontmatter {
+            let mut field_max_chars = BTreeMap::new();
+            for (field_name, field_cfg) in fm.fields {
+                if field_name.trim().is_empty() {
+                    bail!("frontmatter field name must not be empty");
+                }
+                if let Some(max_chars) = field_cfg.max_chars {
+                    if max_chars == 0 {
+                        bail!(
+                            "frontmatter field `{field_name}` max_chars must be greater than zero"
+                        );
+                    }
+                    field_max_chars.insert(field_name, max_chars);
+                }
+            }
+            if !fm.required.is_empty() || !field_max_chars.is_empty() {
+                applications.frontmatter_rules.push(FrontmatterRule {
+                    pattern,
+                    exclude,
+                    required: fm.required,
+                    field_max_chars,
                 });
             }
         }
@@ -376,6 +511,26 @@ fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bo
         .is_ignore())
 }
 
+/// Returns `true` when `relative_path` matches `pattern` and does not match
+/// any of the `exclude` patterns.  This is the single shared implementation
+/// of the per-rule-entry targeting logic used by every rule family.
+fn rule_entry_matches(
+    root: &Path,
+    pattern: &str,
+    exclude: &[String],
+    relative_path: &str,
+) -> Result<bool> {
+    if !pattern_matches(root, pattern, relative_path)? {
+        return Ok(false);
+    }
+    for excl in exclude {
+        if pattern_matches(root, excl, relative_path)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn default_respect_gitignore() -> bool {
     true
 }
@@ -391,8 +546,6 @@ fn normalize_extension(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
-
-    use crate::diagnostics::ignored_rules_for_path;
 
     use super::{BudgetLimit, Config, LocalReferenceStyle, RuleSeverity};
     use tempfile::TempDir;
@@ -454,8 +607,13 @@ disable = ["ambiguous-inline-code"]
         assert!(config.special_filenames.contains("Tiltfile"));
         assert!(!config.special_filenames.contains("LICENSE"));
         assert_eq!(
-            config.per_file_ignores.get("docs/generated/**").unwrap(),
-            &vec!["ambiguous-inline-code".to_string()]
+            config
+                .per_file_ignores
+                .iter()
+                .find(|e| e.pattern == "docs/generated/**")
+                .unwrap()
+                .rules,
+            vec!["ambiguous-inline-code".to_string()]
         );
     }
 
@@ -497,13 +655,16 @@ path_style = "links"
         let config = Config::load(&repository_root, None).unwrap();
 
         assert_eq!(
-            config.per_file_ignores.get("docs/references/**").unwrap(),
-            &vec!["unresolved-local-path".to_string()]
+            config
+                .per_file_ignores
+                .iter()
+                .find(|e| e.pattern == "docs/references/**")
+                .unwrap()
+                .rules,
+            vec!["unresolved-local-path".to_string()]
         );
-        assert_eq!(
-            config.ambiguous_inline_code_patterns,
-            vec!["docs/**".to_string()]
-        );
+        assert_eq!(config.ambiguous_inline_code_patterns.len(), 1);
+        assert_eq!(config.ambiguous_inline_code_patterns[0].pattern, "docs/**");
         assert_eq!(
             config.local_reference_style_for_path("README.md").unwrap(),
             LocalReferenceStyle::Links
@@ -552,12 +713,9 @@ path_style = "links"
         let config = Config::load(&repository_root, None).unwrap();
 
         assert_eq!(
-            ignored_rules_for_path(
-                &config.repository_root,
-                &config.per_file_ignores,
-                "docs/references/source.md",
-            )
-            .unwrap(),
+            config
+                .ignored_rules_for_path("docs/references/source.md")
+                .unwrap(),
             ["unresolved-local-path".to_string()].into_iter().collect()
         );
         assert!(
@@ -782,6 +940,179 @@ enabled = false
             .unwrap_err()
             .to_string();
         assert!(error.contains("failed to parse"));
+    }
+
+    #[test]
+    fn frontmatter_rules_parse_and_lower_correctly() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 1024
+
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(config.frontmatter_rules.len(), 2);
+        assert_eq!(config.frontmatter_rules[0].pattern, "**/*.md");
+        assert!(config.frontmatter_rules[0].exclude.is_empty());
+        assert!(config.frontmatter_rules[0].required.is_empty());
+        assert_eq!(
+            config.frontmatter_rules[0]
+                .field_max_chars
+                .get("description"),
+            Some(&1024)
+        );
+        assert_eq!(config.frontmatter_rules[1].pattern, "**/*.md");
+        assert_eq!(config.frontmatter_rules[1].exclude, vec!["AGENTS.md"]);
+        assert_eq!(
+            config.frontmatter_rules[1].required,
+            vec!["description".to_string()]
+        );
+        assert!(config.frontmatter_rules[1].field_max_chars.is_empty());
+    }
+
+    #[test]
+    fn frontmatter_policy_merges_multiple_matching_rules_last_wins() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 1024
+
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        // Regular .md file: both rules match -> gets both required and max_chars
+        let policy = config.frontmatter_policy_for_path("docs/guide.md").unwrap();
+        assert_eq!(policy.required, vec!["description".to_string()]);
+        assert_eq!(policy.field_max_chars.get("description"), Some(&1024));
+
+        // AGENTS.md: second rule excludes it -> only gets max_chars, not required
+        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md").unwrap();
+        assert_eq!(agents_policy.required, Vec::<String>::new());
+        assert_eq!(
+            agents_policy.field_max_chars.get("description"),
+            Some(&1024)
+        );
+    }
+
+    #[test]
+    fn frontmatter_rules_reject_unknown_fields() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("docgarden.toml");
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter]
+schema = "agent-skill"
+"#,
+        )
+        .unwrap();
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+min_chars = 10
+"#,
+        )
+        .unwrap();
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+    }
+
+    #[test]
+    fn frontmatter_rules_reject_invalid_max_chars() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("docgarden.toml");
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 0
+"#,
+        )
+        .unwrap();
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("max_chars must be greater than zero"),
+            "got: {error}"
+        );
+    }
+
+    #[test]
+    fn frontmatter_duplicate_field_names_in_single_entry_are_rejected_by_toml() {
+        // TOML itself rejects duplicate keys within the same table, so duplicate
+        // [rules.frontmatter.fields.description] entries under one [[rules]] block
+        // produce a parse error before our validation runs.
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("docgarden.toml");
+
+        fs::write(
+            &config_path,
+            "[[rules]]\npath = \"**/*.md\"\n\n[rules.frontmatter.fields.description]\nmax_chars = 512\n\n[rules.frontmatter.fields.description]\nmax_chars = 1024\n",
+        )
+        .unwrap();
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"), "got: {error}");
     }
 
     #[test]

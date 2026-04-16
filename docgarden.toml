@@ -3,6 +3,19 @@ exclude = [
 ]
 
 [[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 1024
+
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md", "README.md"]
+
+[rules.frontmatter]
+required = ["description"]
+
+[[rules]]
 path = "AGENTS.md"
 max_lines = 100
 max_tokens = 1000

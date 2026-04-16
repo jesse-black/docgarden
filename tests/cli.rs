@@ -570,3 +570,210 @@ max_lines = 1
     let rewritten = fs::read_to_string(readme).unwrap();
     assert_eq!(rewritten, original);
 }
+
+#[test]
+fn frontmatter_missing_required_field_is_reported() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    // File with no frontmatter at all.
+    fs::write(root.join("README.md"), "# Hello\n\nBody text.\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "README.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("frontmatter-field-missing"))
+        .stdout(predicate::str::contains("`description`"))
+        .stdout(predicate::str::contains("fixable").not());
+}
+
+#[test]
+fn frontmatter_present_but_missing_required_field_is_reported() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    // File with frontmatter but missing the required field.
+    fs::write(
+        root.join("guide.md"),
+        "---\ntitle: My Guide\n---\n\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("frontmatter-field-missing"))
+        .stdout(predicate::str::contains("`description`"));
+}
+
+#[test]
+fn frontmatter_agents_md_excluded_from_required_field() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    // AGENTS.md has no frontmatter – should not trigger missing-field diagnostic.
+    fs::write(root.join("AGENTS.md"), "# Agent Instructions\n\nBody.\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "AGENTS.md", "--color", "never"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn frontmatter_non_md_files_unaffected_by_frontmatter_rules() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    // Frontmatter rules target only **/*.md.  A .txt file should not trigger them.
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+include = ["*.md", "*.txt"]
+
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("notes.txt"), "Plain text file.\n").unwrap();
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: A guide.\n---\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "notes.txt", "guide.md", "--color", "never"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn frontmatter_malformed_block_reported_distinctly_from_missing_field() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+exclude = ["AGENTS.md"]
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    // File with a leading --- but no closing ---.
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: A guide.\n\n# Body starts without closing delimiter\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("frontmatter-malformed"))
+        .stdout(predicate::str::contains("frontmatter-field-missing").not());
+}
+
+#[test]
+fn frontmatter_max_chars_enforced_for_present_field() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 20
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: This description is definitely longer than twenty characters.\n---\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("frontmatter-field-max-chars"))
+        .stdout(predicate::str::contains("max_chars = 20"));
+}
+
+#[test]
+fn frontmatter_max_chars_not_triggered_when_field_absent() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 20
+"#,
+    )
+    .unwrap();
+    // File has no frontmatter at all – max_chars should not fire.
+    fs::write(root.join("guide.md"), "# Guide\n\nBody.\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .success();
+}
