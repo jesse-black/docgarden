@@ -21,12 +21,18 @@ jobs:
         with:
           tool: covgate@0.1.4-rc.0
       - name: Format
+        id: format
         run: cargo fmt --check
       - name: Clippy
+        id: clippy
+        if: ${{ always() }}
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Coverage
+        id: coverage
+        if: ${{ always() }}
         run: cargo llvm-cov --json --output-path target/coverage.json
       - name: Covgate
+        if: ${{ always() && steps.coverage.outcome == 'success' }}
         run: covgate check target/coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 
   dependency-hygiene:
