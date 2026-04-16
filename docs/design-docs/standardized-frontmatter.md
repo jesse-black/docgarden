@@ -37,6 +37,89 @@ For first-party repository docs, `description` is the current default requiremen
 
 The decision on requiring `last_reviewed` for first-party repository docs remains pending. It may be valuable for freshness-sensitive scopes, but this draft does not yet require it repository-wide.
 
+## Parser Direction
+
+`docgarden` should not depend on a general-purpose YAML stack just to support frontmatter.
+
+The product needs a small, deterministic parser that supports two usage modes:
+
+- linting, where the full document may already be loaded in memory
+- discovery or matching workflows, where `docgarden` should be able to read only the file prefix needed to parse frontmatter and avoid loading the Markdown body
+
+The current direction should be one shared frontmatter parser with two entry points over the same logic:
+
+- a streaming or buffered-reader entry point that reads only enough bytes to parse the frontmatter block or determine that no valid frontmatter block exists
+- an in-memory entry point that operates on a full document string without reparsing through a separate implementation
+
+Do not build separate "linter parser" and "matcher parser" implementations. That would create drift in accepted syntax, malformed-data handling, and field normalization. Discovery and linting should agree on what counts as valid frontmatter.
+
+The parser should be strict enough that the linter can report malformed frontmatter which would otherwise make discovery results unreliable.
+
+## Minimal Supported YAML Subset
+
+The first implementation should support only the subset needed for repository frontmatter and frontmatter-driven discovery.
+
+Treat frontmatter as present only when all of these are true:
+
+- the file begins with a line that is exactly `---`
+- a closing line that is exactly `---` appears before any non-frontmatter body content
+- the content between those delimiters parses under the supported subset below
+
+Any later `---` in the body is ordinary Markdown content, not frontmatter.
+
+### Supported structure
+
+- top-level mapping only
+- nested mappings for field groups such as `metadata`
+- scalar values:
+  - plain strings on a single line
+  - booleans `true` and `false`
+  - integers in base 10
+  - dates in ISO `YYYY-MM-DD` form, initially treated as strings unless or until a schema opts into stricter date typing
+- sequences introduced with `- `, primarily for string lists
+
+### Explicitly unsupported in v1
+
+- anchors and aliases
+- tags
+- block scalars such as `|` and `>`
+- flow-style collections such as `[a, b]` or `{a: b}`
+- multi-document YAML
+- duplicate keys in the same mapping
+- comments as semantically meaningful content
+
+Unsupported constructs should make the frontmatter invalid rather than falling back to partial parsing.
+
+### Additional constraints
+
+- Keys are case-sensitive.
+- For `docgarden`-owned schemas, prefer `snake_case` keys.
+- A duplicate key within the same mapping is invalid.
+- The parser should preserve field order only if needed for diagnostics or display; semantic interpretation should not depend on order.
+- The parser should return byte offsets or line ranges for malformed input when practical so lint diagnostics can point at the broken frontmatter.
+
+## Malformed Frontmatter Handling
+
+The parser should distinguish among these cases:
+
+- no frontmatter present
+- valid supported frontmatter present
+- malformed or unsupported frontmatter present at the start of the file
+
+That distinction matters because discovery commands should ignore files without frontmatter, while linting should be able to report malformed leading frontmatter that would break discovery or schema validation.
+
+The initial linting model should treat malformed leading frontmatter as its own parse failure class rather than quietly converting it into "missing required fields." A missing field and a syntactically broken frontmatter block are different problems and should remain distinguishable.
+
+## Streaming Behavior
+
+For discovery-oriented commands such as `list`, `tree`, and `match`, `docgarden` should parse frontmatter from the beginning of the file and stop reading once it has:
+
+- parsed a valid closing frontmatter delimiter
+- determined that the file does not begin with frontmatter
+- or encountered malformed leading frontmatter
+
+This keeps discovery fast and aligned with the broader progressive-disclosure goal: read metadata first, load body text only when a later workflow actually needs it.
+
 ## References
 
 Use the `references` schema for externally sourced material such as local captures, summaries, or source-adjacent notes derived from web links.
@@ -91,6 +174,7 @@ Use the `skills` schema for files that implement the Agent Skills specification.
 - This draft treats `skills` as an external schema based on the Agent Skills specification rather than a `docgarden`-owned vocabulary.
 - External-schema fields such as `allowed-tools` or `applyTo` should not be generalized into unrelated scopes without an explicit design decision.
 - Required-field linting should be driven by explicit scopes, not by a one-size-fits-all Markdown policy.
+- The frontmatter parser should be purpose-built for this supported subset rather than exposing full YAML compatibility by default.
 
 ## Open Questions
 

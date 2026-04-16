@@ -46,6 +46,7 @@ Store ExecPlans in:
 
 ## Open Questions
 - <unknown that may affect implementation>
+- None yet
 
 ## Steps
 - [ ] <concrete step>
@@ -57,9 +58,11 @@ Store ExecPlans in:
 
 ## Discoveries
 - <append-only discovery>
+- None yet
 
 ## Review
-- <append-only review note>
+- [ ] <append-only review note>
+- None yet
 ```
 
 ## Section Guidance

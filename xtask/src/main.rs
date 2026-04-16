@@ -27,8 +27,6 @@ fn validate() -> Result<()> {
         ],
     )?;
     run("covgate", &["check", "target/coverage.json"])?;
-    run("cargo-machete", &["."])?;
-    run("cargo-deny", &["check"])?;
     Ok(())
 }
 

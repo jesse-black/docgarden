@@ -18,5 +18,6 @@
 - After updating documentation, run `cargo run -- lint <changed-files>` from the repository root before finishing so hypothetical examples and stale references are caught locally during repo dogfooding. Use `cargo run -- fix <targets>` only when you want the tool to apply safe rewrites.
 
 ## Rust Workflow
-- Run `cargo xtask validate`.
+- During implementation, run targeted test commands (`cargo test <filter>`, `cargo test --test cli`) rather than the full validate suite.
+- Run `cargo xtask validate` only as a final gate before handing off for review. It runs fmt, clippy, tests, and coverage; `cargo-deny` and `cargo-machete` are left to CI.
 - Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.

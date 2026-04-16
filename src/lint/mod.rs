@@ -6,7 +6,7 @@ use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
 use crate::config::{Config, LocalReferenceStyle};
-use crate::diagnostics::{Diagnostic, FixSummary, ignored_rules_for_path};
+use crate::diagnostics::{Diagnostic, FixSummary};
 
 mod references;
 mod reporting;
@@ -51,11 +51,7 @@ struct WalkState<'a> {
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
     let relative_path = relative_path(&config.repository_root, path)?;
-    let ignored_rules = ignored_rules_for_path(
-        &config.repository_root,
-        &config.per_file_ignores,
-        &relative_path,
-    )?;
+    let ignored_rules = config.ignored_rules_for_path(&relative_path)?;
     let policy = FilePolicy {
         local_reference_style: config.local_reference_style_for_path(&relative_path)?,
         report_ambiguous_inline_code: config
@@ -82,6 +78,15 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         source: &source,
     };
     emit_findings(&mut state, rules::file::evaluate_file_rules(&file_context)?);
+    let fm_context = rules::frontmatter::FrontmatterRuleContext {
+        config,
+        file: &relative_path,
+        source: &source,
+    };
+    emit_findings(
+        &mut state,
+        rules::frontmatter::evaluate_frontmatter_rules(&fm_context)?,
+    );
     walk_node(config, policy, &relative_path, &tree, &mut state)?;
 
     if mode == Mode::Fix && !edits.is_empty() {
@@ -232,7 +237,6 @@ pub fn summarize(diagnostics: &[Diagnostic]) -> FixSummary {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     use crate::config::{Config, LocalReferenceStyle};
@@ -247,7 +251,7 @@ mod tests {
             repository_root: PathBuf::from("/tmp/repo"),
             include: Vec::new(),
             exclude: Vec::new(),
-            per_file_ignores: BTreeMap::new(),
+            per_file_ignores: Vec::new(),
             local_reference_style_overrides: Vec::new(),
             local_reference_style: LocalReferenceStyle::Backticks,
             known_extensions: default_extensions(),
@@ -256,6 +260,7 @@ mod tests {
             config_was_explicit: false,
             ambiguous_inline_code_patterns: Vec::new(),
             context_budget_rules: Vec::new(),
+            frontmatter_rules: Vec::new(),
             respect_gitignore: true,
         }
     }
