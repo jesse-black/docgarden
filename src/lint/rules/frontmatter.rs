@@ -172,8 +172,7 @@ fn parse_block_value(
     // Find the first non-empty, non-comment child line to determine indent.
     let child_indent = {
         let mut ci = None;
-        for j in start..lines.len() {
-            let (_, cl) = lines[j];
+        for &(_, cl) in lines.iter().skip(start) {
             let ct = cl.trim();
             if ct.is_empty() || ct.starts_with('#') {
                 continue;
@@ -198,8 +197,7 @@ fn parse_block_value(
     let mut child_lines: Vec<(usize, &str)> = Vec::new();
     let mut consumed = 0;
 
-    for j in start..lines.len() {
-        let (cln, cl) = lines[j];
+    for &(cln, cl) in lines.iter().skip(start) {
         let ct = cl.trim();
         if ct.is_empty() || ct.starts_with('#') {
             consumed += 1;
@@ -424,23 +422,23 @@ pub(crate) fn evaluate_frontmatter_rules<'a>(
             }
             // Check max_chars for fields that are present.
             for (field, max_chars) in &policy.field_max_chars {
-                if let Some(char_count) = fm.scalar_char_count(field) {
-                    if char_count > *max_chars {
-                        findings.push(Finding {
-                            payload: DiagnosticPayload {
-                                file: context.file,
-                                position: None,
-                                rule: "frontmatter-field-max-chars",
-                                message: format!(
-                                    "Frontmatter field `{field}` has {char_count} characters, \
-                                     which exceeds configured max_chars = {max_chars}."
-                                ),
-                                fixable: false,
-                                severity: Severity::Error,
-                            },
-                            edit: None,
-                        });
-                    }
+                if let Some(char_count) = fm.scalar_char_count(field)
+                    && char_count > *max_chars
+                {
+                    findings.push(Finding {
+                        payload: DiagnosticPayload {
+                            file: context.file,
+                            position: None,
+                            rule: "frontmatter-field-max-chars",
+                            message: format!(
+                                "Frontmatter field `{field}` has {char_count} characters, \
+                                 which exceeds configured max_chars = {max_chars}."
+                            ),
+                            fixable: false,
+                            severity: Severity::Error,
+                        },
+                        edit: None,
+                    });
                 }
             }
         }
