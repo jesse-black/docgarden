@@ -139,30 +139,6 @@ The direction is that rule behavior and rule options share the same targeting la
 
 For context-budget limits, `severity` is entry-level. If an entry includes both `max_tokens` and `max_lines`, the same severity applies to both diagnostics. Repositories that want different severities for the same path can use separate `[[rules]]` entries with the same `path`.
 
-## Repository-Wide Defaults
-
-Rule-application entries are not a complete replacement for repo-wide defaults.
-
-Some policy choices are foundational enough that repositories should be able to state them once at the top level instead of expressing them indirectly through broad rule entries. A local path style default is the clearest example: repositories may want to say "this is a backticks repo" or "this is a links repo" as a global convention, then override that default only for selected paths.
-
-The current design direction should therefore be layered:
-
-- repository-wide defaults establish the main posture for the repo
-- rule-application entries refine or override behavior for narrower scopes
-
-More specific path patterns should win over the repo-wide default when they conflict.
-
-For the path-style tradeoffs behind that example, see `docs/design-docs/path-style-policy.md`.
-
-A conceptual example:
-
-    path_style = "backticks"
-
-    [[rules]]
-    path = "docs/references/**"
-    disable = ["prefer-backticks-for-local-paths", "prefer-links-for-local-paths"]
-    reason = "Imported source-derived docs are not normalized for repo-authored style."
-
 ## `reason` For Exceptions
 
 Exception-oriented configuration should likely support a `reason` field.
@@ -247,11 +223,3 @@ In this repository, `docs/references/` is one example. Another repository might 
 
 The first useful configuration may be a narrow imported-reference path setting or path-targeted rules.
 
-## Open Questions
-
-- Should the skills directory key be named `skills_dir`, `skills_root`, or something else?
-- What is the first feature that truly needs user-defined groups beyond explicit path patterns?
-- Should rule-application entries continue to require `path` as the only public target field?
-- Should rule-entry `exclude` accept only repository-relative path patterns, or should it eventually support named targets if user-defined groups are added?
-- Should `reason` be optional but recommended for disable or override entries, or required for any configuration that relaxes enforcement?
-- Should broader discovery configuration use named groups, explicit roots, or path patterns?
