@@ -646,10 +646,7 @@ mod tests {
                     fm.get("title"),
                     Some(&YamlValue::Scalar("Hello".to_string()))
                 );
-                assert_eq!(
-                    fm.get("published"),
-                    Some(&YamlValue::Scalar(String::new()))
-                );
+                assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
             }
             other => panic!("expected Valid, got {other:?}"),
         }
@@ -661,10 +658,7 @@ mod tests {
         let src = "---\npublished:\nauthor: Alice\n---\n";
         match parse_from_str(src) {
             FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("published"),
-                    Some(&YamlValue::Scalar(String::new()))
-                );
+                assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
                 assert_eq!(
                     fm.get("author"),
                     Some(&YamlValue::Scalar("Alice".to_string()))
