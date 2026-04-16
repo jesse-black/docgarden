@@ -25,8 +25,15 @@
         if builtins.pathExists localModule
         then [ localModule ]
         else [ ];
-        
-      rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
+
+      rustToolchain = pkgs.rust-bin.stable."1.95.0".default.override {
+        extensions = [
+          "clippy"
+          "llvm-tools-preview"
+          "rust-src"
+          "rustfmt"
+        ];
+      };
     in {
       homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;

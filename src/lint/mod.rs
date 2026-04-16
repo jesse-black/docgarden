@@ -195,7 +195,7 @@ pub(crate) fn edit_from_position(
 
 fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
     let mut sorted: Vec<_> = edits.iter().collect();
-    sorted.sort_by(|left, right| right.start_offset.cmp(&left.start_offset));
+    sorted.sort_by_key(|edit| std::cmp::Reverse(edit.start_offset));
     let mut rewritten = source.to_string();
 
     for window in sorted.windows(2) {
