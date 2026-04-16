@@ -26,12 +26,7 @@
         then [ localModule ]
         else [ ];
         
-      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [
-          "llvm-tools-preview"
-          "rust-src"
-        ];
-      };
+      rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
     in {
       homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
