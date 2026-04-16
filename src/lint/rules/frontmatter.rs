@@ -180,8 +180,8 @@ fn parse_block_value(
             }
             let indent = cl.len() - cl.trim_start().len();
             if indent == 0 {
-                // Next top-level line reached before any indented children.
-                return Err(parent_line);
+                // Next top-level line reached before any indented children: blank value.
+                return Ok((YamlValue::Scalar(String::new()), 0));
             }
             ci = Some(indent);
             break;
@@ -190,7 +190,8 @@ fn parse_block_value(
     };
 
     let Some(child_indent) = child_indent else {
-        return Err(parent_line);
+        // End of block with no children: blank value.
+        return Ok((YamlValue::Scalar(String::new()), 0));
     };
 
     // Collect child lines at exactly child_indent level.
@@ -630,6 +631,44 @@ mod tests {
         match parse_from_str(src) {
             FrontmatterParseResult::Valid(fm) => {
                 assert!(fm.fields.is_empty());
+            }
+            other => panic!("expected Valid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_blank_value_at_end_of_block() {
+        // key: with nothing following it and no more lines before closing ---
+        let src = "---\ntitle: Hello\npublished:\n---\n";
+        match parse_from_str(src) {
+            FrontmatterParseResult::Valid(fm) => {
+                assert_eq!(
+                    fm.get("title"),
+                    Some(&YamlValue::Scalar("Hello".to_string()))
+                );
+                assert_eq!(
+                    fm.get("published"),
+                    Some(&YamlValue::Scalar(String::new()))
+                );
+            }
+            other => panic!("expected Valid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_blank_value_followed_by_another_key() {
+        // key: with no value, followed immediately by another top-level key
+        let src = "---\npublished:\nauthor: Alice\n---\n";
+        match parse_from_str(src) {
+            FrontmatterParseResult::Valid(fm) => {
+                assert_eq!(
+                    fm.get("published"),
+                    Some(&YamlValue::Scalar(String::new()))
+                );
+                assert_eq!(
+                    fm.get("author"),
+                    Some(&YamlValue::Scalar("Alice".to_string()))
+                );
             }
             other => panic!("expected Valid, got {other:?}"),
         }
