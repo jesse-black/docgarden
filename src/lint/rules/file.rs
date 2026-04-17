@@ -14,11 +14,10 @@ pub(crate) struct FileRuleContext<'a> {
 }
 
 pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<Vec<Finding<'a>>> {
-    let _ = context.policy;
-    let budgets = context.config.context_budgets_for_path(context.file)?;
+    let _ = context.config;
     let mut findings = Vec::new();
 
-    if let Some(limit) = budgets.max_tokens {
+    if let Some(limit) = context.policy.max_tokens {
         let observed = count_tokens(context.source)?;
         if observed > limit.limit {
             findings.push(Finding {
@@ -38,7 +37,7 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
         }
     }
 
-    if let Some(limit) = budgets.max_lines {
+    if let Some(limit) = context.policy.max_lines {
         let observed = count_lines(context.source);
         if observed > limit.limit {
             findings.push(Finding {

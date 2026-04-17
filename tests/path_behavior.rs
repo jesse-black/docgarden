@@ -481,3 +481,86 @@ fn broken_link_in_readme_reports_once() {
             "Local repository link `[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)` does not resolve within the repository.",
         ));
 }
+
+#[test]
+fn disable_then_enable_restores_unresolved_backtick_path_diagnostics() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+enable = ["unresolved-backtick-path"]
+
+[[rules]]
+path = "**/*.md"
+disable = ["unresolved-backtick-path"]
+
+[[rules]]
+path = "docs/**"
+enable = ["unresolved-backtick-path"]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "See `docs/missing.md` for more.\n",
+    )
+    .unwrap();
+    fs::write(root.join("README.md"), "See `docs/missing.md` for more.\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        // docs/guide.md: enabled, disabled, re-enabled — should report
+        .stdout(predicate::str::contains("docs/guide.md"))
+        // README.md: enabled then disabled, no later re-enable — should be silent
+        .stdout(predicate::str::contains("README.md").not());
+}
+
+#[test]
+fn disable_then_enable_restores_prefer_links_diagnostics() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docs/real.md"), "# Real\n").unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+enable = ["prefer-links-for-local-paths"]
+
+[[rules]]
+path = "**/*.md"
+disable = ["prefer-links-for-local-paths"]
+
+[[rules]]
+path = "docs/**"
+enable = ["prefer-links-for-local-paths"]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "See `./real.md` for the current guide.\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "See `docs/real.md` for the current guide.\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        // docs/guide.md: enabled, disabled, re-enabled — should report
+        .stdout(predicate::str::contains("docs/guide.md"))
+        // README.md: enabled then disabled, no later re-enable — should be silent
+        .stdout(predicate::str::contains("README.md").not());
+}

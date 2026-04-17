@@ -24,13 +24,3 @@ max_tokens = 1000
 path = "SKILL.md"
 max_lines = 500
 max_tokens = 5000
-
-[[rules]]
-path = "docs/exec-plans/completed/**"
-disable = ["unresolved-link-path"]
-reason = "Completed ExecPlans are archival records and may preserve historical paths."
-
-[[rules]]
-path = "docs/references/**"
-disable = ["unresolved-link-path"]
-reason = "References are clippings of external sources and must remain untouched."

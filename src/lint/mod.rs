@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
-use crate::config::Config;
+use crate::config::{BudgetLimit, Config};
 use crate::diagnostics::{Diagnostic, FixSummary, Severity};
 
 mod references;
@@ -40,6 +40,8 @@ pub(crate) struct Finding<'a> {
 pub(crate) struct FilePolicy {
     pub(crate) unresolved_backtick_path_severity: Option<Severity>,
     pub(crate) prefer_links_for_local_paths: bool,
+    pub(crate) max_tokens: Option<BudgetLimit>,
+    pub(crate) max_lines: Option<BudgetLimit>,
 }
 
 struct WalkState<'a> {
@@ -51,12 +53,13 @@ struct WalkState<'a> {
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
     let relative_path = relative_path(&config.repository_root, path)?;
-    let ignored_rules = config.ignored_rules_for_path(&relative_path)?;
+    let rule_policy = config.effective_rule_policy_for_path(&relative_path)?;
+    let ignored_rules = rule_policy.ignored_rules;
     let policy = FilePolicy {
-        unresolved_backtick_path_severity: config
-            .unresolved_backtick_path_severity_for_path(&relative_path)?,
-        prefer_links_for_local_paths: config
-            .prefer_links_for_local_paths_for_path(&relative_path)?,
+        unresolved_backtick_path_severity: rule_policy.backtick_path_severity,
+        prefer_links_for_local_paths: rule_policy.prefer_links_for_local_paths,
+        max_tokens: rule_policy.max_tokens,
+        max_lines: rule_policy.max_lines,
     };
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
@@ -250,14 +253,11 @@ mod tests {
             repository_root: PathBuf::from("/tmp/repo"),
             include: Vec::new(),
             exclude: Vec::new(),
-            per_file_ignores: Vec::new(),
-            unresolved_backtick_path_rules: Vec::new(),
-            prefer_links_rules: Vec::new(),
+            rule_applications: Vec::new(),
             known_extensions: default_extensions(),
             special_filenames: default_special_filenames(),
             config_path: None,
             config_was_explicit: false,
-            context_budget_rules: Vec::new(),
             frontmatter_rules: Vec::new(),
             respect_gitignore: true,
         }
