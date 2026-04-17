@@ -241,15 +241,6 @@ pub(crate) fn is_external(value: &str) -> bool {
     )
 }
 
-pub(crate) fn looks_path_adjacent(value: &str) -> bool {
-    if contains_disallowed_backtick_syntax(value) {
-        return false;
-    }
-    has_workspace_root_prefix(value)
-        || has_relative_prefix(value)
-        || value.chars().any(|ch| matches!(ch, '/' | '.'))
-}
-
 pub(crate) fn contains_disallowed_backtick_syntax(value: &str) -> bool {
     value.contains("//")
         || value.contains("...")
@@ -270,26 +261,6 @@ fn has_relative_prefix(value: &str) -> bool {
     value.starts_with("./") || value.starts_with("../")
 }
 
-pub(crate) fn label_equivalent(
-    children: &[Node],
-    destination: &str,
-    repo_relative_path: &str,
-) -> bool {
-    let text = label_text(children);
-    text == destination
-        || text == repo_relative_path
-        || text
-            == Path::new(destination)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("")
-        || text
-            == Path::new(repo_relative_path)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("")
-}
-
 pub(crate) fn label_text(children: &[Node]) -> String {
     let mut text = String::new();
     for child in children {
@@ -306,10 +277,9 @@ pub(crate) fn label_text(children: &[Node]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CandidateReference, ReferenceKind, label_equivalent, render_link_destination,
-        render_repo_relative, resolve_candidate,
+        CandidateReference, ReferenceKind, render_link_destination, render_repo_relative,
+        resolve_candidate,
     };
-    use markdown::mdast::{InlineCode, Link, Node, Text};
     use tempfile::TempDir;
 
     #[test]
@@ -357,33 +327,5 @@ mod tests {
 
         assert_eq!(rendered, "/docs/");
         assert_eq!(render_repo_relative(&resolved, &docs), "docs/");
-    }
-
-    #[test]
-    fn label_equivalent_accepts_filename_only_and_inline_code_text() {
-        let children = vec![Node::InlineCode(InlineCode {
-            value: "PLANS.md".to_string(),
-            position: None,
-        })];
-        assert!(label_equivalent(
-            &children,
-            "docs/PLANS.md",
-            "docs/PLANS.md"
-        ));
-
-        let nested_children = vec![Node::Link(Link {
-            children: vec![Node::Text(Text {
-                value: "docs/PLANS.md".to_string(),
-                position: None,
-            })],
-            title: None,
-            url: "docs/PLANS.md".to_string(),
-            position: None,
-        })];
-        assert!(label_equivalent(
-            &nested_children,
-            "docs/PLANS.md",
-            "docs/PLANS.md"
-        ));
     }
 }

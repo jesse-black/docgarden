@@ -62,7 +62,7 @@ Store ExecPlans in:
 
 ## Review
 - [ ] <append-only review note>
-- None yet
+- [ ] None yet
 ```
 
 ## Section Guidance
@@ -70,11 +70,11 @@ Store ExecPlans in:
 - `Goal`: state the end state only.
 - `Scope`: define boundaries briefly.
 - `Relevant Areas`: list only files, modules, or systems likely to matter.
-- `Open Questions`: include only unresolved items that could affect implementation.
+- `Open Questions`: include only unresolved items that could affect implementation. Use `None yet` if there are none.
 - `Steps`: use actionable checkboxes.
 - `Validation`: list exact commands and checks.
-- `Discoveries`: append-only implementation discoveries.
-- `Review`: append-only review findings.
+- `Discoveries`: append-only findings that affect implementation, scope, or validation. Use `None yet` if there are none.
+- `Review`: append-only review findings. Use `None yet` if there are none.
 
 ## Update Rules
 

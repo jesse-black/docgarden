@@ -20,7 +20,7 @@ fn json_output_is_uncolored() {
         .assert()
         .failure()
         .stdout(predicate::str::contains(
-            "\"rule\": \"prefer-backticks-for-local-paths\"",
+            "\"rule\": \"prefer-links-for-local-paths\"",
         ))
         .stdout(predicate::str::contains("\u{1b}").not());
 }

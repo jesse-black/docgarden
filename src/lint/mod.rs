@@ -5,8 +5,8 @@ use anyhow::{Context, Result, anyhow};
 use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
-use crate::config::{Config, LocalReferenceStyle};
-use crate::diagnostics::{Diagnostic, FixSummary};
+use crate::config::{BudgetLimit, Config};
+use crate::diagnostics::{Diagnostic, FixSummary, Severity};
 
 mod references;
 mod reporting;
@@ -38,8 +38,10 @@ pub(crate) struct Finding<'a> {
 
 #[derive(Clone, Copy)]
 pub(crate) struct FilePolicy {
-    pub(crate) local_reference_style: LocalReferenceStyle,
-    pub(crate) report_ambiguous_inline_code: bool,
+    pub(crate) unresolved_backtick_path_severity: Option<Severity>,
+    pub(crate) prefer_links_for_local_paths: bool,
+    pub(crate) max_tokens: Option<BudgetLimit>,
+    pub(crate) max_lines: Option<BudgetLimit>,
 }
 
 struct WalkState<'a> {
@@ -51,11 +53,13 @@ struct WalkState<'a> {
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
     let relative_path = relative_path(&config.repository_root, path)?;
-    let ignored_rules = config.ignored_rules_for_path(&relative_path)?;
+    let rule_policy = config.effective_rule_policy_for_path(&relative_path)?;
+    let ignored_rules = rule_policy.ignored_rules;
     let policy = FilePolicy {
-        local_reference_style: config.local_reference_style_for_path(&relative_path)?,
-        report_ambiguous_inline_code: config
-            .report_ambiguous_inline_code_for_path(&relative_path)?,
+        unresolved_backtick_path_severity: rule_policy.backtick_path_severity,
+        prefer_links_for_local_paths: rule_policy.prefer_links_for_local_paths,
+        max_tokens: rule_policy.max_tokens,
+        max_lines: rule_policy.max_lines,
     };
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
@@ -239,27 +243,21 @@ pub fn summarize(diagnostics: &[Diagnostic]) -> FixSummary {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::config::{Config, LocalReferenceStyle};
+    use crate::config::Config;
     use crate::defaults::{default_extensions, default_special_filenames};
 
-    use super::references::{
-        classify_inline_reference, contains_disallowed_backtick_syntax, looks_path_adjacent,
-    };
+    use super::references::{classify_inline_reference, contains_disallowed_backtick_syntax};
 
     fn test_config() -> Config {
         Config {
             repository_root: PathBuf::from("/tmp/repo"),
             include: Vec::new(),
             exclude: Vec::new(),
-            per_file_ignores: Vec::new(),
-            local_reference_style_overrides: Vec::new(),
-            local_reference_style: LocalReferenceStyle::Backticks,
+            rule_applications: Vec::new(),
             known_extensions: default_extensions(),
             special_filenames: default_special_filenames(),
             config_path: None,
             config_was_explicit: false,
-            ambiguous_inline_code_patterns: Vec::new(),
-            context_budget_rules: Vec::new(),
             frontmatter_rules: Vec::new(),
             respect_gitignore: true,
         }
@@ -318,17 +316,5 @@ mod tests {
                     || value.starts_with("https://")
             );
         }
-    }
-
-    #[test]
-    fn path_adjacent_detection_only_flags_ambiguous_patterns() {
-        assert!(looks_path_adjacent("crates/base_db"));
-        assert!(looks_path_adjacent("./docs/guide"));
-        assert!(looks_path_adjacent("docs.guide"));
-
-        assert!(!looks_path_adjacent("base_db"));
-        assert!(!looks_path_adjacent("docs/**/*.md"));
-        assert!(!looks_path_adjacent("//foo"));
-        assert!(!looks_path_adjacent("/Users/alice/..."));
     }
 }

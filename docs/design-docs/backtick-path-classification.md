@@ -51,7 +51,7 @@ A backticked token should be treated as a definite local path only when it carri
 - a leading `./`, such as `` `./README.md` ``
 - a leading `../`, such as `` `../shared/spec.md` ``
 
-If a backticked token does not have one of those signals, it should not become a hard `unresolved-local-path` error by default.
+If a backticked token does not have one of those signals, it should not become a path diagnostic by default.
 
 The classifier should also reject a small v1 set of obviously non-path backtick forms before attempting path resolution. In v1 that rejection set includes:
 
@@ -98,7 +98,7 @@ Examples:
     `libs/core`
     `docs/generated`
 
-These forms often represent conceptual crate names, module names, example paths from another repository, or shorthand labels. In v1 they should not become path diagnostics by default. Repositories that want extra review signal may opt into reporting them as `ambiguous-inline-code`, but that check should be off by default because it is too noisy for dogfooding and example-heavy docs.
+These forms often represent conceptual crate names, module names, example paths from another repository, or shorthand labels. In v1 they should not become path diagnostics by default.
 
 If an author wants these to be treated as real local paths, they should add a stronger signal:
 
@@ -165,8 +165,7 @@ These forms should classify as ambiguous inline code by default:
 These forms should not be classified as local paths:
 
     `cargo fmt`
-    `path_style`
-    `RuleId::AmbiguousInlineCode`
+    `RuleId::UnresolvedLinkPath`
 
 ## Implications For Dogfooding
 
@@ -174,6 +173,5 @@ This policy reduces false positives in repository knowledge docs, execution plan
 
 ## Open Questions
 
-- Whether opt-in `ambiguous-inline-code` should eventually gain narrower heuristics so it becomes useful enough for broader default use.
 - Whether repositories should eventually get a narrow allowlist for additional strong path signals in backticks.
 - Whether directory references should prefer trailing slash in examples and docs, or merely accept it.
