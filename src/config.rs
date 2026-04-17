@@ -506,10 +506,7 @@ mod tests {
         );
         assert!(config.config_path.is_none());
         assert!(config.rule_applications.is_empty());
-        assert_eq!(
-            config.include,
-            vec!["docs/**", "README.md", "AGENTS.md", "*.md"]
-        );
+        assert_eq!(config.include, vec!["*.md"]);
     }
 
     #[test]

@@ -669,36 +669,18 @@ required = ["description"]
 }
 
 #[test]
-fn frontmatter_non_md_files_unaffected_by_frontmatter_rules() {
+fn explicit_non_md_target_fails_with_error() {
     let temp = tempdir().unwrap();
     let root = temp.path();
-    // Frontmatter rules target only **/*.md.  A .txt file should not trigger them.
-    fs::write(
-        root.join("docgarden.toml"),
-        r#"
-include = ["*.md", "*.txt"]
-
-[[rules]]
-path = "**/*.md"
-exclude = ["AGENTS.md"]
-
-[rules.frontmatter]
-required = ["description"]
-"#,
-    )
-    .unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join("notes.txt"), "Plain text file.\n").unwrap();
-    fs::write(
-        root.join("guide.md"),
-        "---\ndescription: A guide.\n---\n# Guide\n",
-    )
-    .unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args(["lint", "notes.txt", "guide.md", "--color", "never"])
+        .args(["lint", "notes.txt", "--color", "never"])
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains("not a Markdown file"));
 }
 
 #[test]
