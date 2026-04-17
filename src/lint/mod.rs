@@ -7,6 +7,7 @@ use markdown::{ParseOptions, to_mdast};
 
 use crate::config::{BudgetLimit, Config};
 use crate::diagnostics::{Diagnostic, FixSummary, Severity};
+use crate::paths::repository_relative_path;
 
 mod references;
 mod reporting;
@@ -52,7 +53,7 @@ struct WalkState<'a> {
 }
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
-    let relative_path = relative_path(&config.repository_root, path)?;
+    let relative_path = repository_relative_path(&config.repository_root, path)?;
     let rule_policy = config.effective_rule_policy_for_path(&relative_path)?;
     let ignored_rules = rule_policy.ignored_rules;
     let policy = FilePolicy {
@@ -221,14 +222,6 @@ fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
     }
 
     Ok(rewritten)
-}
-
-fn relative_path(root: &Path, path: &Path) -> Result<String> {
-    Ok(path
-        .strip_prefix(root)
-        .with_context(|| format!("{} is not under {}", path.display(), root.display()))?
-        .to_string_lossy()
-        .replace('\\', "/"))
 }
 
 pub fn summarize(diagnostics: &[Diagnostic]) -> FixSummary {

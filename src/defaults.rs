@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-pub const DEFAULT_SCAN_PATTERNS: &[&str] = &["docs/**", "README.md", "AGENTS.md", "*.md"];
+pub const DEFAULT_SCAN_PATTERNS: &[&str] = &["*.md"];
 
 const DEFAULT_EXTENSIONS: &[&str] = &[
     ".md",
