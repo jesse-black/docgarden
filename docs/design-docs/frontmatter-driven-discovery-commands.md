@@ -86,10 +86,12 @@ That gives the repository a clean contract:
 
 For v1, that means discovery commands should:
 
-- traverse the same targets model that lint uses
+- reuse the same discovery walker and include/exclude rules that lint uses
 - discover only Markdown files selected by the existing traversal and include/exclude rules
 - respect `.gitignore`, `.ignore`, and related git exclude behavior by default
 - support the same `--no-gitignore` flag so callers can opt out of gitignore-based filtering when needed
+
+For shipped v1, `docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
 
 This keeps repository traversal behavior consistent across lint and discovery commands, reduces implementation duplication, and avoids subtle cases where `lint` and `list` or `match` disagree about which documents exist.
 
@@ -208,7 +210,7 @@ The best v1 fit is a small weighted lexical scorer rather than a generic fuzzy-m
 Recommended formula:
 
 1. Tokenize the query into terms.
-2. For each term, compute a simple corpus-local IDF from the current candidate set.
+2. For each term, compute a simple corpus-local IDF from the current candidate set and clamp it to keep ubiquitous terms contributing while stopping tiny-corpus outliers from dominating.
 3. Score each field independently with field weights:
    - `name`: highest weight
    - `path`: medium weight
@@ -217,8 +219,7 @@ Recommended formula:
    - exact token match
    - token-prefix match
    - substring match
-   - optional fuzzy fallback
-5. Add a phrase bonus when the normalized whole query appears contiguously in `name`, `description`, or the basename portion of `path`.
+5. Add a phrase bonus when a multi-term normalized query appears contiguously in `name`, `description`, or the basename portion of `path`.
 6. Break ties by:
    - more matched query terms
    - stronger field hit order (`name` before `path` before `description`)
@@ -230,6 +231,7 @@ This is search-like in the ways that matter:
 - common words matter less than distinctive words
 - documents with better discovery metadata get better rankings
 - the behavior stays deterministic and explainable in CI and tests
+- v1 avoids fuzzy fallback tiers so the ordering remains easy to reason about
 
 For `match --limit N`, the implementation can score all candidates and then truncate to the top N. For the repository sizes this feature is aimed at, that should remain fast enough without adding indexing or cache complexity in v1.
 
@@ -237,7 +239,7 @@ For `match --limit N`, the implementation can score all candidates and then trun
 
 Use an integer score in v1 rather than a float.
 
-That makes output easier to scan, easier to snapshot-test, and less likely to imply false precision. A 0 to 1000-ish range is sufficient, but the exact range is less important than stable ordering and documented tie-break behavior.
+That makes output easier to scan, easier to snapshot-test, and less likely to imply false precision. The exact numeric range is less important than stable ordering and documented tie-break behavior.
 
 ### Library Options
 
@@ -279,7 +281,9 @@ The command should be useful both for humans scanning the output and for agents 
 
 `match` should remain the canonical subcommand name in help text and documentation, with `m` provided as a convenience alias.
 
-It should use the same Markdown discovery set that `list` and `lint` would see for the same targets and gitignore settings.
+It should use the same Markdown discovery set that `lint` would see for the same repository root, config, and gitignore settings.
+
+In shipped v1, `match` does not accept positional filesystem targets. The command always scores against the full repository-root discovery set so ranking stays deterministic for a given repo state.
 
 The implementation should consider:
 

@@ -8,6 +8,7 @@ use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::discover::discover_markdown_files_for_targets;
 use crate::lint::{Mode, lint_file, summarize};
+use crate::matching;
 use crate::root::{RootMarker, infer_repository_root};
 
 #[derive(Parser, Debug)]
@@ -24,6 +25,34 @@ enum Command {
     Lint(LintArgs),
     #[command(about = "Apply deterministic safe rewrites")]
     Fix(LintArgs),
+    #[command(
+        visible_alias = "m",
+        about = "Rank repository documents by metadata match",
+        long_about = "Rank repository Markdown documents by how well their frontmatter \
+                      and path match the given query terms.\n\
+                      \n\
+                      Alias: `m`\n\
+                      \n\
+                      Output columns (default):\n\
+                      \n\
+                      \x20 score | path | name | description\n\
+                      \n\
+                      Fields are separated by ` | `. A literal `|` in any field is \
+                      escaped as `\\|`. The `name` and `description` columns are empty \
+                      when the document has no frontmatter.\n\
+                      \n\
+                      With --path-only, each result is a single repository-relative path \
+                      on its own line.\n\
+                      \n\
+                      When color is enabled, only the `score` column is colored: \
+                      1-24 is low (red), 25-59 is medium (yellow), and 60+ is high \
+                      (green). `--path-only` never emits color.\n\
+                      \n\
+                      Score is a non-negative integer. Higher means a closer match; \
+                      ordering is the contract, not the absolute value. Scores are not \
+                      comparable across different repositories or tool versions."
+    )]
+    Match(MatchArgs),
     #[command(about = "Reserved placeholder for future repository initialization")]
     Init,
     #[command(about = "Reserved namespace for future skill workflows")]
@@ -56,8 +85,40 @@ struct LintArgs {
     color: ColorChoice,
 }
 
+#[derive(ClapArgs, Debug)]
+struct MatchArgs {
+    #[arg(
+        required = true,
+        num_args = 1..,
+        help = "Query terms; joined with spaces before tokenization"
+    )]
+    query: Vec<String>,
+    #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
+    config: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Ignore .gitignore and related exclude files during discovery"
+    )]
+    no_gitignore: bool,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = ColorChoice::Auto,
+        help = "Control colored human-readable output"
+    )]
+    color: ColorChoice,
+    #[arg(short = 'n', long, help = "Limit results to the top N matches")]
+    limit: Option<usize>,
+    #[arg(
+        short = 'p',
+        long,
+        help = "Print only repository-relative paths, one per line"
+    )]
+    path_only: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-enum ColorChoice {
+pub(crate) enum ColorChoice {
     Auto,
     Always,
     Never,
@@ -68,6 +129,14 @@ pub fn run() -> Result<()> {
     match args.command {
         Command::Lint(args) => execute_lint(args, Mode::Check),
         Command::Fix(args) => execute_lint(args, Mode::Fix),
+        Command::Match(args) => matching::execute_match(
+            args.query,
+            args.config,
+            args.no_gitignore,
+            args.color,
+            args.limit,
+            args.path_only,
+        ),
         Command::Init => bail!(
             "`docgarden init` is reserved for future repository initialization work and is not implemented yet"
         ),
@@ -147,11 +216,7 @@ fn execute(
 }
 
 fn print_diagnostics(diagnostics: &[Diagnostic], color: ColorChoice) {
-    let colorize = match color {
-        ColorChoice::Always => true,
-        ColorChoice::Never => false,
-        ColorChoice::Auto => std::io::stdout().is_terminal(),
-    };
+    let colorize = colorize_stdout(color);
     for diagnostic in diagnostics {
         let severity = match (diagnostic.severity, colorize) {
             (Severity::Error, true) => "\u{1b}[31merror\u{1b}[0m",
@@ -171,6 +236,14 @@ fn print_diagnostics(diagnostics: &[Diagnostic], color: ColorChoice) {
             );
         }
         println!("{}", diagnostic.message);
+    }
+}
+
+pub(crate) fn colorize_stdout(color: ColorChoice) -> bool {
+    match color {
+        ColorChoice::Always => true,
+        ColorChoice::Never => false,
+        ColorChoice::Auto => std::io::stdout().is_terminal(),
     }
 }
 
