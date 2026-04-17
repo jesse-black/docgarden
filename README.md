@@ -8,7 +8,7 @@
 
 When autonomous coding agents treat your repository's Markdown files (`AGENTS.md`, `ARCHITECTURE.md`, `docs/`) as executable context, documentation stops being "nice to have" prose. Broken local references, monolithic instruction files, and stale context directly reduce agent reliability and waste expensive context windows. 
 
-`docgarden` validates repository-local references, enforces machine-readable styling, and emits deterministic diagnostics and safe autofixes. It ensures your repository remains a highly legible, progressively loadable operating system for your agents.
+`docgarden` validates repository-local references, enforces machine-readable styling, and emits deterministic diagnostics. It ensures your repository remains a highly legible, progressively loadable operating system for your agents.
 
 ## The "Agent-Legible" Philosophy
 
@@ -23,7 +23,7 @@ To achieve high agent throughput, the repository itself must become the system o
 `docgarden` is the mechanical enforcer of this map. It focuses exclusively on the structural invariants that agents and CI systems must be able to trust absolutely:
 
 * Does this repository-local path actually exist?
-* Is this reference written in the configured machine-readable style?
+* Does this document follow the configured mechanical style rules?
 * Is the document structured correctly for a coding agent to parse?
 
 ## The Doc Gardener Workflow
@@ -52,11 +52,8 @@ Run `docgarden` locally or in your CI pipeline to continuously garden your repos
 ### Commands
 
 * `docgarden lint [TARGETS]...`: Lint repository knowledge without modifying files.
-* `docgarden fix [TARGETS]...`: Apply deterministic safe rewrites.
-* `docgarden init`: Reserved placeholder for future repository initialization.
-* `docgarden skill`: Reserved namespace for future skill workflows.
 
-Shared lint and fix flags:
+Shared lint flags:
 
 * `--config <FILE>`: Use an explicit `docgarden.toml` configuration file.
 * `--json`: Emit machine-readable diagnostics for agents or CI parsers.
@@ -68,23 +65,22 @@ Shared lint and fix flags:
 `docgarden.toml` can apply existing lint rules to repository-relative paths or gitignore-style path patterns:
 
 ```toml
-path_style = "backticks"
-
 [[rules]]
 path = "docs/references/**"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 reason = "Imported references may preserve source-derived paths."
 
 [[rules]]
 path = "docs/**"
-enable = ["ambiguous-inline-code"]
+enable = ["prefer-links-for-local-paths"]
 
 [[rules]]
-path = "README.md"
-path_style = "links"
+path = "internal/**"
+enable = ["unresolved-backtick-path"]
+severity = "warn"
 ```
 
-The supported rule names today are `unresolved-local-path`, `prefer-links-for-local-paths`, `prefer-backticks-for-local-paths`, and `ambiguous-inline-code`.
+Supported rule names today are `unresolved-link-path`, `unresolved-backtick-path`, `prefer-links-for-local-paths`, `max_tokens`, and `max_lines`.
 
 ### Examples
 
@@ -98,11 +94,6 @@ docgarden lint .
 docgarden lint README.md AGENTS.md docs/exec-plans/
 ```
 
-**Apply safe autofixes to the working tree:**
-```bash
-docgarden fix .
-```
-
 **Lint files that are normally skipped by `.gitignore`:**
 ```bash
 docgarden lint . --no-gitignore
@@ -114,18 +105,6 @@ docgarden lint . --no-gitignore
   run: docgarden lint .
 ```
 
-## How does `docgarden` compare to existing tools?
-
-The category of agent-first repository tooling is still early. While there are a few adjacent tools in this space, `docgarden` is optimized entirely around token efficiency and context window management.
-
-**Standard Markdown Linters (e.g., `markdownlint`)**
-Standard linters are designed for human typography and styling (e.g., heading levels, trailing spaces). They do not understand the repository filesystem and cannot validate whether a referenced path actually exists in the working tree. `docgarden` guarantees that when an agent tries to read a referenced file, it will be there.
-
-**Heuristic-Based Prompt Linters**
-Tools are emerging to lint agent instruction files using basic heuristics. These tools generally focus on the syntax of the prompt itself. `docgarden`, by contrast, secures the integrity of the *entire repository knowledge graph*. 
-
-**The `docgarden` Advantage**
-By enforcing strict cross-linking hygiene and local reference accuracy, `docgarden` guarantees that your repository knowledge base is highly optimized for progressive disclosure. Agents can confidently navigate your repository via references instead of forcing you to load massive, monolithic instruction files into every single prompt, saving significant token costs and improving agent focus.
 
 ## Contributing
 

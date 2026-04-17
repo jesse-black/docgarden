@@ -63,10 +63,7 @@ The config model currently controls:
 - include and exclude scan patterns
 - whether discovery respects `.gitignore` and related ignore files
 - known file extensions and special filenames used for path classification
-- per-file ignored rules
-- the local reference style policy: `backticks` or `links`
-- whether path-adjacent inline code should produce warnings
-- path-targeted rule applications, including local-reference style overrides and explicit file-level context budgets through `max_tokens`, `max_lines`, and severity
+- path-targeted rule applications that can disable always-on rules, enable opt-in rules, and set explicit file-level context budgets through `max_tokens`, `max_lines`, and severity
 
 `src/defaults.rs` contains the stable built-in defaults for scan patterns, known extensions, and special filenames. Keeping these defaults separate makes the policy surface easy to review without reading the rest of the linter.
 
@@ -80,12 +77,11 @@ The config model currently controls:
 
 `src/lint/mod.rs` owns lint orchestration. It reads the Markdown source, parses it with `markdown`, invokes file-level rule hooks, walks the AST for node-level rules, emits diagnostics, and writes the file back when fix mode made an allowed rewrite.
 
-Today the lint engine focuses on repository-local reference correctness, style, and explicit context-budget checks:
+Today the lint engine focuses on repository-local reference correctness, an opt-in style rewrite, and explicit context-budget checks:
 
-- `unresolved-local-path`
+- `unresolved-link-path`
+- `unresolved-backtick-path`
 - `prefer-links-for-local-paths`
-- `prefer-backticks-for-local-paths`
-- `ambiguous-inline-code`
 - `max_tokens`
 - `max_lines`
 
@@ -106,7 +102,7 @@ These invariants are important to preserve even if the internal implementation c
 - `docgarden` assumes repository knowledge should be encoded in versioned repo artifacts. Rules should reinforce discoverable, cross-linked documentation rather than rely on external context.
 - Markdown AST traversal is the source of truth for linting. The tool does not rely on regex-only scanning for rule decisions.
 - Resolution is path-based, not symbol-based. `docgarden` verifies whether a referenced repository path exists; it does not infer semantic meaning from the target file contents.
-- Fix mode is conservative. The tool only rewrites cases where the local-reference style policy can be applied mechanically without inventing new target semantics.
+- Fix mode is conservative. The tool only rewrites explicitly enabled backticked local paths into Markdown links when that rewrite can be applied mechanically without inventing new target semantics.
 - Configuration affects classification and scope, not repository contents. The linter never mutates anything outside files explicitly being fixed.
 - Diagnostics are file-local. Each reported issue is anchored to a single Markdown file position and can be emitted in human-readable or JSON form.
 - High-traffic repository entry points such as `AGENTS.md` are part of the intended design target. New rules should support progressive disclosure and agent legibility rather than push repositories back toward large monolithic instruction files.
