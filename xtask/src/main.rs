@@ -16,7 +16,17 @@ fn main() -> Result<()> {
 
 fn validate() -> Result<()> {
     run("cargo", &["fmt", "--check"])?;
-    run("cargo", &["clippy"])?;
+    run(
+        "cargo",
+        &[
+            "clippy",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    )?;
     run(
         "cargo",
         &[

@@ -153,7 +153,7 @@ fn print_diagnostics(diagnostics: &[Diagnostic], color: ColorChoice) {
         ColorChoice::Auto => std::io::stdout().is_terminal(),
     };
     for diagnostic in diagnostics {
-        let severity = match (diagnostic.severity.clone(), colorize) {
+        let severity = match (diagnostic.severity, colorize) {
             (Severity::Error, true) => "\u{1b}[31merror\u{1b}[0m",
             (Severity::Warning, true) => "\u{1b}[33mwarning\u{1b}[0m",
             (Severity::Error, false) => "error",

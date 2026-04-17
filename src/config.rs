@@ -429,7 +429,10 @@ fn is_known_rule(rule: &str) -> bool {
 }
 
 fn is_supported_enabled_rule(rule: &str) -> bool {
-    matches!(rule, "unresolved-backtick-path" | "prefer-links-for-local-paths")
+    matches!(
+        rule,
+        "unresolved-backtick-path" | "prefer-links-for-local-paths"
+    )
 }
 
 fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bool> {
@@ -479,7 +482,7 @@ fn normalize_extension(value: &str) -> String {
 mod tests {
     use std::fs;
 
-    use super::{BudgetLimit, Config, EffectiveRulePolicy, RuleApplication, RuleSeverity};
+    use super::{BudgetLimit, Config, RuleSeverity};
     use crate::diagnostics::Severity;
     use tempfile::TempDir;
 
@@ -595,9 +598,7 @@ enable = ["prefer-links-for-local-paths"]
         assert!(refs_policy.ignored_rules.contains("unresolved-link-path"));
         assert!(refs_policy.backtick_path_severity.is_some());
 
-        let readme_policy = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(readme_policy.prefer_links_for_local_paths);
         assert!(readme_policy.backtick_path_severity.is_none());
 
@@ -669,9 +670,7 @@ reason = "References preserve source fidelity."
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let readme = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme = config.effective_rule_policy_for_path("README.md").unwrap();
         assert_eq!(
             readme.max_tokens,
             Some(BudgetLimit {
@@ -1095,9 +1094,7 @@ severity = "warn"
             .unwrap();
         assert_eq!(docs_policy.backtick_path_severity, Some(Severity::Warning));
 
-        let readme_policy = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(readme_policy.backtick_path_severity.is_none());
     }
 
@@ -1138,9 +1135,7 @@ severity = "warn"
         );
 
         // README.md matches only the first two: enabled then disabled
-        let readme_policy = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(
             readme_policy.backtick_path_severity.is_none(),
             "disable without later re-enable should leave rule off"
@@ -1180,9 +1175,7 @@ enable = ["prefer-links-for-local-paths"]
             "later enable should override earlier disable"
         );
 
-        let readme_policy = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(
             !readme_policy.prefer_links_for_local_paths,
             "disable without later re-enable should leave rule off"
@@ -1227,9 +1220,7 @@ severity = "warn"
             "later max_tokens entry should override earlier disable"
         );
 
-        let readme_policy = config
-            .effective_rule_policy_for_path("README.md")
-            .unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(
             readme_policy.max_tokens.is_none(),
             "disable without later re-enable should leave max_tokens off"

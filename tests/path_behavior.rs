@@ -90,11 +90,7 @@ fn broken_backtick_path_is_silent_by_default() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(root.join("docgarden.toml"), "").unwrap();
-    fs::write(
-        root.join("README.md"),
-        "See `docs/missing.md` for more.\n",
-    )
-    .unwrap();
+    fs::write(root.join("README.md"), "See `docs/missing.md` for more.\n").unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap(), "--color", "never"])
@@ -112,11 +108,7 @@ fn broken_backtick_path_reports_when_rule_enabled() {
         "[[rules]]\npath = \"**\"\nenable = [\"unresolved-backtick-path\"]\n",
     )
     .unwrap();
-    fs::write(
-        root.join("README.md"),
-        "See `docs/missing.md` for more.\n",
-    )
-    .unwrap();
+    fs::write(root.join("README.md"), "See `docs/missing.md` for more.\n").unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap(), "--color", "never"])
@@ -135,11 +127,7 @@ fn broken_backtick_path_honors_configured_severity() {
         "[[rules]]\npath = \"**\"\nenable = [\"unresolved-backtick-path\"]\nseverity = \"warn\"\n",
     )
     .unwrap();
-    fs::write(
-        root.join("README.md"),
-        "See `docs/missing.md` for more.\n",
-    )
-    .unwrap();
+    fs::write(root.join("README.md"), "See `docs/missing.md` for more.\n").unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap(), "--color", "never"])

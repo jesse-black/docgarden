@@ -280,7 +280,6 @@ mod tests {
         CandidateReference, ReferenceKind, render_link_destination, render_repo_relative,
         resolve_candidate,
     };
-    use markdown::mdast::Node;
     use tempfile::TempDir;
 
     #[test]
@@ -329,5 +328,4 @@ mod tests {
         assert_eq!(rendered, "/docs/");
         assert_eq!(render_repo_relative(&resolved, &docs), "docs/");
     }
-
 }

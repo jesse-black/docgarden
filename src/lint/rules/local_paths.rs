@@ -1,13 +1,13 @@
 use anyhow::Result;
 use markdown::mdast::Node;
 
+use crate::diagnostics::Severity;
 use crate::lint::references::{
     ReferenceKind, classify_inline_reference, classify_link_reference, is_external,
     render_link_destination, resolve_candidate,
 };
 use crate::lint::reporting::DiagnosticPayload;
 use crate::lint::{Finding, edit_from_position};
-use crate::diagnostics::Severity;
 
 use super::NodeRuleContext;
 
@@ -33,57 +33,56 @@ fn lint_inline_code_node<'a>(
         return Ok(Vec::new());
     };
     let value = inline.value.trim();
-    if let Some(candidate) = classify_inline_reference(context.config, value) {
-        if let Some(resolved) = resolve_candidate(context.file, &candidate, ReferenceKind::Backtick)
-        {
-            let exists_path = context
-                .config
-                .repository_root
-                .join(&resolved.repo_relative_path);
-            let exists = exists_path.exists();
-            if !exists && candidate.is_directory_like {
-                return Ok(Vec::new());
-            }
-            if !exists {
-                if let Some(severity) = context.policy.unresolved_backtick_path_severity {
-                    return Ok(vec![Finding {
-                        payload: DiagnosticPayload {
-                            file: context.file,
-                            position: inline.position.as_ref(),
-                            rule: "unresolved-backtick-path",
-                            message: format!(
-                                "Local repository path `{}` does not resolve within the repository.",
-                                candidate.display_text
-                            ),
-                            fixable: false,
-                            severity,
-                        },
-                        edit: None,
-                    }]);
-                }
-                return Ok(Vec::new());
-            }
-            if context.policy.prefer_links_for_local_paths {
-                let link_text =
-                    render_link_destination(context.file, &candidate, &resolved, &exists_path);
+    if let Some(candidate) = classify_inline_reference(context.config, value)
+        && let Some(resolved) = resolve_candidate(context.file, &candidate, ReferenceKind::Backtick)
+    {
+        let exists_path = context
+            .config
+            .repository_root
+            .join(&resolved.repo_relative_path);
+        let exists = exists_path.exists();
+        if !exists && candidate.is_directory_like {
+            return Ok(Vec::new());
+        }
+        if !exists {
+            if let Some(severity) = context.policy.unresolved_backtick_path_severity {
                 return Ok(vec![Finding {
                     payload: DiagnosticPayload {
                         file: context.file,
                         position: inline.position.as_ref(),
-                        rule: "prefer-links-for-local-paths",
+                        rule: "unresolved-backtick-path",
                         message: format!(
-                            "Local repository path `{}` should use Markdown link syntax.",
+                            "Local repository path `{}` does not resolve within the repository.",
                             candidate.display_text
                         ),
-                        fixable: true,
-                        severity: Severity::Error,
+                        fixable: false,
+                        severity,
                     },
-                    edit: edit_from_position(
-                        inline.position.as_ref(),
-                        format!("[{}]({link_text})", candidate.display_text),
-                    ),
+                    edit: None,
                 }]);
             }
+            return Ok(Vec::new());
+        }
+        if context.policy.prefer_links_for_local_paths {
+            let link_text =
+                render_link_destination(context.file, &candidate, &resolved, &exists_path);
+            return Ok(vec![Finding {
+                payload: DiagnosticPayload {
+                    file: context.file,
+                    position: inline.position.as_ref(),
+                    rule: "prefer-links-for-local-paths",
+                    message: format!(
+                        "Local repository path `{}` should use Markdown link syntax.",
+                        candidate.display_text
+                    ),
+                    fixable: true,
+                    severity: Severity::Error,
+                },
+                edit: edit_from_position(
+                    inline.position.as_ref(),
+                    format!("[{}]({link_text})", candidate.display_text),
+                ),
+            }]);
         }
     }
     Ok(Vec::new())
