@@ -7,7 +7,7 @@ use common::fixture_repo;
 
 #[test]
 fn json_output_is_uncolored() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args([
@@ -27,7 +27,7 @@ fn json_output_is_uncolored() {
 
 #[test]
 fn color_always_forces_ansi_in_human_output() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap(), "--color", "always"])
@@ -38,7 +38,7 @@ fn color_always_forces_ansi_in_human_output() {
 
 #[test]
 fn explicit_config_path_is_echoed_in_fix_hint() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args([

@@ -1,5 +1,5 @@
 ---
-description: "Working design draft for frontmatter-driven discovery commands such as `docgarden list`, `tree`, and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior."
+description: "Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior."
 ---
 
 # Frontmatter-Driven Discovery Commands
@@ -8,7 +8,7 @@ description: "Working design draft for frontmatter-driven discovery commands suc
 
 This document is a working design draft for metadata-driven discovery commands in `docgarden`.
 
-The goal is to make repository knowledge discoverable without requiring handwritten index-style files as the default navigation mechanism. If repositories adopt standardized YAML front matter with fields such as `title` and `description`, `docgarden` should be able to derive useful catalog and matching views directly from that metadata.
+The goal is to make repository knowledge discoverable without requiring handwritten index-style files as the default navigation mechanism. If repositories adopt standardized YAML front matter with fields such as `name` and `description`, `docgarden` should be able to derive useful catalog and matching views directly from that metadata.
 
 The product should describe these commands in terms of explicit configuration, not in terms of this repository's current directory layout. The strongest near-term example is the configured skills directory. Broader discovery roots or named groups can wait until a concrete feature needs them.
 
@@ -16,15 +16,21 @@ The product should describe these commands in terms of explicit configuration, n
 
 The initial command family under consideration is:
 
-- `docgarden list`
-- `docgarden tree`
-- `docgarden match <QUERY>`
+- `docgarden list` with `ls` as an alias
+- `docgarden match <QUERY>` with `m` as an alias
 - `docgarden skills list`
 - `docgarden skills match <QUERY>`
 
 These commands should operate on Markdown documents that opt into recognizable front matter schemas and belong to configured scopes.
 
 The product intent is discovery, not arbitrary text search.
+
+For v1, the discovery surface should stay intentionally small and deterministic:
+
+- `path` is always present
+- frontmatter `name` is surfaced when present
+- frontmatter `description` is surfaced when present
+- `match` may add a numeric score, but ordering matters more than the absolute score value
 
 ## Why Frontmatter Instead Of Mandatory Index Files
 
@@ -33,7 +39,6 @@ Handwritten index files can be useful, but they are an additional maintenance bu
 If a repository already expects agents or humans to maintain document front matter, then the same metadata can power:
 
 - list views
-- tree views
 - query-time matching
 - future scope-specific routing or linting
 
@@ -64,7 +69,7 @@ For example, the OpenAI `skill-creator` guidance says:
 
 This is highly relevant to `docgarden`.
 
-If repositories standardize front matter and teach agents to include the information needed to trigger use in fields such as `title`, `description`, tags, or scope metadata, then `docgarden match` can remain intentionally narrow and still be very useful.
+If repositories standardize front matter and teach agents to include the information needed to trigger use in fields such as `name`, `description`, tags, or scope metadata, then `docgarden match` can remain intentionally narrow and still be very useful.
 
 That gives the repository a clean contract:
 
@@ -75,46 +80,216 @@ That gives the repository a clean contract:
 
 ## Preliminary Command Semantics
 
+## Discovery Traversal
+
+`docgarden list` and `docgarden match` should reuse the existing lint file-traversal system rather than introducing a separate discovery walker.
+
+For v1, that means discovery commands should:
+
+- traverse the same targets model that lint uses
+- discover only Markdown files selected by the existing traversal and include/exclude rules
+- respect `.gitignore`, `.ignore`, and related git exclude behavior by default
+- support the same `--no-gitignore` flag so callers can opt out of gitignore-based filtering when needed
+
+This keeps repository traversal behavior consistent across lint and discovery commands, reduces implementation duplication, and avoids subtle cases where `lint` and `list` or `match` disagree about which documents exist.
+
+## Resolved V1 Output Contract
+
+The v1 contract should optimize for two audiences:
+
+- humans scanning CLI output
+- agents doing first-pass document routing
+
+The common result shape should be:
+
+- `path`: repository-relative path to the document
+- `name`: frontmatter `name` when present
+- `description`: frontmatter `description` when present
+
+For `match`, add:
+
+- `score`: numeric relevance score used for ranking
+
+The score should be treated as an ordering aid, not as a durable semantic contract across scoring-version changes. Callers should trust sorted order first and only use score for debugging or quick scanning within the same tool version.
+
+### Text Output
+
+Default text output should stay compact and token-conscious.
+
+`docgarden list` should emit one result per line in a stable field order:
+
+```text
+docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+```
+
+`docgarden match <QUERY>` should emit:
+
+```text
+842 | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+```
+
+This keeps the path first for quick scanning and makes it easy for agents to strip trailing fields when they only need candidates.
+
+There should be no JSON output surface for these commands in v1. Unlike lint diagnostics, discovery output is primarily an agent-facing routing tool, and compact text is the main product value.
+
+The subcommand help text should explain the output columns and field order instead of adding a header row to every result set. That is a good fit for progressive discovery: the first layer stays compact during normal use, while `--help` provides the format explanation when a human or agent needs to orient itself. The score range should also be explained in the subcommand help text.
+
+### Result Limits
+
+`match` should support limiting the number of results returned.
+
+The v1 interface should be:
+
+- `--limit N`
+- `-n N`
+
+This is the main token-conservation control for ranked discovery. Agents usually do not want every weak candidate; they want the best few options to inspect next.
+
+The limit should apply after ranking, so callers get the top N highest-scoring matches.
+
+### Path-Only Mode
+
+An explicit path-only mode is worth adding because it matches how agents often work.
+
+After an initial discovery step, agents frequently want to:
+
+- pass candidate paths directly into a follow-up file read
+- conserve tokens before opening the most promising documents
+- avoid carrying repeated descriptions once routing is complete
+
+The simplest v1 interface is:
+
+- `--path-only` for `match`
+- `-p` as the short form
+
+That should print one repository-relative path per line.
+
+`--path-only` is preferable to making path-only the default because first-pass discovery is usually better when the agent can see `name` and `description` before choosing which document bodies to load.
+
+`-p` is a reasonable short flag here because it reads naturally as "path" and does not compete with `-n` for result count.
+
+## Match Scoring Design
+
+The scoring model should feel search-like without turning `docgarden` into a full-text search engine.
+
+The intended v1 behavior is:
+
+- match only over discovery metadata, not Markdown body text
+- score deterministically and locally
+- prefer explainable ranking over opaque fuzzy heuristics
+- reward good frontmatter without hiding path-only documents completely
+
+### Candidate Fields
+
+The scoring corpus for each document should include:
+
+- `name` frontmatter when present
+- `description` frontmatter when present
+- repository-relative `path`
+
+If `name` or `description` is absent, the file should still remain discoverable through `path`.
+
+### Normalization
+
+Query text and candidate fields should be normalized in the same way:
+
+- lowercase
+- split on whitespace and punctuation
+- split paths on `/`, `_`, `-`, and `.`
+- collapse repeated separators
+- preserve the original values only for display
+
+V1 should not add stemming, embeddings, or language-specific analyzers.
+
+### Ranking Model
+
+The best v1 fit is a small weighted lexical scorer rather than a generic fuzzy-match-only library.
+
+Recommended formula:
+
+1. Tokenize the query into terms.
+2. For each term, compute a simple corpus-local IDF from the current candidate set.
+3. Score each field independently with field weights:
+   - `name`: highest weight
+   - `path`: medium weight
+   - `description`: lowest weight
+4. Within each field, reward stronger match shapes more than weaker ones:
+   - exact token match
+   - token-prefix match
+   - substring match
+   - optional fuzzy fallback
+5. Add a phrase bonus when the normalized whole query appears contiguously in `name`, `description`, or the basename portion of `path`.
+6. Break ties by:
+   - more matched query terms
+   - stronger field hit order (`name` before `path` before `description`)
+   - lexicographic `path`
+
+This is search-like in the ways that matter:
+
+- exact and prefix matches rise to the top
+- common words matter less than distinctive words
+- documents with better discovery metadata get better rankings
+- the behavior stays deterministic and explainable in CI and tests
+
+For `match --limit N`, the implementation can score all candidates and then truncate to the top N. For the repository sizes this feature is aimed at, that should remain fast enough without adding indexing or cache complexity in v1.
+
+### Score Format
+
+Use an integer score in v1 rather than a float.
+
+That makes output easier to scan, easier to snapshot-test, and less likely to imply false precision. A 0 to 1000-ish range is sufficient, but the exact range is less important than stable ordering and documented tie-break behavior.
+
+### Library Options
+
+There are Rust crates that can help, but none should fully define the ranking contract.
+
+Possible helpers:
+
+- `strsim`: useful for typo-tolerance or a low-weight tie-breaker on short single-token inputs, but not sufficient as the whole ranking model
+- `sublime_fuzzy`: useful if we want editor-style subsequence scoring as a fallback signal
+- `nucleo-matcher`: stronger fuzzy matcher, but probably heavier than this feature needs in v1
+
+The cleanest product shape is:
+
+- own the weighted lexical ranking in `docgarden`
+- optionally use a small fuzzy-scoring crate only as the weakest match tier or a tie-breaker
+
+That preserves mechanical explainability and avoids locking the product to an external scoring philosophy that may not match repository discovery well.
+
 ### `docgarden list`
 
 `docgarden list` should emit a flat list of matching Markdown documents with a compact metadata summary.
 
-By default, it should operate over configured knowledge roots or built-in scopes rather than over every Markdown file in the repository.
+`list` should remain the canonical subcommand name in help text and documentation, with `ls` provided as a convenience alias.
+
+By default, it should operate over the same Markdown traversal system used by lint, scoped by invocation targets and configuration rather than by a separate filesystem walk.
 
 A reasonable first output shape is:
 
 - path
-- title
-- description
+- name frontmatter if present
+- description frontmatter if present
 - optional scope label if known
 
 The command should be useful both for humans scanning the output and for agents consuming it in a deterministic workflow.
-
-### `docgarden tree`
-
-`docgarden tree` should present the same metadata grouped hierarchically, likely by directory and possibly later by configured scope.
-
-This command is primarily a navigation aid.
-
-It should help answer questions like:
-
-- what knowledge exists under a configured design-docs root
-- which configured roots contain richly described documents versus sparse ones
-- which parts of the repository knowledge map have metadata coverage
 
 ### `docgarden match <QUERY>`
 
 `docgarden match <QUERY>` should rank candidate documents based on metadata fields rather than full body text.
 
-The first pass should likely consider:
+`match` should remain the canonical subcommand name in help text and documentation, with `m` provided as a convenience alias.
 
-- title
+It should use the same Markdown discovery set that `list` and `lint` would see for the same targets and gitignore settings.
+
+The implementation should consider:
+
+- name
 - description
 - path
-- scope metadata
-- tags or similar fields if a schema defines them
 
-The output should explain why a document matched, for example by surfacing the matching fields or snippets from metadata values.
+The default output should stay compact and include score plus the common result fields.
+
+An optional future `--explain` mode could surface field-level score breakdowns or matched terms, but that should not be part of the default token budget.
 
 ### `docgarden skills list`
 
@@ -173,7 +348,7 @@ That means future rules might validate configured index files when they exist, b
 
 This proposal depends on standardized front matter being meaningful enough to support discovery.
 
-That raises a product requirement: front matter cannot be treated as perfunctory metadata. Repositories that want strong discovery need prompts, skills, or local guidance that tell agents to write titles and descriptions that are specific enough to trigger later use.
+That raises a product requirement: front matter cannot be treated as perfunctory metadata. Repositories that want strong discovery need prompts, skills, or local guidance that tell agents to write names and descriptions that are specific enough to trigger later use.
 
 This also argues for scope-aware front matter schemas rather than one universal metadata blob. Different scopes may need different discovery fields, but each scope should still provide a compact, high-signal trigger surface.
 
@@ -181,18 +356,9 @@ This also argues for scope-aware front matter schemas rather than one universal 
 
 Metadata-driven discovery complements context-budget limits.
 
-If `docgarden list`, `tree`, and `match` can expose the right files from front matter alone, agents can avoid loading full document bodies too early. That supports the broader progressive-disclosure model:
+If `docgarden list` and `match` can expose the right files from front matter alone, agents can avoid loading full document bodies too early. That supports the broader progressive-disclosure model:
 
 - small routing surface first
 - deeper documents only when needed
 
 This is especially attractive for high-traffic scopes such as skills, design docs, plans, and references.
-
-## Open Questions
-
-- Should `match` stay strictly limited to front matter, or should it eventually support an opt-in second tier that consults headings only?
-- Which built-in scopes should be included in discovery by default, and which should require explicit configuration?
-- What minimum metadata is required before a file is eligible for `list`, `tree`, or `match` output?
-- Should `match` ranking be purely field-presence and keyword based, or should it include deterministic weighting such as giving `title` matches more weight than `description` matches?
-- Should repositories be able to define canonical discovery roots or named groups so `tree` and `list` do not need to scan every Markdown file?
-- If curated index files are configured, should `docgarden` validate only their links, or also compare them against frontmatter-derived inventories for drift?

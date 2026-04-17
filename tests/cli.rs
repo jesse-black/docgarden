@@ -48,7 +48,7 @@ fn lint_and_fix_help_list_shared_flags() {
 
 #[test]
 fn lint_subcommand_reports_fixable_diagnostics_for_fixture_repo() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap(), "--color", "never"])
@@ -62,7 +62,7 @@ fn lint_subcommand_reports_fixable_diagnostics_for_fixture_repo() {
 
 #[test]
 fn explicit_file_target_reports_fixable_diagnostics() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
@@ -77,7 +77,7 @@ fn explicit_file_target_reports_fixable_diagnostics() {
 
 #[test]
 fn fix_subcommand_rewrites_files_and_second_lint_passes() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["fix", root.to_str().unwrap()])
@@ -95,7 +95,7 @@ fn fix_subcommand_rewrites_files_and_second_lint_passes() {
 
 #[test]
 fn explicit_file_fix_rewrites_and_second_passes() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
@@ -115,7 +115,7 @@ fn explicit_file_fix_rewrites_and_second_passes() {
 
 #[test]
 fn explicit_file_list_is_supported() {
-    let (_temp, root) = fixture_repo("backticks");
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
@@ -242,8 +242,8 @@ fn git_root_is_used_when_no_docgarden_toml_is_found() {
 }
 
 #[test]
-fn fix_rewrites_backticks_to_links_in_link_mode() {
-    let (_temp, root) = fixture_repo("links");
+fn fix_rewrites_backticks_to_links_in_fixture_repo() {
+    let (_temp, root) = fixture_repo("test-repo");
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["fix", root.to_str().unwrap()])
