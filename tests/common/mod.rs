@@ -20,7 +20,7 @@ fn copy_dir_all(src: &Path, dst: &Path) {
 pub fn fixture_repo(name: &str) -> (TempDir, PathBuf) {
     let temp = tempdir().unwrap();
     let root = temp.path().join("repo");
-    let fixture = Path::new("tests/test-repos").join(name);
+    let fixture = Path::new("tests").join(name);
     copy_dir_all(&fixture, &root);
     (temp, root)
 }
