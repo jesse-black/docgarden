@@ -26,16 +26,11 @@ max_lines = 500
 max_tokens = 5000
 
 [[rules]]
-path = "README.md"
-disable = ["prefer-backticks-for-local-paths"]
-reason = "Allow local links in README.md because it is human-facing documentation."
-
-[[rules]]
 path = "docs/exec-plans/completed/**"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 reason = "Completed ExecPlans are archival records and may preserve historical paths."
 
 [[rules]]
 path = "docs/references/**"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 reason = "References are clippings of external sources and must remain untouched."

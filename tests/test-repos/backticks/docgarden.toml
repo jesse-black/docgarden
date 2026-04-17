@@ -1,1 +1,3 @@
-path_style = "backticks"
+[[rules]]
+path = "docs/**"
+enable = ["prefer-links-for-local-paths"]

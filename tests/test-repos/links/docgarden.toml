@@ -1,1 +1,3 @@
-path_style = "links"
+[[rules]]
+path = "docs/**"
+enable = ["prefer-links-for-local-paths"]

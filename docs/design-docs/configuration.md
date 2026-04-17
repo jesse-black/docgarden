@@ -48,7 +48,7 @@ Use `[[rules]].disable` instead when a file should still be discovered and linte
 
     [[rules]]
     path = "docs/references/**"
-    disable = ["unresolved-local-path"]
+    disable = ["unresolved-link-path"]
     reason = "Imported source-derived docs may contain external or hypothetical paths."
 
 This distinction matters because excluded files disappear from all lint checks, while rule disables preserve the file in discovery and relax only the named behavior.
@@ -90,7 +90,7 @@ A conceptual example:
 
     [[rules]]
     path = "docs/references/**"
-    disable = ["unresolved-local-path"]
+    disable = ["unresolved-link-path"]
 
     [[rules]]
     path = ".agents/skills/**/SKILL.md"
@@ -151,7 +151,7 @@ A plausible example:
 
     [[rules]]
     path = "docs/references/**"
-    disable = ["unresolved-local-path"]
+    disable = ["unresolved-link-path"]
     reason = "Imported source-derived docs may contain hypothetical or external paths that should not be treated as repository errors."
 
 The current design direction is:

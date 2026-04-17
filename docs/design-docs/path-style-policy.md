@@ -156,13 +156,11 @@ That makes wikilinks a higher-complexity opt-in mode rather than a natural defau
 
 ## Current Product Boundary
 
-Today `docgarden` supports a local reference style policy of `backticks` or `links`.
+Today `docgarden` validates local Markdown links by default and supports opt-in style enforcement for backtick paths.
 
-That boundary is pragmatic:
-
-- both forms fit naturally into Markdown AST processing
-- both forms can be linted and autofixed mechanically in a repository-local way
-- both map cleanly onto the current product focus on repo-relative path integrity
+- `unresolved-link-path` fires by default for any local Markdown link that does not resolve within the repository.
+- `unresolved-backtick-path` is opt-in via `[[rules]].enable` and fires when a backtick path does not resolve, using entry-level `severity`.
+- `prefer-links-for-local-paths` is opt-in via `[[rules]].enable` and rewrites backtick paths to Markdown links for repositories that prefer navigable link syntax.
 
 Wikilinks are not just another spelling of the same feature. Supporting them would require explicit decisions about syntax, resolution rules, portability, and whether the product is still enforcing repository paths or has expanded into wiki-page identity.
 
@@ -179,26 +177,14 @@ Path-style policy should apply to repository-authored documents, not to raw impo
 
 In this repository, files under `docs/references/` are local captures of external material. Even when they contain path-shaped text or alternate link styles, those files should be treated as source-derived inputs rather than as style-normalized first-party prose.
 
-This distinction matters for future configuration:
+This distinction matters for configuration:
 
-- repo-authored scopes may opt into a strict path-style policy
-- imported reference scopes may require provenance checks while relaxing path-style rewrites
-
-## Initial Design Direction
-
-The current design direction is:
-
-- keep `backticks` and `links` as the actively supported style-policy options
-- preserve the repository's rationale for starting with backticks in agent-first, token-sensitive docs
-- treat Markdown links as the main alternative for repositories that prioritize explicit navigation or rendered readability
-- treat wikilinks as a separate product-scope decision rather than as an immediate third style option
-- avoid applying style rewrites to imported raw-source paths such as `docs/references/`
+- repo-authored scopes may opt into `prefer-links-for-local-paths` enforcement
+- imported reference scopes should use `disable = ["unresolved-link-path"]` to relax link resolution
 
 ## Open Questions
 
 - Should `docgarden` stay focused on repository knowledge bases, or should it also become a Markdown wiki tool for Obsidian-style knowledge bases?
 - If wikilinks are supported, should they live behind a separate wiki mode rather than inside the ordinary repository-path style policy?
 - Should wikilink resolution use document identities, scope-specific titles, aliases, or explicit repository paths as the canonical target model?
-- Should repositories be able to define different path-style policies for different configured scopes?
-- Should style policy be enforced only in repo-authored docs by default, with imported-reference scopes automatically exempted from rewrites?
 - How much rendered-document ergonomics should matter relative to token efficiency in the default product posture?

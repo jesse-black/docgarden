@@ -24,13 +24,6 @@ pub struct FrontmatterRuleConfig {
     pub fields: BTreeMap<String, FrontmatterFieldConfig>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum LocalReferenceStyle {
-    Backticks,
-    Links,
-}
-
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileConfig {
@@ -49,8 +42,6 @@ pub struct FileConfig {
     #[serde(default = "default_respect_gitignore")]
     pub respect_gitignore: bool,
     #[serde(default)]
-    pub path_style: Option<LocalReferenceStyle>,
-    #[serde(default)]
     pub rules: Vec<RuleConfig>,
 }
 
@@ -64,8 +55,6 @@ pub struct RuleConfig {
     pub disable: Option<Vec<String>>,
     #[serde(default)]
     pub enable: Option<Vec<String>>,
-    #[serde(default)]
-    pub path_style: Option<LocalReferenceStyle>,
     #[serde(default)]
     pub max_tokens: Option<usize>,
     #[serde(default)]
@@ -108,19 +97,31 @@ pub struct EffectiveFrontmatterPolicy {
     pub field_max_chars: BTreeMap<String, usize>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnresolvedBacktickPathRule {
+    pub pattern: String,
+    pub exclude: Vec<String>,
+    pub severity: RuleSeverity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreferLinksRule {
+    pub pattern: String,
+    pub exclude: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub repository_root: PathBuf,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub per_file_ignores: Vec<PerFileIgnoreEntry>,
-    pub local_reference_style_overrides: Vec<LocalReferenceStyleOverride>,
-    pub local_reference_style: LocalReferenceStyle,
+    pub unresolved_backtick_path_rules: Vec<UnresolvedBacktickPathRule>,
+    pub prefer_links_rules: Vec<PreferLinksRule>,
     pub known_extensions: BTreeSet<String>,
     pub special_filenames: BTreeSet<String>,
     pub config_path: Option<PathBuf>,
     pub config_was_explicit: bool,
-    pub ambiguous_inline_code_patterns: Vec<AmbiguousCodeEntry>,
     pub context_budget_rules: Vec<ContextBudgetRule>,
     pub frontmatter_rules: Vec<FrontmatterRule>,
     pub respect_gitignore: bool,
@@ -131,19 +132,6 @@ pub struct PerFileIgnoreEntry {
     pub pattern: String,
     pub exclude: Vec<String>,
     pub rules: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AmbiguousCodeEntry {
-    pub pattern: String,
-    pub exclude: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LocalReferenceStyleOverride {
-    pub pattern: String,
-    pub exclude: Vec<String>,
-    pub style: LocalReferenceStyle,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -225,7 +213,6 @@ impl Config {
             bail!("include patterns must not be empty");
         }
 
-        let local_reference_style = parsed.path_style.unwrap_or(LocalReferenceStyle::Backticks);
         let rule_applications = lower_rules(parsed.rules)?;
 
         Ok(Self {
@@ -233,13 +220,12 @@ impl Config {
             include,
             exclude: parsed.exclude,
             per_file_ignores: rule_applications.per_file_ignores,
-            local_reference_style_overrides: rule_applications.local_reference_style_overrides,
-            local_reference_style,
+            unresolved_backtick_path_rules: rule_applications.unresolved_backtick_path_rules,
+            prefer_links_rules: rule_applications.prefer_links_rules,
             known_extensions,
             special_filenames,
             config_path,
             config_was_explicit,
-            ambiguous_inline_code_patterns: rule_applications.ambiguous_inline_code_patterns,
             context_budget_rules: rule_applications.context_budget_rules,
             frontmatter_rules: rule_applications.frontmatter_rules,
             respect_gitignore: parsed.respect_gitignore,
@@ -261,30 +247,30 @@ impl Config {
         Ok(ignored)
     }
 
-    pub fn local_reference_style_for_path(
+    pub fn unresolved_backtick_path_severity_for_path(
         &self,
         relative_path: &str,
-    ) -> Result<LocalReferenceStyle> {
-        let mut style = self.local_reference_style;
-        for entry in &self.local_reference_style_overrides {
+    ) -> Result<Option<Severity>> {
+        let mut severity = None;
+        for rule in &self.unresolved_backtick_path_rules {
             if rule_entry_matches(
                 &self.repository_root,
-                &entry.pattern,
-                &entry.exclude,
+                &rule.pattern,
+                &rule.exclude,
                 relative_path,
             )? {
-                style = entry.style;
+                severity = Some(rule.severity.into());
             }
         }
-        Ok(style)
+        Ok(severity)
     }
 
-    pub fn report_ambiguous_inline_code_for_path(&self, relative_path: &str) -> Result<bool> {
-        for entry in &self.ambiguous_inline_code_patterns {
+    pub fn prefer_links_for_local_paths_for_path(&self, relative_path: &str) -> Result<bool> {
+        for rule in &self.prefer_links_rules {
             if rule_entry_matches(
                 &self.repository_root,
-                &entry.pattern,
-                &entry.exclude,
+                &rule.pattern,
+                &rule.exclude,
                 relative_path,
             )? {
                 return Ok(true);
@@ -348,8 +334,8 @@ impl Config {
 #[derive(Default)]
 struct RuleApplications {
     per_file_ignores: Vec<PerFileIgnoreEntry>,
-    local_reference_style_overrides: Vec<LocalReferenceStyleOverride>,
-    ambiguous_inline_code_patterns: Vec<AmbiguousCodeEntry>,
+    unresolved_backtick_path_rules: Vec<UnresolvedBacktickPathRule>,
+    prefer_links_rules: Vec<PreferLinksRule>,
     context_budget_rules: Vec<ContextBudgetRule>,
     frontmatter_rules: Vec<FrontmatterRule>,
 }
@@ -385,26 +371,28 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<RuleApplications> {
         }
         if let Some(enabled_rules) = rule.enable {
             validate_rule_list("enable", &enabled_rules, is_supported_enabled_rule)?;
+            let severity = rule.severity.unwrap_or(RuleSeverity::Error);
             if enabled_rules
                 .iter()
-                .any(|rule| rule == "ambiguous-inline-code")
+                .any(|r| r == "unresolved-backtick-path")
             {
                 applications
-                    .ambiguous_inline_code_patterns
-                    .push(AmbiguousCodeEntry {
+                    .unresolved_backtick_path_rules
+                    .push(UnresolvedBacktickPathRule {
                         pattern: pattern.clone(),
                         exclude: exclude.clone(),
+                        severity,
                     });
             }
-        }
-        if let Some(style) = rule.path_style {
-            applications
-                .local_reference_style_overrides
-                .push(LocalReferenceStyleOverride {
+            if enabled_rules
+                .iter()
+                .any(|r| r == "prefer-links-for-local-paths")
+            {
+                applications.prefer_links_rules.push(PreferLinksRule {
                     pattern: pattern.clone(),
                     exclude: exclude.clone(),
-                    style,
                 });
+            }
         }
         if rule.max_tokens.is_some() || rule.max_lines.is_some() || !disabled_rules.is_empty() {
             let severity = rule.severity.unwrap_or(RuleSeverity::Error);
@@ -487,17 +475,16 @@ fn validate_rule_list(
 fn is_known_rule(rule: &str) -> bool {
     matches!(
         rule,
-        "unresolved-local-path"
+        "unresolved-link-path"
+            | "unresolved-backtick-path"
             | "prefer-links-for-local-paths"
-            | "prefer-backticks-for-local-paths"
-            | "ambiguous-inline-code"
             | "max_tokens"
             | "max_lines"
     )
 }
 
 fn is_supported_enabled_rule(rule: &str) -> bool {
-    rule == "ambiguous-inline-code"
+    matches!(rule, "unresolved-backtick-path" | "prefer-links-for-local-paths")
 }
 
 fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bool> {
@@ -547,7 +534,7 @@ fn normalize_extension(value: &str) -> String {
 mod tests {
     use std::fs;
 
-    use super::{BudgetLimit, Config, LocalReferenceStyle, RuleSeverity};
+    use super::{BudgetLimit, Config, RuleSeverity};
     use tempfile::TempDir;
 
     #[test]
@@ -556,7 +543,11 @@ mod tests {
         let repository_root = temp.path().join("repo");
         let nested = repository_root.join("docs");
         fs::create_dir_all(&nested).unwrap();
-        fs::write(nested.join("docgarden.toml"), "path_style = \"links\"\n").unwrap();
+        fs::write(
+            nested.join("docgarden.toml"),
+            "[[rules]]\npath = \"docs/**\"\nenable = [\"prefer-links-for-local-paths\"]\n",
+        )
+        .unwrap();
 
         let config = Config::load(&repository_root, None).unwrap();
 
@@ -565,7 +556,7 @@ mod tests {
             repository_root.canonicalize().unwrap()
         );
         assert!(config.config_path.is_none());
-        assert_eq!(config.local_reference_style, LocalReferenceStyle::Backticks);
+        assert!(config.prefer_links_rules.is_empty());
         assert_eq!(
             config.include,
             vec!["docs/**", "README.md", "AGENTS.md", "*.md"]
@@ -586,11 +577,10 @@ extend_extensions = ["proto", ".rego"]
 remove_extensions = ["md"]
 extend_special_filenames = ["Tiltfile"]
 remove_special_filenames = ["LICENSE"]
-path_style = "links"
 
 [[rules]]
 path = "docs/generated/**"
-disable = ["ambiguous-inline-code"]
+disable = ["unresolved-link-path"]
 "#,
         )
         .unwrap();
@@ -599,7 +589,6 @@ disable = ["ambiguous-inline-code"]
 
         assert_eq!(config.config_path, Some(config_path));
         assert!(!config.config_was_explicit);
-        assert_eq!(config.local_reference_style, LocalReferenceStyle::Links);
         assert!(!config.respect_gitignore);
         assert!(config.known_extensions.contains(".proto"));
         assert!(config.known_extensions.contains(".rego"));
@@ -613,7 +602,7 @@ disable = ["ambiguous-inline-code"]
                 .find(|e| e.pattern == "docs/generated/**")
                 .unwrap()
                 .rules,
-            vec!["ambiguous-inline-code".to_string()]
+            vec!["unresolved-link-path".to_string()]
         );
     }
 
@@ -638,16 +627,16 @@ disable = ["ambiguous-inline-code"]
             r#"
 [[rules]]
 path = "docs/references/**"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 reason = "Imported references may contain source-derived paths."
 
 [[rules]]
 path = "docs/**"
-enable = ["ambiguous-inline-code"]
+enable = ["unresolved-backtick-path"]
 
 [[rules]]
 path = "README.md"
-path_style = "links"
+enable = ["prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
@@ -661,29 +650,31 @@ path_style = "links"
                 .find(|e| e.pattern == "docs/references/**")
                 .unwrap()
                 .rules,
-            vec!["unresolved-local-path".to_string()]
+            vec!["unresolved-link-path".to_string()]
         );
-        assert_eq!(config.ambiguous_inline_code_patterns.len(), 1);
-        assert_eq!(config.ambiguous_inline_code_patterns[0].pattern, "docs/**");
-        assert_eq!(
-            config.local_reference_style_for_path("README.md").unwrap(),
-            LocalReferenceStyle::Links
-        );
-        assert_eq!(
-            config
-                .local_reference_style_for_path("docs/guide.md")
-                .unwrap(),
-            LocalReferenceStyle::Backticks
-        );
+        assert_eq!(config.unresolved_backtick_path_rules.len(), 1);
+        assert_eq!(config.unresolved_backtick_path_rules[0].pattern, "docs/**");
         assert!(
             config
-                .report_ambiguous_inline_code_for_path("docs/guide.md")
+                .prefer_links_for_local_paths_for_path("README.md")
                 .unwrap()
         );
         assert!(
             !config
-                .report_ambiguous_inline_code_for_path("README.md")
+                .prefer_links_for_local_paths_for_path("docs/guide.md")
                 .unwrap()
+        );
+        assert!(
+            config
+                .unresolved_backtick_path_severity_for_path("docs/guide.md")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            config
+                .unresolved_backtick_path_severity_for_path("README.md")
+                .unwrap()
+                .is_none()
         );
     }
 
@@ -697,15 +688,15 @@ path_style = "links"
             r#"
 [[rules]]
 path = "docs/references"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 
 [[rules]]
 path = "docs/references"
-enable = ["ambiguous-inline-code"]
+enable = ["unresolved-backtick-path"]
 
 [[rules]]
 path = "docs/references"
-path_style = "links"
+enable = ["prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
@@ -716,18 +707,18 @@ path_style = "links"
             config
                 .ignored_rules_for_path("docs/references/source.md")
                 .unwrap(),
-            ["unresolved-local-path".to_string()].into_iter().collect()
+            ["unresolved-link-path".to_string()].into_iter().collect()
         );
         assert!(
             config
-                .report_ambiguous_inline_code_for_path("docs/references/source.md")
+                .unresolved_backtick_path_severity_for_path("docs/references/source.md")
                 .unwrap()
+                .is_some()
         );
-        assert_eq!(
+        assert!(
             config
-                .local_reference_style_for_path("docs/references/source.md")
-                .unwrap(),
-            LocalReferenceStyle::Links
+                .prefer_links_for_local_paths_for_path("docs/references/source.md")
+                .unwrap()
         );
     }
 
@@ -830,7 +821,7 @@ match = "docs/**"
             r#"
 [[rules]]
 match = "docs/**"
-disable = ["unresolved-local-path"]
+disable = ["unresolved-link-path"]
 "#,
         )
         .unwrap();
@@ -853,6 +844,12 @@ disable = ["unresolved-local-path"]
         assert!(error.contains("failed to parse"));
 
         fs::write(&config_path, "local-reference-style = \"backticks\"\n").unwrap();
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(&config_path, "path_style = \"links\"\n").unwrap();
         let error = Config::load(&repository_root, None)
             .unwrap_err()
             .to_string();
@@ -932,6 +929,21 @@ max_tokens = 500
 [[rules]]
 path = "docs/**"
 enabled = false
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "docs/**"
+path_style = "links"
 "#,
         )
         .unwrap();
@@ -1096,9 +1108,6 @@ max_chars = 0
 
     #[test]
     fn frontmatter_duplicate_field_names_in_single_entry_are_rejected_by_toml() {
-        // TOML itself rejects duplicate keys within the same table, so duplicate
-        // [rules.frontmatter.fields.description] entries under one [[rules]] block
-        // produce a parse error before our validation runs.
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
         fs::create_dir_all(&repository_root).unwrap();
@@ -1116,7 +1125,7 @@ max_chars = 0
     }
 
     #[test]
-    fn local_reference_style_reports_invalid_path_pattern() {
+    fn prefer_links_rule_reports_invalid_path_pattern() {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
         fs::create_dir_all(&repository_root).unwrap();
@@ -1125,17 +1134,54 @@ max_chars = 0
             r#"
 [[rules]]
 path = "{docs,README.md"
-path_style = "links"
+enable = ["prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
         let config = Config::load(&repository_root, None).unwrap();
 
         let error = config
-            .local_reference_style_for_path("README.md")
+            .prefer_links_for_local_paths_for_path("README.md")
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("invalid rule path pattern {docs,README.md"));
+    }
+
+    #[test]
+    fn unresolved_backtick_path_enable_uses_entry_severity() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "docs/**"
+enable = ["unresolved-backtick-path"]
+severity = "warn"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(config.unresolved_backtick_path_rules.len(), 1);
+        assert_eq!(
+            config.unresolved_backtick_path_rules[0].severity,
+            RuleSeverity::Warn
+        );
+        assert!(
+            config
+                .unresolved_backtick_path_severity_for_path("docs/guide.md")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            config
+                .unresolved_backtick_path_severity_for_path("README.md")
+                .unwrap()
+                .is_none()
+        );
     }
 }

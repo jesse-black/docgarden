@@ -54,7 +54,7 @@ fn lint_subcommand_reports_fixable_diagnostics_for_fixture_repo() {
         .args(["lint", root.to_str().unwrap(), "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
+        .stdout(predicate::str::contains("prefer-links-for-local-paths"))
         .stdout(predicate::str::contains("fixable"))
         .stdout(predicate::str::contains("Run `docgarden fix "))
         .stdout(predicate::str::contains("--config").not());
@@ -69,7 +69,7 @@ fn explicit_file_target_reports_fixable_diagnostics() {
         .args(["lint", "docs/guide.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
+        .stdout(predicate::str::contains("prefer-links-for-local-paths"))
         .stdout(predicate::str::contains(
             "Run `docgarden fix docs/guide.md`",
         ));
@@ -85,7 +85,7 @@ fn fix_subcommand_rewrites_files_and_second_lint_passes() {
         .success();
 
     let doc = fs::read_to_string(root.join("docs/guide.md")).unwrap();
-    assert!(doc.contains("`docs/real.md`"));
+    assert!(doc.contains("[./real.md](real.md)"));
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", root.to_str().unwrap()])
@@ -104,7 +104,7 @@ fn explicit_file_fix_rewrites_and_second_passes() {
         .success();
 
     let doc = fs::read_to_string(root.join("docs/guide.md")).unwrap();
-    assert!(doc.contains("`docs/real.md`"));
+    assert!(doc.contains("[./real.md](real.md)"));
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&root)
@@ -122,7 +122,7 @@ fn explicit_file_list_is_supported() {
         .args(["lint", "docs/guide.md", "docs/real.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("prefer-backticks-for-local-paths"))
+        .stdout(predicate::str::contains("prefer-links-for-local-paths"))
         .stdout(predicate::str::contains(
             "Run `docgarden fix docs/guide.md docs/real.md`",
         ));
@@ -182,7 +182,7 @@ fn no_gitignore_flag_scans_gitignored_files() {
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
         root.join("target/package/docgarden-0.1.0/docs/stale.md"),
-        "See `scripts/setup-jules.sh`.\n",
+        "[Missing](missing.md)\n",
     )
     .unwrap();
 
@@ -194,7 +194,7 @@ fn no_gitignore_flag_scans_gitignored_files() {
         .stdout(predicate::str::contains(
             "target/package/docgarden-0.1.0/docs/stale.md",
         ))
-        .stdout(predicate::str::contains("unresolved-local-path"));
+        .stdout(predicate::str::contains("unresolved-link-path"));
 }
 
 #[test]
@@ -208,7 +208,7 @@ fn config_can_opt_out_of_gitignore_support() {
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
         root.join("target/package/docgarden-0.1.0/docs/stale.md"),
-        "See `scripts/setup-jules.sh`.\n",
+        "[Missing](missing.md)\n",
     )
     .unwrap();
 
@@ -220,7 +220,7 @@ fn config_can_opt_out_of_gitignore_support() {
         .stdout(predicate::str::contains(
             "target/package/docgarden-0.1.0/docs/stale.md",
         ))
-        .stdout(predicate::str::contains("unresolved-local-path"));
+        .stdout(predicate::str::contains("unresolved-link-path"));
 }
 
 #[test]
@@ -264,7 +264,11 @@ fn fix_preserves_unrelated_readme_formatting() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(root.join("docgarden.toml"), "path_style = \"backticks\"\n").unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "[[rules]]\npath = \"README.md\"\nenable = [\"prefer-links-for-local-paths\"]\n",
+    )
+    .unwrap();
     fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
     fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
     let readme = root.join("README.md");
@@ -277,7 +281,7 @@ fn fix_preserves_unrelated_readme_formatting() {
         "\n",
         "Text with a trailing space. \n",
         "\n",
-        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
     );
     let expected = concat!(
         "# Doc Garden\n",
@@ -288,7 +292,7 @@ fn fix_preserves_unrelated_readme_formatting() {
         "\n",
         "Text with a trailing space. \n",
         "\n",
-        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
     );
     fs::write(&readme, original).unwrap();
 
@@ -310,11 +314,13 @@ fn fix_respects_rule_disable_for_readme_style_rules() {
     fs::write(
         root.join("docgarden.toml"),
         concat!(
-            "path_style = \"backticks\"\n",
+            "[[rules]]\n",
+            "path = \"**\"\n",
+            "enable = [\"prefer-links-for-local-paths\"]\n",
             "\n",
             "[[rules]]\n",
             "path = \"README.md\"\n",
-            "disable = [\"prefer-backticks-for-local-paths\"]\n",
+            "disable = [\"prefer-links-for-local-paths\"]\n",
         ),
     )
     .unwrap();
@@ -324,7 +330,7 @@ fn fix_respects_rule_disable_for_readme_style_rules() {
     let original = concat!(
         "# Doc Garden\n",
         "\n",
-        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
     );
     fs::write(&readme, original).unwrap();
 
@@ -343,19 +349,23 @@ fn fix_handles_multibyte_text_before_rewrites_without_corruption() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(root.join("docgarden.toml"), "path_style = \"backticks\"\n").unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "[[rules]]\npath = \"README.md\"\nenable = [\"prefer-links-for-local-paths\"]\n",
+    )
+    .unwrap();
     fs::write(root.join("docs/PRODUCT.md"), "# Product\n").unwrap();
     fs::write(root.join("LICENSE"), "Apache-2.0\n").unwrap();
     let readme = root.join("README.md");
     let original = concat!(
         "Préface\n",
         "\n",
-        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
+        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
     );
     let expected = concat!(
         "Préface\n",
         "\n",
-        "For more, see `docs/PRODUCT.md` and `LICENSE`.\n",
+        "For more, see [docs/PRODUCT.md](docs/PRODUCT.md) and [LICENSE](LICENSE).\n",
     );
     fs::write(&readme, original).unwrap();
 

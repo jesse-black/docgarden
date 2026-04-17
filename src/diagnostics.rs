@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Serialize;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Severity {
     Error,
@@ -78,9 +78,9 @@ mod tests {
             file: "docs/guide.md".to_string(),
             line: 2,
             column: 1,
-            severity: Severity::Warning,
-            rule: "ambiguous-inline-code".to_string(),
-            message: "warn".to_string(),
+            severity: Severity::Error,
+            rule: "unresolved-link-path".to_string(),
+            message: "broken link".to_string(),
             fixable: false,
         });
 
@@ -90,7 +90,7 @@ mod tests {
                 .fixable_rules
                 .contains("prefer-links-for-local-paths")
         );
-        assert!(!summary.fixable_rules.contains("ambiguous-inline-code"));
+        assert!(!summary.fixable_rules.contains("unresolved-link-path"));
     }
 
     #[test]
