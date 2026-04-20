@@ -102,7 +102,31 @@ The scorer should improve separation and recall without turning `docgarden match
 
 Lucene's `CombinedFieldQuery` and `BM25Similarity` remain the source of truth for the shipped lexical ranking model. Future work should build on that base rather than reopening the pre-BM25F tiered scorer.
 
-### 1. Stemming With A Shared Normalization Path
+### 1. Evaluate Document-Union Pseudo Statistics
+
+The shipped scorer intentionally follows Lucene's combined-field shape, including these corpus-level approximations:
+
+- `pseudo_df(term)` uses the maximum per-field document frequency
+- `pseudo_doc_count` uses the maximum per-field document count
+
+That behavior is consistent with the linked Lucene implementation and should not be treated as a correctness bug in the current scorer.
+
+A plausible future experiment is to replace those max-based pseudo statistics with document-union statistics that treat a term as present when it appears in any scoring field of a document:
+
+- `pseudo_df(term) = number of documents where the term appears in any scoring field`
+- `pseudo_doc_count = total candidate documents`
+
+The motivation would be repository-routing quality, not fidelity to Lucene. In small curated corpora, union-style statistics may reduce cases where a term that appears in different fields across different documents is treated as rarer than it feels to a human reader.
+
+If this is explored, it should be treated as a deliberate scoring-model change:
+
+- compare ranking quality against the current Lucene-shaped baseline on real repo queries
+- update `docs/design-docs/frontmatter-driven-discovery-commands.md` if the ranking contract changes materially
+- document clearly that `docgarden` is no longer mirroring Lucene's pseudo-statistics approximation exactly
+
+This is worth evaluating before more speculative scoring additions if dogfooding shows corpus-statistics shape matters more than token normalization.
+
+### 2. Stemming With A Shared Normalization Path
 
 The next plausible routing improvement is stemming, and current repo dogfooding suggests it has more upside than phrase/proximity bonuses.
 
@@ -142,7 +166,7 @@ Implementation shape if accepted:
 - expose enough normalized-token information for `src/matching.rs` highlighting to follow the same analyzed terms
 - add tests showing that ranking and highlighting stay aligned for stemmed forms such as `plan` / `plans`
 
-### 2. Partial Phrase And Proximity Bonuses (Deferred)
+### 3. Partial Phrase And Proximity Bonuses (Deferred)
 
 BM25F is a bag-of-words model and does not capture phrase evidence. Bigram bonuses or limited proximity evidence could still add signal on top of BM25F for routing queries where term co-occurrence matters.
 
@@ -157,8 +181,9 @@ If implemented:
 ## Recommended Order
 
 1. Recalibrate explain-mode color thresholds
-2. Evaluate stemming with a single shared normalization path if recall and highlighting consistency still need improvement
-3. Optionally add bigram or proximity bonuses if dogfooding still shows a remaining gap after stemming
+2. Evaluate whether document-union pseudo statistics outperform the current Lucene-shaped max-based approximation on real routing queries
+3. Evaluate stemming with a single shared normalization path if recall and highlighting consistency still need improvement
+4. Optionally add bigram or proximity bonuses if dogfooding still shows a remaining gap after stemming
 
 ## What Implementation Would Look Like
 
