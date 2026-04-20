@@ -220,7 +220,6 @@ dependencies = [
  "markdown",
  "predicates",
  "serde",
- "serde_json",
  "tempfile",
  "tiktoken-rs",
  "toml",
