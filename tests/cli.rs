@@ -16,7 +16,7 @@ use common::fixture_repo;
 // ---------------------------------------------------------------------------
 
 #[test]
-fn match_help_documents_output_columns_flags_and_alias() {
+fn match_help_documents_output_columns_and_flags() {
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["match", "--help"])
         .assert()
@@ -28,10 +28,10 @@ fn match_help_documents_output_columns_flags_and_alias() {
         .stdout(predicate::str::contains("--path-only"))
         .stdout(predicate::str::contains("-n"))
         .stdout(predicate::str::contains("-p"))
-        .stdout(predicate::str::contains("Alias: `m`"))
-        .stdout(predicate::str::contains("1-24 is low"))
-        .stdout(predicate::str::contains("25-59 is medium"))
-        .stdout(predicate::str::contains("60+ is high"));
+        .stdout(predicate::str::contains("Alias: `m`").not())
+        .stdout(predicate::str::contains("1-24 is low").not())
+        .stdout(predicate::str::contains("25-59 is medium").not())
+        .stdout(predicate::str::contains("60+ is high").not());
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn match_path_only_with_limit() {
 }
 
 #[test]
-fn match_color_always_and_never_control_only_score_column() {
+fn match_color_always_and_never_control_match_styling() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::write(root.join("docgarden.toml"), "").unwrap();
@@ -218,7 +218,9 @@ fn match_color_always_and_never_control_only_score_column() {
         .unwrap();
     assert!(low.status.success());
     let low_stdout = String::from_utf8(low.stdout).unwrap();
-    assert!(low_stdout.contains("\u{1b}[31m1\u{1b}[0m | docs/low.md"));
+    assert!(low_stdout.contains("\u{1b}[1;31m1\u{1b}[0m"));
+    assert!(low_stdout.contains("\u{1b}[1m | \u{1b}[0mdocs/low.md"));
+    assert!(low_stdout.contains("\u{1b}[1mlow\u{1b}[0m"));
 
     let medium = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
@@ -227,7 +229,8 @@ fn match_color_always_and_never_control_only_score_column() {
         .unwrap();
     assert!(medium.status.success());
     let medium_stdout = String::from_utf8(medium.stdout).unwrap();
-    assert!(medium_stdout.contains("\u{1b}[33m51\u{1b}[0m | docs/medium.md"));
+    assert!(medium_stdout.contains("\u{1b}[1;33m51\u{1b}[0m"));
+    assert!(medium_stdout.contains("\u{1b}[1mUniquealpha\u{1b}[0m"));
 
     let high = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
@@ -236,7 +239,8 @@ fn match_color_always_and_never_control_only_score_column() {
         .unwrap();
     assert!(high.status.success());
     let high_stdout = String::from_utf8(high.stdout).unwrap();
-    assert!(high_stdout.contains("\u{1b}[32m127\u{1b}[0m | docs/high.md"));
+    assert!(high_stdout.contains("\u{1b}[1;32m127\u{1b}[0m"));
+    assert!(high_stdout.contains("\u{1b}[1mAlpha Beta\u{1b}[0m"));
 
     let never = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
@@ -406,8 +410,8 @@ fn root_help_lists_explicit_subcommands() {
         .stdout(predicate::str::contains("Usage: docgarden <COMMAND>"))
         .stdout(predicate::str::contains("lint"))
         .stdout(predicate::str::contains("fix"))
-        .stdout(predicate::str::contains("init"))
-        .stdout(predicate::str::contains("skill"))
+        .stdout(predicate::str::contains("init").not())
+        .stdout(predicate::str::contains("skill").not())
         .stdout(predicate::str::contains("[TARGETS]").not())
         .stdout(predicate::str::contains("--fix").not());
 }

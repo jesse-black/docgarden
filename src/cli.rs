@@ -31,10 +31,7 @@ enum Command {
         long_about = "Rank repository Markdown documents by how well their frontmatter \
                       and path match the given query terms.\n\
                       \n\
-                      Alias: `m`\n\
-                      \n\
                       Output columns (default):\n\
-                      \n\
                       \x20 score | path | name | description\n\
                       \n\
                       Fields are separated by ` | `. A literal `|` in any field is \
@@ -44,17 +41,9 @@ enum Command {
                       no frontmatter `description`.\n\
                       \n\
                       With --path-only, each result is a single repository-relative path \
-                      on its own line.\n\
-                      \n\
-                      Score is a non-negative integer. Higher means a closer match; \
-                      ordering is the contract, not the absolute value. Scores are not \
-                      comparable across different repositories or tool versions."
+                      on its own line."
     )]
     Match(MatchArgs),
-    #[command(about = "Reserved placeholder for future repository initialization")]
-    Init,
-    #[command(about = "Reserved namespace for future skill workflows")]
-    Skill,
 }
 
 #[derive(ClapArgs, Debug)]
@@ -134,12 +123,6 @@ pub fn run() -> Result<()> {
             args.color,
             args.limit,
             args.path_only,
-        ),
-        Command::Init => bail!(
-            "`docgarden init` is reserved for future repository initialization work and is not implemented yet"
-        ),
-        Command::Skill => bail!(
-            "`docgarden skill` is reserved for future skill workflows and is not implemented yet"
         ),
     }
 }
