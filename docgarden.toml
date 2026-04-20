@@ -21,6 +21,9 @@ max_lines = 100
 max_tokens = 1000
 
 [[rules]]
-path = "SKILL.md"
+path = "**/SKILL.md"
 max_lines = 500
 max_tokens = 5000
+
+[rules.frontmatter]
+required = ["name"]

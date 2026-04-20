@@ -86,10 +86,12 @@ That gives the repository a clean contract:
 
 For v1, that means discovery commands should:
 
-- traverse the same targets model that lint uses
+- reuse the same discovery walker and include/exclude rules that lint uses
 - discover only Markdown files selected by the existing traversal and include/exclude rules
 - respect `.gitignore`, `.ignore`, and related git exclude behavior by default
 - support the same `--no-gitignore` flag so callers can opt out of gitignore-based filtering when needed
+
+For shipped v1, `docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
 
 This keeps repository traversal behavior consistent across lint and discovery commands, reduces implementation duplication, and avoids subtle cases where `lint` and `list` or `match` disagree about which documents exist.
 
@@ -106,11 +108,9 @@ The common result shape should be:
 - `name`: frontmatter `name` when present
 - `description`: frontmatter `description` when present
 
-For `match`, add:
+For `match`, ranking still uses a numeric relevance score internally, but the default text output should optimize for routing rather than score inspection.
 
-- `score`: numeric relevance score used for ranking
-
-The score should be treated as an ordering aid, not as a durable semantic contract across scoring-version changes. Callers should trust sorted order first and only use score for debugging or quick scanning within the same tool version.
+The score should be treated as an ordering aid, not as a durable semantic contract across scoring-version changes. Callers should trust sorted order first and only use score for debugging or explain-mode inspection within the same tool version.
 
 ### Text Output
 
@@ -125,14 +125,23 @@ docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven D
 `docgarden match <QUERY>` should emit:
 
 ```text
-842 | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
 ```
 
 This keeps the path first for quick scanning and makes it easy for agents to strip trailing fields when they only need candidates.
 
+`docgarden match --explain <QUERY>` should emit a header row followed by:
+
+```text
+score | relative | coverage | path | name | description
+8.42 | 100% of top | 3/3 terms | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+```
+
+This keeps the default mode compact while still providing a deterministic diagnostic view for humans or agents that need to inspect why one result outranked another.
+
 There should be no JSON output surface for these commands in v1. Unlike lint diagnostics, discovery output is primarily an agent-facing routing tool, and compact text is the main product value.
 
-The subcommand help text should explain the output columns and field order instead of adding a header row to every result set. That is a good fit for progressive discovery: the first layer stays compact during normal use, while `--help` provides the format explanation when a human or agent needs to orient itself. The score range should also be explained in the subcommand help text.
+The subcommand help text should explain the output columns and field order instead of adding a header row to every default result set. That is a good fit for progressive discovery: the first layer stays compact during normal use, while `--help` provides the format explanation when a human or agent needs to orient itself. `--explain` is the exception: it should print a header row because its purpose is deliberate inspection rather than compact routing.
 
 ### Result Limits
 
@@ -183,11 +192,11 @@ The intended v1 behavior is:
 
 The scoring corpus for each document should include:
 
-- `name` frontmatter when present
+- `name` frontmatter when present, else the filename stem
+- `path_prefix` as the directory portion of the repository-relative path
 - `description` frontmatter when present
-- repository-relative `path`
 
-If `name` or `description` is absent, the file should still remain discoverable through `path`.
+If `description` is absent, the file should still remain discoverable through `name`. The filename-stem fallback keeps path-only documents discoverable without treating the full path as one undifferentiated field.
 
 ### Normalization
 
@@ -197,47 +206,38 @@ Query text and candidate fields should be normalized in the same way:
 - split on whitespace and punctuation
 - split paths on `/`, `_`, `-`, and `.`
 - collapse repeated separators
+- filter English stopwords symmetrically at index and query time
 - preserve the original values only for display
 
-V1 should not add stemming, embeddings, or language-specific analyzers.
+V1 should not add stemming, embeddings, or analyzers beyond stopword filtering.
 
 ### Ranking Model
 
-The best v1 fit is a small weighted lexical scorer rather than a generic fuzzy-match-only library.
+The best v1 fit is a Lucene-style combined-field BM25F scorer rather than a generic fuzzy matcher.
 
 Recommended formula:
 
-1. Tokenize the query into terms.
-2. For each term, compute a simple corpus-local IDF from the current candidate set.
-3. Score each field independently with field weights:
-   - `name`: highest weight
-   - `path`: medium weight
-   - `description`: lowest weight
-4. Within each field, reward stronger match shapes more than weaker ones:
-   - exact token match
-   - token-prefix match
-   - substring match
-   - optional fuzzy fallback
-5. Add a phrase bonus when the normalized whole query appears contiguously in `name`, `description`, or the basename portion of `path`.
-6. Break ties by:
+1. Tokenize the query into informative terms after stopword filtering.
+2. Build corpus statistics over `name`, `path_prefix`, and `description`.
+3. Combine the weighted field term frequencies and field lengths into one synthetic field.
+4. Score each query term with BM25 using:
+   - `k1 = 1.2`
+   - `b = 0.75`
+   - boosts: `name = 3.0`, `path_prefix = 1.0`, `description = 1.0`
+5. Break ties by:
    - more matched query terms
-   - stronger field hit order (`name` before `path` before `description`)
+   - stronger field hit order (`name` before `description` before `path_prefix`)
    - lexicographic `path`
 
-This is search-like in the ways that matter:
-
-- exact and prefix matches rise to the top
-- common words matter less than distinctive words
-- documents with better discovery metadata get better rankings
-- the behavior stays deterministic and explainable in CI and tests
+This keeps the ranking deterministic and mechanical while replacing the old ad-hoc exact/prefix/substring tiers with a standard field-aware lexical scorer.
 
 For `match --limit N`, the implementation can score all candidates and then truncate to the top N. For the repository sizes this feature is aimed at, that should remain fast enough without adding indexing or cache complexity in v1.
 
 ### Score Format
 
-Use an integer score in v1 rather than a float.
+Use `f32` scores in v1 and render them with two decimal places in `--explain`.
 
-That makes output easier to scan, easier to snapshot-test, and less likely to imply false precision. A 0 to 1000-ish range is sufficient, but the exact range is less important than stable ordering and documented tie-break behavior.
+The exact numeric range is not a semantic contract. Ordering matters first; the displayed score is a debugging and explain-mode aid within one tool version. Default `match` output should hide the raw score column and instead rely on sorted order plus matched-term highlighting for scanning.
 
 ### Library Options
 
@@ -279,7 +279,9 @@ The command should be useful both for humans scanning the output and for agents 
 
 `match` should remain the canonical subcommand name in help text and documentation, with `m` provided as a convenience alias.
 
-It should use the same Markdown discovery set that `list` and `lint` would see for the same targets and gitignore settings.
+It should use the same Markdown discovery set that `lint` would see for the same repository root, config, and gitignore settings.
+
+In shipped v1, `match` does not accept positional filesystem targets. The command always scores against the full repository-root discovery set so ranking stays deterministic for a given repo state.
 
 The implementation should consider:
 

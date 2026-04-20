@@ -24,6 +24,7 @@ Store ExecPlans in:
 - Prefer bullets over prose.
 - Keep plans compact and concrete.
 - Use exact file paths and commands when known.
+- Validation commands must be copy-paste runnable; for `cargo test`, use one positional filter per command.
 - Do not repeat unchanged content when updating a plan.
 - Do not add background or narrative unless required for execution.
 - Do not restate repository context already obvious from the code or file paths.

@@ -4,9 +4,644 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::tempdir;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 mod common;
 
 use common::fixture_repo;
+
+#[derive(Debug)]
+struct MatchRow {
+    path: String,
+    name: String,
+    description: String,
+}
+
+fn parse_match_rows(stdout: &str) -> Vec<MatchRow> {
+    stdout
+        .lines()
+        .map(|line| {
+            let cols: Vec<&str> = line.split(" | ").collect();
+            assert_eq!(cols.len(), 3, "expected 3 columns in output: {line}");
+            MatchRow {
+                path: cols[0].to_string(),
+                name: cols[1].to_string(),
+                description: cols[2].to_string(),
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug)]
+struct ExplainRow {
+    score: f32,
+    relative: String,
+    coverage: String,
+    path: String,
+    name: String,
+    description: String,
+}
+
+fn parse_explain_rows(stdout: &str) -> Vec<ExplainRow> {
+    let mut lines = stdout.lines();
+    let header = lines.next().expect("expected explain header row");
+    assert_eq!(
+        header,
+        "score | relative | coverage | path | name | description"
+    );
+
+    lines
+        .map(|line| {
+            let cols: Vec<&str> = line.split(" | ").collect();
+            assert_eq!(
+                cols.len(),
+                6,
+                "expected 6 columns in explain output: {line}"
+            );
+            ExplainRow {
+                score: cols[0].trim().parse().expect("score should be float"),
+                relative: cols[1].to_string(),
+                coverage: cols[2].to_string(),
+                path: cols[3].to_string(),
+                name: cols[4].to_string(),
+                description: cols[5].to_string(),
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// match subcommand integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn match_help_documents_output_columns_and_flags() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["match", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Usage: docgarden match [OPTIONS] <QUERY>...",
+        ))
+        .stdout(predicate::str::contains("--limit"))
+        .stdout(predicate::str::contains("--path-only"))
+        .stdout(predicate::str::contains("--explain"))
+        .stdout(predicate::str::contains("--color <COLOR>"))
+        .stdout(predicate::str::contains("-n"))
+        .stdout(predicate::str::contains("-p"));
+}
+
+#[test]
+fn root_help_lists_match_subcommand() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("match"));
+}
+
+#[test]
+fn match_alias_m_works_identically_to_match() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let full = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "scoring"])
+        .output()
+        .unwrap();
+
+    let alias = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["m", "scoring"])
+        .output()
+        .unwrap();
+
+    assert_eq!(full.stdout, alias.stdout);
+    assert!(full.status.success());
+}
+
+#[test]
+fn match_multi_token_query_accepted_without_quoting() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    // "scoring guide" as two separate args should find the scoring-guide doc
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "scoring", "guide"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("scoring-guide"));
+}
+
+#[test]
+fn match_name_hit_ranks_above_description_only_hit() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    // scoring-guide has "scoring" in its `name` field.
+    // discovery-overview has "scoring" only in its `description` field.
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let rows = parse_match_rows(&stdout);
+    let paths: Vec<&str> = rows.iter().map(|row| row.path.as_str()).collect();
+
+    let scoring_guide_pos = paths.iter().position(|p| p.contains("scoring-guide"));
+    let discovery_pos = paths.iter().position(|p| p.contains("discovery-overview"));
+
+    let (sg, do_) = (scoring_guide_pos.unwrap(), discovery_pos.unwrap());
+    assert!(
+        sg < do_,
+        "scoring-guide (pos {sg}) should rank above discovery-overview (pos {do_})"
+    );
+}
+
+#[test]
+fn match_rare_term_returns_only_matching_doc() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    // "radium" appears only in common-word.md; all other docs should score 0 and be dropped.
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "radium"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected exactly 1 result, got: {stdout}");
+    assert!(
+        lines[0].contains("common-word"),
+        "expected common-word.md, got: {}",
+        lines[0]
+    );
+}
+
+#[test]
+fn match_limit_truncates_to_n_results() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    // "scoring" matches multiple docs; limit to 2
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--limit", "2", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line_count = stdout.lines().count();
+    assert_eq!(
+        line_count, 2,
+        "expected 2 results with --limit 2, got {line_count}"
+    );
+}
+
+#[test]
+fn match_path_only_emits_one_path_per_line() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--path-only", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    for line in stdout.lines() {
+        // Each line must be a plain path (no " | " separator)
+        assert!(
+            !line.contains(" | "),
+            "--path-only output should not contain ` | `, got: {line}"
+        );
+        assert!(
+            line.ends_with(".md"),
+            "--path-only output should be a .md path, got: {line}"
+        );
+    }
+}
+
+#[test]
+fn match_path_only_with_limit() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--path-only", "-n", "1", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "expected 1 path with -n 1, got: {stdout}");
+}
+
+#[test]
+fn match_color_always_and_never_control_match_styling() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+
+    fs::write(
+        root.join("docs/low.md"),
+        "---\ndescription: zetasoup\n---\n# Low\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/medium.md"),
+        "---\nname: Uniquealpha\n---\n# Medium\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/high.md"),
+        "---\nname: Alpha Beta\n---\n# High\n",
+    )
+    .unwrap();
+
+    let low = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--color", "always", "zetasoup"])
+        .output()
+        .unwrap();
+    assert!(low.status.success());
+    let low_stdout = String::from_utf8(low.stdout).unwrap();
+    assert!(low_stdout.contains("docs/low.md | low | \u{1b}[1mzetasoup\u{1b}[0m"));
+    assert!(!low_stdout.contains("\u{1b}[1;31m"));
+    assert!(!low_stdout.contains("1.01 |"));
+
+    let medium = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--color", "always", "uniquealpha"])
+        .output()
+        .unwrap();
+    assert!(medium.status.success());
+    let medium_stdout = String::from_utf8(medium.stdout).unwrap();
+    assert!(medium_stdout.contains("docs/medium.md | \u{1b}[1mUniquealpha\u{1b}[0m | "));
+    assert!(!medium_stdout.contains("\u{1b}[1;33m"));
+
+    let high = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--color", "always", "alpha", "beta"])
+        .output()
+        .unwrap();
+    assert!(high.status.success());
+    let high_stdout = String::from_utf8(high.stdout).unwrap();
+    assert!(high_stdout.contains("\u{1b}[1mAlpha\u{1b}[0m \u{1b}[1mBeta\u{1b}[0m"));
+    assert!(!high_stdout.contains("\u{1b}[1;32m"));
+
+    let never = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--color", "never", "alpha", "beta"])
+        .output()
+        .unwrap();
+    assert!(never.status.success());
+    let never_stdout = String::from_utf8(never.stdout).unwrap();
+    assert!(!never_stdout.contains("\u{1b}["));
+    assert!(never_stdout.contains("docs/high.md"));
+}
+
+#[test]
+fn match_explain_colorizes_scores_by_relative_and_coverage_bands() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+
+    fs::write(
+        root.join("docs/top.md"),
+        "---\nname: Alpha Beta Gamma Delta\n---\n# Top\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/mid.md"),
+        "---\nname: Alpha Beta\n---\n# Mid\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/low.md"),
+        "---\ndescription: Alpha\n---\n# Low\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args([
+            "match",
+            "--explain",
+            "--color",
+            "always",
+            "alpha",
+            "beta",
+            "gamma",
+            "delta",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("score | relative | coverage | path | name | description"));
+    assert!(stdout.contains("\u{1b}[1;32m"));
+    assert!(stdout.contains("\u{1b}[1;33m"));
+    assert!(stdout.contains("\u{1b}[1;31m"));
+}
+
+#[test]
+fn match_path_only_never_emits_color_even_when_forced() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--path-only", "--color", "always", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("\u{1b}["));
+}
+
+#[test]
+fn match_no_gitignore_exposes_hidden_doc() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+    let hidden = root.join("hidden");
+    fs::create_dir_all(&hidden).unwrap();
+    fs::write(
+        hidden.join("secret-scoring.md"),
+        concat!(
+            "---\n",
+            "name: Hidden Scoring Doc\n",
+            "description: This document is inside a gitignored directory and should only appear when --no-gitignore is passed.\n",
+            "---\n\n",
+            "# Hidden Scoring Doc\n\n",
+            "Only visible when gitignore exclusions are disabled.\n",
+        ),
+    )
+    .unwrap();
+
+    // Without --no-gitignore: hidden/secret-scoring.md is excluded by .gitignore
+    let without = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "scoring"])
+        .output()
+        .unwrap();
+    let without_stdout = String::from_utf8(without.stdout).unwrap();
+    assert!(
+        !without_stdout.contains("secret-scoring"),
+        "expected hidden doc to be absent without --no-gitignore: {without_stdout}"
+    );
+
+    // With --no-gitignore: hidden/secret-scoring.md should appear
+    let with_flag = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--no-gitignore", "scoring"])
+        .output()
+        .unwrap();
+    let with_stdout = String::from_utf8(with_flag.stdout).unwrap();
+    assert!(
+        with_stdout.contains("secret-scoring"),
+        "expected hidden doc to appear with --no-gitignore: {with_stdout}"
+    );
+}
+
+#[test]
+fn match_no_results_exits_zero_and_emits_nothing() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "qxjzv987unmatched"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn match_reports_read_error_for_unreadable_discovered_file() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+
+    let unreadable = root.join("docs/unreadable.md");
+    fs::write(&unreadable, "---\nname: Hidden\n---\n# Hidden\n").unwrap();
+
+    let mut perms = fs::metadata(&unreadable).unwrap().permissions();
+    perms.set_mode(0o000);
+    fs::set_permissions(&unreadable, perms).unwrap();
+
+    let assert = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "hidden"])
+        .assert();
+
+    let mut restore = fs::metadata(&unreadable).unwrap().permissions();
+    restore.set_mode(0o644);
+    fs::set_permissions(&unreadable, restore).unwrap();
+
+    assert
+        .failure()
+        .stderr(predicate::str::contains("failed to read"))
+        .stderr(predicate::str::contains("docs/unreadable.md"));
+}
+
+#[test]
+fn match_path_only_doc_still_scores_via_path() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    // no-frontmatter.md has no frontmatter but its path contains "no-frontmatter";
+    // querying "frontmatter" should find it via path tokenization.
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "frontmatter"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("no-frontmatter"));
+}
+
+#[test]
+fn match_name_column_falls_back_to_file_stem_when_frontmatter_name_is_missing() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "frontmatter"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("docs/no-frontmatter.md"))
+        .expect("expected no-frontmatter doc in results");
+    let rows = parse_match_rows(line);
+    assert_eq!(rows[0].name, "no-frontmatter");
+}
+
+#[test]
+fn match_output_format_has_three_pipe_separated_columns() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "scoring", "--limit", "1"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let rows = parse_match_rows(&stdout);
+    assert!(!rows.is_empty(), "expected at least one result row");
+    assert!(!rows[0].path.is_empty());
+    assert!(!rows[0].name.is_empty());
+    assert!(!rows[0].description.is_empty());
+}
+
+#[test]
+fn match_explain_output_includes_header_and_diagnostics() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--explain", "scoring", "--limit", "1"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let rows = parse_explain_rows(&stdout);
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].score > 0.0);
+    assert!(rows[0].relative.ends_with("% of top"));
+    assert!(rows[0].coverage.ends_with("terms"));
+    assert!(!rows[0].path.is_empty());
+    assert!(!rows[0].name.is_empty());
+}
+
+#[test]
+fn match_default_output_highlights_matching_terms_when_styled() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--color", "always", "review"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\u{1b}[1mReview\u{1b}[0m"));
+    assert!(!stdout.contains("\u{1b}[1;"));
+}
+
+#[test]
+fn match_stopword_only_query_is_rejected() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "the"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "query must contain at least one non-stopword term",
+        ));
+}
+
+#[test]
+fn match_routes_review_queries_to_expected_execplan_docs() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let review = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "review"])
+        .output()
+        .unwrap();
+    assert!(review.status.success());
+    let review_rows = parse_match_rows(&String::from_utf8(review.stdout).unwrap());
+    assert!(review_rows[0].path.contains("evaluator-execplan"));
+    assert_eq!(review_rows.len(), 1);
+
+    let review_plan = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args([
+            "match",
+            "--explain",
+            "review",
+            "against",
+            "the",
+            "active",
+            "plan",
+        ])
+        .output()
+        .unwrap();
+    assert!(review_plan.status.success());
+    let review_plan_rows = parse_explain_rows(&String::from_utf8(review_plan.stdout).unwrap());
+    assert!(review_plan_rows[0].path.contains("evaluator-execplan"));
+    assert!(review_plan_rows[0].score >= review_plan_rows[1].score * 1.5);
+}
+
+#[test]
+fn match_routes_plan_authoring_and_implementation_queries() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let implement = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args([
+            "match",
+            "--explain",
+            "implement",
+            "from",
+            "the",
+            "active",
+            "plan",
+        ])
+        .output()
+        .unwrap();
+    assert!(implement.status.success());
+    let implement_rows = parse_explain_rows(&String::from_utf8(implement.stdout).unwrap());
+    assert!(implement_rows[0].path.contains("generator-execplan"));
+    assert!(implement_rows[0].score >= implement_rows[1].score * 1.5);
+
+    let revise = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--explain", "revise", "the", "active", "plan"])
+        .output()
+        .unwrap();
+    assert!(revise.status.success());
+    let revise_rows = parse_explain_rows(&String::from_utf8(revise.stdout).unwrap());
+    assert!(revise_rows[0].path.contains("planner-execplan"));
+    assert!(revise_rows[0].score >= revise_rows[1].score * 1.5);
+}
+
+#[test]
+fn match_routes_scoring_query_to_scoring_guide() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--explain", "docgarden", "match", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_explain_rows(&String::from_utf8(output.stdout).unwrap());
+    assert!(rows[0].path.contains("scoring-guide"));
+    assert!(rows[0].description.contains("scoring"));
+    assert!(rows[0].score >= rows[1].score * 1.5);
+}
 
 #[test]
 fn root_help_lists_explicit_subcommands() {
@@ -17,8 +652,8 @@ fn root_help_lists_explicit_subcommands() {
         .stdout(predicate::str::contains("Usage: docgarden <COMMAND>"))
         .stdout(predicate::str::contains("lint"))
         .stdout(predicate::str::contains("fix"))
-        .stdout(predicate::str::contains("init"))
-        .stdout(predicate::str::contains("skill"))
+        .stdout(predicate::str::contains("init").not())
+        .stdout(predicate::str::contains("skill").not())
         .stdout(predicate::str::contains("[TARGETS]").not())
         .stdout(predicate::str::contains("--fix").not());
 }
@@ -31,7 +666,6 @@ fn lint_and_fix_help_list_shared_flags() {
         .success()
         .stdout(predicate::str::contains("[TARGETS]..."))
         .stdout(predicate::str::contains("--config <CONFIG>"))
-        .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--no-gitignore"))
         .stdout(predicate::str::contains("--color <COLOR>"));
 
@@ -41,7 +675,6 @@ fn lint_and_fix_help_list_shared_flags() {
         .success()
         .stdout(predicate::str::contains("[TARGETS]..."))
         .stdout(predicate::str::contains("--config <CONFIG>"))
-        .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--no-gitignore"))
         .stdout(predicate::str::contains("--color <COLOR>"));
 }
