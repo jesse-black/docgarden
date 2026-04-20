@@ -1,5 +1,7 @@
-use anyhow::Result;
-use tiktoken_rs::o200k_base;
+use std::sync::OnceLock;
+
+use anyhow::{Result, anyhow};
+use tiktoken_rs::{CoreBPE, o200k_base};
 
 use crate::config::Config;
 use crate::lint::reporting::DiagnosticPayload;
@@ -61,10 +63,19 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
 }
 
 fn count_tokens(source: &str) -> Result<usize> {
-    let tokenizer = o200k_base()?;
+    let tokenizer = tokenizer()?;
     Ok(tokenizer.encode_ordinary(source).len())
 }
 
 fn count_lines(source: &str) -> usize {
     source.lines().count()
+}
+
+fn tokenizer() -> Result<&'static CoreBPE> {
+    static TOKENIZER: OnceLock<Result<CoreBPE, String>> = OnceLock::new();
+
+    match TOKENIZER.get_or_init(|| o200k_base().map_err(|error| error.to_string())) {
+        Ok(tokenizer) => Ok(tokenizer),
+        Err(error) => Err(anyhow!(error.clone())),
+    }
 }

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use ignore::gitignore::GitignoreBuilder;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 
 use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special_filenames};
@@ -83,13 +83,73 @@ impl From<RuleSeverity> for Severity {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FrontmatterRule {
     pub pattern: String,
     pub exclude: Vec<String>,
     pub required: Vec<String>,
     pub field_max_chars: BTreeMap<String, usize>,
+    path_matcher: Gitignore,
+    exclude_matcher: Gitignore,
 }
+
+impl FrontmatterRule {
+    fn new(
+        root: &Path,
+        pattern: String,
+        exclude: Vec<String>,
+        required: Vec<String>,
+        field_max_chars: BTreeMap<String, usize>,
+    ) -> Result<Self> {
+        Ok(Self {
+            path_matcher: compile_rule_matcher(root, std::slice::from_ref(&pattern))?,
+            exclude_matcher: compile_rule_matcher(root, &exclude)?,
+            pattern,
+            exclude,
+            required,
+            field_max_chars,
+        })
+    }
+
+    fn matches(&self, relative_path: &Path) -> bool {
+        matcher_matches(&self.path_matcher, relative_path)
+            && !matcher_matches(&self.exclude_matcher, relative_path)
+    }
+}
+
+impl Clone for FrontmatterRule {
+    fn clone(&self) -> Self {
+        Self {
+            pattern: self.pattern.clone(),
+            exclude: self.exclude.clone(),
+            required: self.required.clone(),
+            field_max_chars: self.field_max_chars.clone(),
+            path_matcher: self.path_matcher.clone(),
+            exclude_matcher: self.exclude_matcher.clone(),
+        }
+    }
+}
+
+impl std::fmt::Debug for FrontmatterRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FrontmatterRule")
+            .field("pattern", &self.pattern)
+            .field("exclude", &self.exclude)
+            .field("required", &self.required)
+            .field("field_max_chars", &self.field_max_chars)
+            .finish()
+    }
+}
+
+impl PartialEq for FrontmatterRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern
+            && self.exclude == other.exclude
+            && self.required == other.required
+            && self.field_max_chars == other.field_max_chars
+    }
+}
+
+impl Eq for FrontmatterRule {}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct EffectiveFrontmatterPolicy {
@@ -107,7 +167,6 @@ pub struct BudgetLimit {
 ///
 /// Stored in source order in `Config.rule_applications` so that
 /// `effective_rule_policy_for_path` can apply last-writer-wins semantics.
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleApplication {
     pub pattern: String,
     pub exclude: Vec<String>,
@@ -117,7 +176,66 @@ pub struct RuleApplication {
     pub severity: RuleSeverity,
     pub max_tokens: Option<BudgetLimit>,
     pub max_lines: Option<BudgetLimit>,
+    path_matcher: Gitignore,
+    exclude_matcher: Gitignore,
 }
+
+impl RuleApplication {
+    fn compile_matchers(mut self, root: &Path) -> Result<Self> {
+        self.path_matcher = compile_rule_matcher(root, std::slice::from_ref(&self.pattern))?;
+        self.exclude_matcher = compile_rule_matcher(root, &self.exclude)?;
+        Ok(self)
+    }
+
+    fn matches(&self, relative_path: &Path) -> bool {
+        matcher_matches(&self.path_matcher, relative_path)
+            && !matcher_matches(&self.exclude_matcher, relative_path)
+    }
+}
+
+impl Clone for RuleApplication {
+    fn clone(&self) -> Self {
+        Self {
+            pattern: self.pattern.clone(),
+            exclude: self.exclude.clone(),
+            disable: self.disable.clone(),
+            enable: self.enable.clone(),
+            severity: self.severity,
+            max_tokens: self.max_tokens,
+            max_lines: self.max_lines,
+            path_matcher: self.path_matcher.clone(),
+            exclude_matcher: self.exclude_matcher.clone(),
+        }
+    }
+}
+
+impl std::fmt::Debug for RuleApplication {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuleApplication")
+            .field("pattern", &self.pattern)
+            .field("exclude", &self.exclude)
+            .field("disable", &self.disable)
+            .field("enable", &self.enable)
+            .field("severity", &self.severity)
+            .field("max_tokens", &self.max_tokens)
+            .field("max_lines", &self.max_lines)
+            .finish()
+    }
+}
+
+impl PartialEq for RuleApplication {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern
+            && self.exclude == other.exclude
+            && self.disable == other.disable
+            && self.enable == other.enable
+            && self.severity == other.severity
+            && self.max_tokens == other.max_tokens
+            && self.max_lines == other.max_lines
+    }
+}
+
+impl Eq for RuleApplication {}
 
 /// The effective per-file rule state derived by the ordered reducer.
 ///
@@ -203,7 +321,7 @@ impl Config {
             bail!("include patterns must not be empty");
         }
 
-        let (rule_applications, frontmatter_rules) = lower_rules(parsed.rules)?;
+        let (rule_applications, frontmatter_rules) = lower_rules(&repository_root, parsed.rules)?;
 
         Ok(Self {
             repository_root,
@@ -231,6 +349,7 @@ impl Config {
         &self,
         relative_path: &str,
     ) -> Result<EffectiveRulePolicy> {
+        let relative_path = Path::new(relative_path);
         let mut ignored_rules: BTreeSet<String> = BTreeSet::new();
         let mut backtick_severity: Option<Severity> = None;
         let mut prefer_links = false;
@@ -238,12 +357,7 @@ impl Config {
         let mut max_lines: Option<BudgetLimit> = None;
 
         for app in &self.rule_applications {
-            if !rule_entry_matches(
-                &self.repository_root,
-                &app.pattern,
-                &app.exclude,
-                relative_path,
-            )? {
+            if !app.matches(relative_path) {
                 continue;
             }
 
@@ -290,14 +404,10 @@ impl Config {
         &self,
         relative_path: &str,
     ) -> Result<EffectiveFrontmatterPolicy> {
+        let relative_path = Path::new(relative_path);
         let mut policy = EffectiveFrontmatterPolicy::default();
         for rule in &self.frontmatter_rules {
-            if !rule_entry_matches(
-                &self.repository_root,
-                &rule.pattern,
-                &rule.exclude,
-                relative_path,
-            )? {
+            if !rule.matches(relative_path) {
                 continue;
             }
             if !rule.required.is_empty() {
@@ -311,7 +421,10 @@ impl Config {
     }
 }
 
-fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<FrontmatterRule>)> {
+fn lower_rules(
+    root: &Path,
+    rules: Vec<RuleConfig>,
+) -> Result<(Vec<RuleApplication>, Vec<FrontmatterRule>)> {
     let mut applications: Vec<RuleApplication> = Vec::new();
     let mut frontmatter_rules: Vec<FrontmatterRule> = Vec::new();
 
@@ -352,15 +465,20 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<Fron
             || max_lines.is_some();
 
         if has_rule_content {
-            applications.push(RuleApplication {
-                pattern: pattern.clone(),
-                exclude: exclude.clone(),
-                disable: disabled_rules,
-                enable: enabled_rules,
-                severity,
-                max_tokens,
-                max_lines,
-            });
+            applications.push(
+                RuleApplication {
+                    pattern: pattern.clone(),
+                    exclude: exclude.clone(),
+                    disable: disabled_rules,
+                    enable: enabled_rules,
+                    severity,
+                    max_tokens,
+                    max_lines,
+                    path_matcher: Gitignore::empty(),
+                    exclude_matcher: Gitignore::empty(),
+                }
+                .compile_matchers(root)?,
+            );
         }
 
         if let Some(fm) = rule.frontmatter {
@@ -379,12 +497,13 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<Fron
                 }
             }
             if !fm.required.is_empty() || !field_max_chars.is_empty() {
-                frontmatter_rules.push(FrontmatterRule {
+                frontmatter_rules.push(FrontmatterRule::new(
+                    root,
                     pattern,
                     exclude,
-                    required: fm.required,
+                    fm.required,
                     field_max_chars,
-                });
+                )?);
             }
         }
     }
@@ -435,35 +554,20 @@ fn is_supported_enabled_rule(rule: &str) -> bool {
     )
 }
 
-fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bool> {
+fn compile_rule_matcher(root: &Path, patterns: &[String]) -> Result<Gitignore> {
     let mut builder = GitignoreBuilder::new(root);
-    builder
-        .add_line(None, pattern)
-        .with_context(|| format!("invalid rule path pattern {pattern}"))?;
-    let matcher = builder.build()?;
-    Ok(matcher
-        .matched_path_or_any_parents(Path::new(relative_path), false)
-        .is_ignore())
+    for pattern in patterns {
+        builder
+            .add_line(None, pattern)
+            .with_context(|| format!("invalid rule path pattern {pattern}"))?;
+    }
+    Ok(builder.build()?)
 }
 
-/// Returns `true` when `relative_path` matches `pattern` and does not match
-/// any of the `exclude` patterns.  This is the single shared implementation
-/// of the per-rule-entry targeting logic used by every rule family.
-fn rule_entry_matches(
-    root: &Path,
-    pattern: &str,
-    exclude: &[String],
-    relative_path: &str,
-) -> Result<bool> {
-    if !pattern_matches(root, pattern, relative_path)? {
-        return Ok(false);
-    }
-    for excl in exclude {
-        if pattern_matches(root, excl, relative_path)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+fn matcher_matches(matcher: &Gitignore, relative_path: &Path) -> bool {
+    matcher
+        .matched_path_or_any_parents(relative_path, false)
+        .is_ignore()
 }
 
 fn default_respect_gitignore() -> bool {
@@ -1055,10 +1159,7 @@ enable = ["prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
-        let config = Config::load(&repository_root, None).unwrap();
-
-        let error = config
-            .effective_rule_policy_for_path("README.md")
+        let error = Config::load(&repository_root, None)
             .unwrap_err()
             .to_string();
 
