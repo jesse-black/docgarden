@@ -153,32 +153,25 @@ The `ScoredHit` struct and sort order do not need to change structurally. Score 
 
 ### 2. Stopword Filtering
 
-BM25F's IDF suppresses common terms, but in a small corpus IDF cannot fully separate universal function words from moderately common content words. Pre-filtering stopwords from the query before scoring handles this directly.
+BM25F's IDF suppresses common terms, but in a small corpus IDF cannot fully separate universal function words from moderately common content words. `docgarden` should use analyzer-style stopword filtering:
 
-Likely stopwords for this repo:
+- apply stopword filtering in the analyzer, not as an afterthought in scoring
+- apply it symmetrically at index time and query time for normal bag-of-words retrieval
+- use standard language stopword lists as a starting point, then customize conservatively
 
-- `the`
-- `a`
-- `an`
-- `to`
-- `for`
-- `of`
-- `in`
-- `on`
-- `when`
-- `with`
+Concrete design:
 
-Domain-specific candidates may also emerge later, but should be added conservatively.
-
-Recommended first version:
-
-- filter stopwords out of the query before scoring
-- leave candidate tokenization and the IDF table unchanged
+- filter stopwords during candidate field normalization as well as query normalization
+- compute BM25F term statistics and field lengths from the filtered token streams so scoring and normalization stay aligned
+- use a Lucene-derived English stopword list
+- keep the stopwords in `src/data/stopwords_en.txt`, one term per line
+- load the file at compile time with `include_str!`
 - if every query term is filtered out, fall back to the unfiltered query so single-word queries like `the` still behave mechanically instead of erroring
 
-Implementation sketch:
+Implementation:
 
-- add a small repo-local static set in `src/score.rs`
+- add `src/data/stopwords_en.txt`
+- parse `include_str!("data/stopwords_en.txt")` into a static stopword set in `src/score.rs`
 - add `fn is_stopword(term: &str) -> bool`
 - add `fn informative_query_terms(query_terms: &[String]) -> Vec<String>`
 - score against the filtered query when it is non-empty
@@ -222,24 +215,6 @@ If implemented:
 - `docs/exec-plans/active/*.md`
   - if this becomes active work, capture the accepted tuning scope in an ExecPlan rather than only in this design draft
 
-## Stopword Source
-
-The first stopword list should be repo-local and hand-curated, not loaded from an external package or runtime dataset.
-
-Recommended source:
-
-- start with a short built-in English function-word list derived from obvious low-signal terms seen in this repo's docs and skills
-- keep it in code near the scorer, for example in `src/score.rs`
-- expand it only when a concrete ranking failure shows a term is broadly harmful
-
-This is preferable to importing a large generic list because:
-
-- the scorer is intentionally mechanical and small
-- huge stopword lists often remove terms that matter in technical repos
-- repository-local control is more important than linguistic completeness
-
-If a longer list is ever needed, the next-best source is still vendored repository data, not a runtime dependency. In that case, a small checked-in text file under `docs/references/` or a Rust constant array would both be acceptable, but the initial version should stay inline and small.
-
 ## Related Work
 
 ### BM25F
@@ -265,11 +240,10 @@ Search systems routinely treat stopwords specially because low-signal function w
 
 Reference:
 
-- Lucene stopword and phrase-query discussion: https://stackoverflow.com/questions/62912408/lucene-search-with-stop-words-in-phrasequery-doesnt-return-results
+- Lucene `EnglishAnalyzer` docs: https://lucene.apache.org/core/10_2_1/analysis/common/org/apache/lucene/analysis/en/EnglishAnalyzer.html
 
 ## Open Questions
 
-- Should stopwords be query-only, or should they also be excluded from candidate IDF? Query-only is simpler and leaves the IDF table shape unchanged, which is the recommended starting point.
 - What are the right BM25F `k1` and `b_f` values for this corpus? The `name` field likely wants `b=0` (no length normalization) since skill names are short and uniform. The `path_prefix` and `description` fields may benefit from `b=0.75` but need dogfooding to confirm.
 - Should score-color band thresholds be recalibrated after BM25F changes the score distribution, or derived dynamically from the result set?
 
