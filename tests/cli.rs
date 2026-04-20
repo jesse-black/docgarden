@@ -373,6 +373,20 @@ fn match_path_only_never_emits_color_even_when_forced() {
 #[test]
 fn match_no_gitignore_exposes_hidden_doc() {
     let (_temp, root) = fixture_repo("discovery-repo");
+    let hidden = root.join("hidden");
+    fs::create_dir_all(&hidden).unwrap();
+    fs::write(
+        hidden.join("secret-scoring.md"),
+        concat!(
+            "---\n",
+            "name: Hidden Scoring Doc\n",
+            "description: This document is inside a gitignored directory and should only appear when --no-gitignore is passed.\n",
+            "---\n\n",
+            "# Hidden Scoring Doc\n\n",
+            "Only visible when gitignore exclusions are disabled.\n",
+        ),
+    )
+    .unwrap();
 
     // Without --no-gitignore: hidden/secret-scoring.md is excluded by .gitignore
     let without = Command::new(env!("CARGO_BIN_EXE_docgarden"))
