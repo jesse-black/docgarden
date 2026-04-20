@@ -26,5 +26,4 @@ max_lines = 500
 max_tokens = 5000
 
 [rules.frontmatter]
-required = ["name"]
-required = ["description"]
+required = ["name", "description"]

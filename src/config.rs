@@ -83,13 +83,52 @@ impl From<RuleSeverity> for Severity {
     }
 }
 
-pub struct FrontmatterRule {
-    pub pattern: String,
-    pub exclude: Vec<String>,
-    pub required: Vec<String>,
-    pub field_max_chars: BTreeMap<String, usize>,
+#[derive(Clone)]
+struct CompiledRuleTarget {
+    pattern: String,
+    exclude: Vec<String>,
     path_matcher: Gitignore,
     exclude_matcher: Gitignore,
+}
+
+impl CompiledRuleTarget {
+    fn new(root: &Path, pattern: String, exclude: Vec<String>) -> Result<Self> {
+        Ok(Self {
+            path_matcher: compile_rule_matcher(root, std::slice::from_ref(&pattern))?,
+            exclude_matcher: compile_rule_matcher(root, &exclude)?,
+            pattern,
+            exclude,
+        })
+    }
+
+    fn matches(&self, relative_path: &Path) -> bool {
+        matcher_matches(&self.path_matcher, relative_path)
+            && !matcher_matches(&self.exclude_matcher, relative_path)
+    }
+}
+
+impl std::fmt::Debug for CompiledRuleTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompiledRuleTarget")
+            .field("pattern", &self.pattern)
+            .field("exclude", &self.exclude)
+            .finish()
+    }
+}
+
+impl PartialEq for CompiledRuleTarget {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern && self.exclude == other.exclude
+    }
+}
+
+impl Eq for CompiledRuleTarget {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrontmatterRule {
+    target: CompiledRuleTarget,
+    pub required: Vec<String>,
+    pub field_max_chars: BTreeMap<String, usize>,
 }
 
 impl FrontmatterRule {
@@ -101,55 +140,16 @@ impl FrontmatterRule {
         field_max_chars: BTreeMap<String, usize>,
     ) -> Result<Self> {
         Ok(Self {
-            path_matcher: compile_rule_matcher(root, std::slice::from_ref(&pattern))?,
-            exclude_matcher: compile_rule_matcher(root, &exclude)?,
-            pattern,
-            exclude,
+            target: CompiledRuleTarget::new(root, pattern, exclude)?,
             required,
             field_max_chars,
         })
     }
 
     fn matches(&self, relative_path: &Path) -> bool {
-        matcher_matches(&self.path_matcher, relative_path)
-            && !matcher_matches(&self.exclude_matcher, relative_path)
+        self.target.matches(relative_path)
     }
 }
-
-impl Clone for FrontmatterRule {
-    fn clone(&self) -> Self {
-        Self {
-            pattern: self.pattern.clone(),
-            exclude: self.exclude.clone(),
-            required: self.required.clone(),
-            field_max_chars: self.field_max_chars.clone(),
-            path_matcher: self.path_matcher.clone(),
-            exclude_matcher: self.exclude_matcher.clone(),
-        }
-    }
-}
-
-impl std::fmt::Debug for FrontmatterRule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FrontmatterRule")
-            .field("pattern", &self.pattern)
-            .field("exclude", &self.exclude)
-            .field("required", &self.required)
-            .field("field_max_chars", &self.field_max_chars)
-            .finish()
-    }
-}
-
-impl PartialEq for FrontmatterRule {
-    fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern
-            && self.exclude == other.exclude
-            && self.required == other.required
-            && self.field_max_chars == other.field_max_chars
-    }
-}
-
-impl Eq for FrontmatterRule {}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct EffectiveFrontmatterPolicy {
@@ -167,75 +167,22 @@ pub struct BudgetLimit {
 ///
 /// Stored in source order in `Config.rule_applications` so that
 /// `effective_rule_policy_for_path` can apply last-writer-wins semantics.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuleApplication {
-    pub pattern: String,
-    pub exclude: Vec<String>,
+    target: CompiledRuleTarget,
     pub disable: Vec<String>,
     pub enable: Vec<String>,
     /// Severity used when `enable` contains `"unresolved-backtick-path"`.
     pub severity: RuleSeverity,
     pub max_tokens: Option<BudgetLimit>,
     pub max_lines: Option<BudgetLimit>,
-    path_matcher: Gitignore,
-    exclude_matcher: Gitignore,
 }
 
 impl RuleApplication {
-    fn compile_matchers(mut self, root: &Path) -> Result<Self> {
-        self.path_matcher = compile_rule_matcher(root, std::slice::from_ref(&self.pattern))?;
-        self.exclude_matcher = compile_rule_matcher(root, &self.exclude)?;
-        Ok(self)
-    }
-
     fn matches(&self, relative_path: &Path) -> bool {
-        matcher_matches(&self.path_matcher, relative_path)
-            && !matcher_matches(&self.exclude_matcher, relative_path)
+        self.target.matches(relative_path)
     }
 }
-
-impl Clone for RuleApplication {
-    fn clone(&self) -> Self {
-        Self {
-            pattern: self.pattern.clone(),
-            exclude: self.exclude.clone(),
-            disable: self.disable.clone(),
-            enable: self.enable.clone(),
-            severity: self.severity,
-            max_tokens: self.max_tokens,
-            max_lines: self.max_lines,
-            path_matcher: self.path_matcher.clone(),
-            exclude_matcher: self.exclude_matcher.clone(),
-        }
-    }
-}
-
-impl std::fmt::Debug for RuleApplication {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RuleApplication")
-            .field("pattern", &self.pattern)
-            .field("exclude", &self.exclude)
-            .field("disable", &self.disable)
-            .field("enable", &self.enable)
-            .field("severity", &self.severity)
-            .field("max_tokens", &self.max_tokens)
-            .field("max_lines", &self.max_lines)
-            .finish()
-    }
-}
-
-impl PartialEq for RuleApplication {
-    fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern
-            && self.exclude == other.exclude
-            && self.disable == other.disable
-            && self.enable == other.enable
-            && self.severity == other.severity
-            && self.max_tokens == other.max_tokens
-            && self.max_lines == other.max_lines
-    }
-}
-
-impl Eq for RuleApplication {}
 
 /// The effective per-file rule state derived by the ordered reducer.
 ///
@@ -465,20 +412,14 @@ fn lower_rules(
             || max_lines.is_some();
 
         if has_rule_content {
-            applications.push(
-                RuleApplication {
-                    pattern: pattern.clone(),
-                    exclude: exclude.clone(),
-                    disable: disabled_rules,
-                    enable: enabled_rules,
-                    severity,
-                    max_tokens,
-                    max_lines,
-                    path_matcher: Gitignore::empty(),
-                    exclude_matcher: Gitignore::empty(),
-                }
-                .compile_matchers(root)?,
-            );
+            applications.push(RuleApplication {
+                target: CompiledRuleTarget::new(root, pattern.clone(), exclude.clone())?,
+                disable: disabled_rules,
+                enable: enabled_rules,
+                severity,
+                max_tokens,
+                max_lines,
+            });
         }
 
         if let Some(fm) = rule.frontmatter {
@@ -649,7 +590,7 @@ disable = ["unresolved-link-path"]
             config
                 .rule_applications
                 .iter()
-                .find(|a| a.pattern == "docs/generated/**")
+                .find(|a| a.target.pattern == "docs/generated/**")
                 .unwrap()
                 .disable,
             vec!["unresolved-link-path".to_string()]
@@ -1002,8 +943,8 @@ required = ["description"]
         let config = Config::load(&repository_root, None).unwrap();
 
         assert_eq!(config.frontmatter_rules.len(), 2);
-        assert_eq!(config.frontmatter_rules[0].pattern, "**/*.md");
-        assert!(config.frontmatter_rules[0].exclude.is_empty());
+        assert_eq!(config.frontmatter_rules[0].target.pattern, "**/*.md");
+        assert!(config.frontmatter_rules[0].target.exclude.is_empty());
         assert!(config.frontmatter_rules[0].required.is_empty());
         assert_eq!(
             config.frontmatter_rules[0]
@@ -1011,8 +952,8 @@ required = ["description"]
                 .get("description"),
             Some(&1024)
         );
-        assert_eq!(config.frontmatter_rules[1].pattern, "**/*.md");
-        assert_eq!(config.frontmatter_rules[1].exclude, vec!["AGENTS.md"]);
+        assert_eq!(config.frontmatter_rules[1].target.pattern, "**/*.md");
+        assert_eq!(config.frontmatter_rules[1].target.exclude, ["AGENTS.md"]);
         assert_eq!(
             config.frontmatter_rules[1].required,
             vec!["description".to_string()]
