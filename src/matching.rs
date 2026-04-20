@@ -13,7 +13,7 @@ use crate::score::{Candidate, Field, IdfTable, normalize_text};
 
 struct MatchResult {
     repo_relative_path: String,
-    name: Option<String>,
+    name: String,
     description: Option<String>,
     score: i32,
     matched_terms: u32,
@@ -56,18 +56,19 @@ pub(crate) fn execute_match(
     let files = discover_markdown_files_for_targets(&config, &[repository_root])?;
 
     // Owned metadata for each discovered file.
-    let mut raw: Vec<(String, Option<String>, Option<String>)> = Vec::new();
+    let mut raw: Vec<(String, String, Option<String>)> = Vec::new();
     for path in &files {
         let rel = repository_relative_path(&config.repository_root, path)?;
         let source = fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let (name, description) = match parse_from_str(&source) {
+        let (frontmatter_name, description) = match parse_from_str(&source) {
             FrontmatterParseResult::Valid(fm) => (
                 extract_scalar(&fm, "name"),
                 extract_scalar(&fm, "description"),
             ),
             _ => (None, None),
         };
+        let name = normalized_match_name(&rel, frontmatter_name);
         raw.push((rel, name, description));
     }
 
@@ -75,7 +76,7 @@ pub(crate) fn execute_match(
     let candidates: Vec<Candidate<'_>> = raw
         .iter()
         .map(|(path, name, desc)| Candidate {
-            name: name.as_deref(),
+            name: Some(name.as_str()),
             description: desc.as_deref(),
             repo_relative_path: path.as_str(),
         })
@@ -119,7 +120,7 @@ pub(crate) fn execute_match(
         if path_only {
             println!("{}", r.repo_relative_path);
         } else {
-            let name = r.name.as_deref().map(escape_pipe).unwrap_or_default();
+            let name = escape_pipe(&r.name);
             let desc = r
                 .description
                 .as_deref()
@@ -143,6 +144,18 @@ fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Opti
         YamlValue::Scalar(s) => Some(s.clone()),
         _ => None,
     }
+}
+
+fn normalized_match_name(repo_relative_path: &str, frontmatter_name: Option<String>) -> String {
+    frontmatter_name.unwrap_or_else(|| fallback_name_from_path(repo_relative_path))
+}
+
+fn fallback_name_from_path(repo_relative_path: &str) -> String {
+    std::path::Path::new(repo_relative_path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| repo_relative_path.to_owned())
 }
 
 fn escape_pipe(s: &str) -> String {
@@ -182,5 +195,26 @@ fn field_priority(field: Option<Field>) -> u8 {
         Some(Field::Path) => 1,
         Some(Field::Description) => 2,
         None => 3,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalized_match_name;
+
+    #[test]
+    fn normalized_match_name_prefers_frontmatter_value() {
+        assert_eq!(
+            normalized_match_name("docs/scoring-guide.md", Some("Scoring Guide".to_string())),
+            "Scoring Guide"
+        );
+    }
+
+    #[test]
+    fn normalized_match_name_falls_back_to_file_stem() {
+        assert_eq!(
+            normalized_match_name("docs/no-frontmatter.md", None),
+            "no-frontmatter"
+        );
     }
 }

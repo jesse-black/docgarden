@@ -350,6 +350,27 @@ fn match_path_only_doc_still_scores_via_path() {
 }
 
 #[test]
+fn match_name_column_falls_back_to_file_stem_when_frontmatter_name_is_missing() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "frontmatter"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("docs/no-frontmatter.md"))
+        .expect("expected no-frontmatter doc in results");
+    let cols: Vec<&str> = line.split(" | ").collect();
+    assert_eq!(cols.len(), 4, "expected 4 columns in output: {line}");
+    assert_eq!(cols[2], "no-frontmatter");
+}
+
+#[test]
 fn match_output_format_has_four_pipe_separated_columns() {
     let (_temp, root) = fixture_repo("discovery-repo");
 

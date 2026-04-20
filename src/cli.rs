@@ -38,8 +38,10 @@ enum Command {
                       \x20 score | path | name | description\n\
                       \n\
                       Fields are separated by ` | `. A literal `|` in any field is \
-                      escaped as `\\|`. The `name` and `description` columns are empty \
-                      when the document has no frontmatter.\n\
+                      escaped as `\\|`. The `name` column uses frontmatter `name` when \
+                      present and otherwise falls back to the filename without its \
+                      extension. The `description` column is empty when the document has \
+                      no frontmatter `description`.\n\
                       \n\
                       With --path-only, each result is a single repository-relative path \
                       on its own line.\n\
