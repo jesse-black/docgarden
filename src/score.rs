@@ -368,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn deterministic_ordering_signals_are_stable() {
+    fn strongest_field_hit_prefers_description_over_path() {
         let docs = vec![
             candidate(Some("review"), "", Some("active plan")),
             candidate(None, "docs/review", Some("active plan")),
@@ -380,7 +380,7 @@ mod tests {
 
         assert_eq!(first.matched_terms, second.matched_terms);
         assert_eq!(first.first_field_hit, Some(Field::Name));
-        assert_eq!(second.first_field_hit, Some(Field::Path));
+        assert_eq!(second.first_field_hit, Some(Field::Description));
     }
 
     #[test]

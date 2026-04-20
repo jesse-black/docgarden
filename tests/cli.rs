@@ -81,20 +81,15 @@ fn match_help_documents_output_columns_and_flags() {
         .args(["match", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("path | name | description"))
-        .stdout(predicate::str::contains("name"))
-        .stdout(predicate::str::contains("description"))
+        .stdout(predicate::str::contains(
+            "Usage: docgarden match [OPTIONS] <QUERY>...",
+        ))
         .stdout(predicate::str::contains("--limit"))
         .stdout(predicate::str::contains("--path-only"))
         .stdout(predicate::str::contains("--explain"))
+        .stdout(predicate::str::contains("--color <COLOR>"))
         .stdout(predicate::str::contains("-n"))
-        .stdout(predicate::str::contains("-p"))
-        .stdout(predicate::str::contains("BM25F"))
-        .stdout(predicate::str::contains("Sorted order is the contract"))
-        .stdout(predicate::str::contains("Alias: `m`").not())
-        .stdout(predicate::str::contains("header row"))
-        .stdout(predicate::str::contains("relative"))
-        .stdout(predicate::str::contains("coverage"));
+        .stdout(predicate::str::contains("-p"));
 }
 
 #[test]

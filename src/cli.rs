@@ -98,10 +98,7 @@ struct MatchArgs {
         help = "Print only repository-relative paths, one per line"
     )]
     path_only: bool,
-    #[arg(
-        long,
-        help = "Show diagnostic data explaining each document's ranking"
-    )]
+    #[arg(long, help = "Show diagnostic data explaining each document's ranking")]
     explain: bool,
 }
 
