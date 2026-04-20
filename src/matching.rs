@@ -116,21 +116,25 @@ pub(crate) fn execute_match(
     }
 
     let colorize = colorize_stdout(color) && !path_only;
+    let separator = render_match_separator(colorize);
     for r in &results {
         if path_only {
             println!("{}", r.repo_relative_path);
         } else {
-            let name = escape_pipe(&r.name);
+            let name = render_match_name(&escape_pipe(&r.name), colorize);
             let desc = r
                 .description
                 .as_deref()
                 .map(escape_pipe)
                 .unwrap_or_default();
             println!(
-                "{} | {} | {} | {}",
+                "{}{}{}{}{}{}{}",
                 render_score(r.score, colorize),
+                separator,
                 r.repo_relative_path,
+                separator,
                 name,
+                separator,
                 desc
             );
         }
@@ -172,7 +176,23 @@ fn render_score(score: i32, colorize: bool) -> String {
         ScoreBand::Medium => 33,
         ScoreBand::High => 32,
     };
-    format!("\u{1b}[{code}m{score}\u{1b}[0m")
+    format!("\u{1b}[1;{code}m{score}\u{1b}[0m")
+}
+
+fn render_match_separator(colorize: bool) -> &'static str {
+    if colorize {
+        "\u{1b}[1m | \u{1b}[0m"
+    } else {
+        " | "
+    }
+}
+
+fn render_match_name(name: &str, colorize: bool) -> String {
+    if colorize {
+        format!("\u{1b}[1m{name}\u{1b}[0m")
+    } else {
+        name.to_string()
+    }
 }
 
 fn score_band(score: i32) -> ScoreBand {

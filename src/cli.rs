@@ -46,10 +46,6 @@ enum Command {
                       With --path-only, each result is a single repository-relative path \
                       on its own line.\n\
                       \n\
-                      When color is enabled, only the `score` column is colored: \
-                      1-24 is low (red), 25-59 is medium (yellow), and 60+ is high \
-                      (green). `--path-only` never emits color.\n\
-                      \n\
                       Score is a non-negative integer. Higher means a closer match; \
                       ordering is the contract, not the absolute value. Scores are not \
                       comparable across different repositories or tool versions."
