@@ -56,8 +56,6 @@ struct LintArgs {
     targets: Vec<PathBuf>,
     #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
     config: Option<PathBuf>,
-    #[arg(long, help = "Emit machine-readable diagnostics as JSON")]
-    json: bool,
     #[arg(
         long,
         help = "Ignore .gitignore and related exclude files during discovery"
@@ -128,21 +126,13 @@ pub fn run() -> Result<()> {
 }
 
 fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
-    execute(
-        args.targets,
-        args.config,
-        mode,
-        args.json,
-        args.no_gitignore,
-        args.color,
-    )
+    execute(args.targets, args.config, mode, args.no_gitignore, args.color)
 }
 
 fn execute(
     targets: Vec<PathBuf>,
     config_path: Option<PathBuf>,
     mode: Mode,
-    json: bool,
     no_gitignore: bool,
     color: ColorChoice,
 ) -> Result<()> {
@@ -172,13 +162,9 @@ fn execute(
         diagnostics.extend(result.diagnostics);
     }
 
-    if json {
-        println!("{}", serde_json::to_string_pretty(&diagnostics)?);
-    } else {
-        print_diagnostics(&diagnostics, color);
-        if mode == Mode::Check {
-            print_fix_hint(&config, &repository_root, &invocation_targets, &diagnostics);
-        }
+    print_diagnostics(&diagnostics, color);
+    if mode == Mode::Check {
+        print_fix_hint(&config, &repository_root, &invocation_targets, &diagnostics);
     }
 
     let has_errors = diagnostics

@@ -424,7 +424,6 @@ fn lint_and_fix_help_list_shared_flags() {
         .success()
         .stdout(predicate::str::contains("[TARGETS]..."))
         .stdout(predicate::str::contains("--config <CONFIG>"))
-        .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--no-gitignore"))
         .stdout(predicate::str::contains("--color <COLOR>"));
 
@@ -434,7 +433,6 @@ fn lint_and_fix_help_list_shared_flags() {
         .success()
         .stdout(predicate::str::contains("[TARGETS]..."))
         .stdout(predicate::str::contains("--config <CONFIG>"))
-        .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--no-gitignore"))
         .stdout(predicate::str::contains("--color <COLOR>"));
 }
