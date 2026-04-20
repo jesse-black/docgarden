@@ -141,8 +141,8 @@ impl FieldStats {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Field {
     Name,
-    Path,
     Description,
+    Path,
 }
 
 pub(crate) struct ScoredHit {

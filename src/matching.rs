@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -27,6 +28,7 @@ pub(crate) fn execute_match(
     color: ColorChoice,
     limit: Option<usize>,
     path_only: bool,
+    explain: bool,
 ) -> Result<()> {
     let query_str = raw_query.join(" ");
     if query_str.trim().is_empty() {
@@ -116,28 +118,32 @@ pub(crate) fn execute_match(
         results.truncate(n);
     }
 
-    let colorize = colorize_stdout(color) && !path_only;
-    let separator = render_match_separator(colorize);
+    let style_output = colorize_stdout(color) && !path_only;
+    let query_term_set: HashSet<&str> = query_terms.iter().map(String::as_str).collect();
+
+    if explain && !path_only {
+        println!("score | relative | coverage | path | name | description");
+    }
+
+    let top_score = results.first().map(|result| result.score).unwrap_or(0.0);
+    let query_term_count = query_terms.len() as u32;
+
     for r in &results {
         if path_only {
             println!("{}", r.repo_relative_path);
-        } else {
-            let name = render_match_name(&escape_pipe(&r.name), colorize);
-            let desc = r
-                .description
-                .as_deref()
-                .map(escape_pipe)
-                .unwrap_or_default();
+        } else if explain {
             println!(
-                "{}{}{}{}{}{}{}",
-                render_score(r.score, colorize),
-                separator,
-                r.repo_relative_path,
-                separator,
-                name,
-                separator,
-                desc
+                "{}",
+                render_explain_row(
+                    r,
+                    &query_term_set,
+                    style_output,
+                    top_score,
+                    query_term_count
+                )
             );
+        } else {
+            println!("{}", render_default_row(r, &query_term_set, style_output));
         }
     }
 
@@ -175,13 +181,101 @@ fn escape_pipe(s: &str) -> String {
     s.replace('|', r"\|")
 }
 
-fn render_score(score: f32, colorize: bool) -> String {
+fn render_default_row(
+    result: &MatchResult,
+    query_terms: &HashSet<&str>,
+    style_output: bool,
+) -> String {
+    let path = render_match_field(
+        &result.repo_relative_path,
+        query_terms,
+        style_output,
+        FieldRenderMode::Path,
+    );
+    let name = render_match_field(
+        &result.name,
+        query_terms,
+        style_output,
+        FieldRenderMode::Text,
+    );
+    let description = result
+        .description
+        .as_deref()
+        .map(|description| {
+            render_match_field(
+                description,
+                query_terms,
+                style_output,
+                FieldRenderMode::Text,
+            )
+        })
+        .unwrap_or_default();
+
+    format!("{path} | {name} | {description}")
+}
+
+fn render_explain_row(
+    result: &MatchResult,
+    query_terms: &HashSet<&str>,
+    style_output: bool,
+    top_score: f32,
+    query_term_count: u32,
+) -> String {
+    let relative = if top_score > 0.0 {
+        (100.0 * (result.score / top_score)).round()
+    } else {
+        0.0
+    };
+    let score = render_explain_score(
+        result.score,
+        style_output,
+        top_score,
+        result.matched_terms,
+        query_term_count,
+    );
+    let relative = format!("{}% of top", relative as u32);
+    let coverage = format!("{}/{} terms", result.matched_terms, query_term_count);
+    let path = render_match_field(
+        &result.repo_relative_path,
+        query_terms,
+        style_output,
+        FieldRenderMode::Path,
+    );
+    let name = render_match_field(
+        &result.name,
+        query_terms,
+        style_output,
+        FieldRenderMode::Text,
+    );
+    let description = result
+        .description
+        .as_deref()
+        .map(|description| {
+            render_match_field(
+                description,
+                query_terms,
+                style_output,
+                FieldRenderMode::Text,
+            )
+        })
+        .unwrap_or_default();
+
+    format!("{score} | {relative} | {coverage} | {path} | {name} | {description}")
+}
+
+fn render_explain_score(
+    score: f32,
+    style_output: bool,
+    top_score: f32,
+    matched_terms: u32,
+    query_term_count: u32,
+) -> String {
     let rendered = format!("{score:.2}");
-    if !colorize {
+    if !style_output {
         return rendered;
     }
 
-    let code = match score_band(score) {
+    let code = match explain_score_band(score, top_score, matched_terms, query_term_count) {
         ScoreBand::Low => 31,
         ScoreBand::Medium => 33,
         ScoreBand::High => 32,
@@ -189,29 +283,90 @@ fn render_score(score: f32, colorize: bool) -> String {
     format!("\u{1b}[1;{code}m{rendered}\u{1b}[0m")
 }
 
-fn render_match_separator(colorize: bool) -> &'static str {
-    if colorize {
-        "\u{1b}[1m | \u{1b}[0m"
+fn render_match_field(
+    input: &str,
+    query_terms: &HashSet<&str>,
+    style_output: bool,
+    mode: FieldRenderMode,
+) -> String {
+    let mut rendered = String::new();
+    let mut token = String::new();
+
+    for ch in input.chars() {
+        if is_separator(ch, mode) {
+            flush_render_token(&mut rendered, &mut token, query_terms, style_output);
+            push_escaped_char(&mut rendered, ch);
+        } else {
+            token.push(ch);
+        }
+    }
+
+    flush_render_token(&mut rendered, &mut token, query_terms, style_output);
+    rendered
+}
+
+fn flush_render_token(
+    rendered: &mut String,
+    token: &mut String,
+    query_terms: &HashSet<&str>,
+    style_output: bool,
+) {
+    if token.is_empty() {
+        return;
+    }
+
+    let normalized = token.to_lowercase();
+    let escaped = escape_pipe(token);
+    if style_output && query_terms.contains(normalized.as_str()) {
+        rendered.push_str("\u{1b}[1m");
+        rendered.push_str(&escaped);
+        rendered.push_str("\u{1b}[0m");
     } else {
-        " | "
+        rendered.push_str(&escaped);
+    }
+    token.clear();
+}
+
+fn push_escaped_char(rendered: &mut String, ch: char) {
+    if ch == '|' {
+        rendered.push_str(r"\|");
+    } else {
+        rendered.push(ch);
     }
 }
 
-fn render_match_name(name: &str, colorize: bool) -> String {
-    if colorize {
-        format!("\u{1b}[1m{name}\u{1b}[0m")
-    } else {
-        name.to_string()
+fn is_separator(ch: char, mode: FieldRenderMode) -> bool {
+    match mode {
+        FieldRenderMode::Text => ch.is_whitespace() || ch.is_ascii_punctuation(),
+        FieldRenderMode::Path => {
+            matches!(ch, '/' | '_' | '-' | '.') || ch.is_whitespace() || ch.is_ascii_punctuation()
+        }
     }
 }
 
-fn score_band(score: f32) -> ScoreBand {
-    if score < 1.25 {
-        ScoreBand::Low
-    } else if score < 2.5 {
+fn explain_score_band(
+    score: f32,
+    top_score: f32,
+    matched_terms: u32,
+    query_term_count: u32,
+) -> ScoreBand {
+    let relative = if top_score > 0.0 {
+        score / top_score
+    } else {
+        0.0
+    };
+    let coverage = if query_term_count > 0 {
+        matched_terms as f32 / query_term_count as f32
+    } else {
+        0.0
+    };
+
+    if relative >= 0.75 && coverage >= 0.75 {
+        ScoreBand::High
+    } else if relative >= 0.35 || coverage >= 0.5 {
         ScoreBand::Medium
     } else {
-        ScoreBand::High
+        ScoreBand::Low
     }
 }
 
@@ -221,19 +376,28 @@ enum ScoreBand {
     High,
 }
 
+#[derive(Clone, Copy)]
+enum FieldRenderMode {
+    Text,
+    Path,
+}
+
 fn field_priority(field: Option<Field>) -> u8 {
     match field {
         Some(Field::Name) => 0,
-        Some(Field::Path) => 1,
-        Some(Field::Description) => 2,
+        Some(Field::Description) => 1,
+        Some(Field::Path) => 2,
         None => 3,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{field_priority, normalized_match_name, path_prefix};
+    use super::{
+        FieldRenderMode, field_priority, normalized_match_name, path_prefix, render_match_field,
+    };
     use crate::score::Field;
+    use std::collections::HashSet;
 
     #[test]
     fn normalized_match_name_prefers_frontmatter_value() {
@@ -268,7 +432,33 @@ mod tests {
 
     #[test]
     fn field_priority_orders_path_and_none_after_named_fields() {
-        assert_eq!(field_priority(Some(Field::Path)), 1);
+        assert_eq!(field_priority(Some(Field::Description)), 1);
+        assert_eq!(field_priority(Some(Field::Path)), 2);
         assert_eq!(field_priority(None), 3);
+    }
+
+    #[test]
+    fn render_match_field_highlights_matching_text_terms() {
+        let query_terms: HashSet<&str> = HashSet::from(["review"]);
+        let rendered = render_match_field(
+            "Review the active plan",
+            &query_terms,
+            true,
+            FieldRenderMode::Text,
+        );
+        assert!(rendered.contains("\u{1b}[1mReview\u{1b}[0m"));
+        assert!(rendered.contains("active"));
+    }
+
+    #[test]
+    fn render_match_field_highlights_matching_path_terms() {
+        let query_terms: HashSet<&str> = HashSet::from(["scoring"]);
+        let rendered = render_match_field(
+            "docs/active-scoring.md",
+            &query_terms,
+            true,
+            FieldRenderMode::Path,
+        );
+        assert!(rendered.contains("\u{1b}[1mscoring\u{1b}[0m"));
     }
 }

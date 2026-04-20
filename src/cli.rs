@@ -32,18 +32,25 @@ enum Command {
                       fields match the given query terms.\n\
                       \n\
                       Output columns (default):\n\
-                      \x20 score | path | name | description\n\
+                      \x20 path | name | description\n\
                       \n\
                       Scoring uses combined-field BM25F over `name`, `path_prefix`, and \
-                      `description`. Higher scores rank earlier, but sorted order is the \
-                      contract.\n\
+                      `description`. Sorted order is the contract.\n\
                       \n\
                       Fields are separated by ` | `. A literal `|` in any field is \
-                      escaped as `\\|`. The `name` column uses frontmatter `name` when \
+                      escaped as `\\|`. Matching query terms are bolded when styled output \
+                      is enabled. The `name` column uses frontmatter `name` when \
                       present and otherwise falls back to the filename without its \
                       extension. The `description` column is empty when the document has \
-                      no frontmatter `description`. Score bands are colorized as low \
-                      (`< 1.25`), medium (`1.25-2.49`), and high (`>= 2.50`).\n\
+                      no frontmatter `description`.\n\
+                      \n\
+                      With --explain, output begins with a header row and adds `score`, \
+                      `relative`, and `coverage` columns before the default document \
+                      fields. `score` is the raw BM25F score, `relative` shows the \
+                      result's percentage of the top score in that result set, and \
+                      `coverage` shows matched informative query terms as `matched/total`. \
+                      When styled output is enabled, explain-mode scores are colorized \
+                      using hybrid relative-plus-coverage bands.\n\
                       \n\
                       With --path-only, each result is a single repository-relative path \
                       on its own line."
@@ -105,6 +112,11 @@ struct MatchArgs {
         help = "Print only repository-relative paths, one per line"
     )]
     path_only: bool,
+    #[arg(
+        long,
+        help = "Show explain-mode output with a header row and ranking diagnostics"
+    )]
+    explain: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -126,6 +138,7 @@ pub fn run() -> Result<()> {
             args.color,
             args.limit,
             args.path_only,
+            args.explain,
         ),
     }
 }

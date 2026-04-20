@@ -150,7 +150,7 @@ Implementation changes in `src/score.rs` and `src/matching.rs`:
 - remove the existing full-query phrase bonus entirely; BM25F alone is the baseline, and phrase/bigram evidence is deferred as described below
 - change `ScoredHit.score` from `i32` to `f32`; BM25F contributions are floating-point and rounding to integers collapses small-but-meaningful separation (e.g. `3.12` vs `3.48`) — the sort comparator should compare `f32` with a total-ordering wrapper or stable tiebreakers
 
-The sort order does not need to change structurally. Score magnitudes will change so the color band thresholds in `src/cli.rs` will need recalibration after dogfooding.
+The sort order does not need to change structurally beyond the preferred field tie-break order of `name` before `description` before `path_prefix`. Score magnitudes will change so any explain-mode color thresholds in `src/cli.rs` will need recalibration after dogfooding.
 
 ### 2. Stopword Filtering
 
@@ -251,7 +251,23 @@ Reference:
 ## Open Questions
 
 - What are the right BM25F `k1` and `b` values for this corpus? Lucene's `BM25Similarity` defaults are `k1 = 1.2`, `b = 0.75` and are the right starting point. The combined-field length is dominated by short `name` and `path_prefix` content, so a lower `b` may reduce length penalty for documents with longer descriptions; dogfooding will confirm whether the defaults hold.
-- Should score-color band thresholds be recalibrated after BM25F changes the score distribution, or derived dynamically from the result set?
+- Should explain-mode color bands be recalibrated after BM25F changes the score distribution, or derived dynamically from the result set?
+
+## Explain And Display
+
+The default `docgarden match` output should prioritize routing clarity over score inspection:
+
+- default output shows `path | name | description`
+- matched informative query terms may be highlighted when styled output is enabled
+- raw BM25F score should be hidden from the default view
+
+`docgarden match --explain` is the place to surface score diagnostics:
+
+- print a header row followed by `score | relative | coverage | path | name | description`
+- `score` is the raw BM25F score rendered with two decimal places
+- `relative` is the result's percentage of the top score in that result set
+- `coverage` is `matched_terms/query_terms` after stopword filtering
+- any color bands should apply only in explain mode and should use a hybrid relative-plus-coverage rule rather than fixed absolute raw-score thresholds
 
 ## Suggested Evaluation
 

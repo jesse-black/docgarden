@@ -108,11 +108,9 @@ The common result shape should be:
 - `name`: frontmatter `name` when present
 - `description`: frontmatter `description` when present
 
-For `match`, add:
+For `match`, ranking still uses a numeric relevance score internally, but the default text output should optimize for routing rather than score inspection.
 
-- `score`: numeric relevance score used for ranking
-
-The score should be treated as an ordering aid, not as a durable semantic contract across scoring-version changes. Callers should trust sorted order first and only use score for debugging or quick scanning within the same tool version.
+The score should be treated as an ordering aid, not as a durable semantic contract across scoring-version changes. Callers should trust sorted order first and only use score for debugging or explain-mode inspection within the same tool version.
 
 ### Text Output
 
@@ -127,14 +125,23 @@ docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven D
 `docgarden match <QUERY>` should emit:
 
 ```text
-842 | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
 ```
 
 This keeps the path first for quick scanning and makes it easy for agents to strip trailing fields when they only need candidates.
 
+`docgarden match --explain <QUERY>` should emit a header row followed by:
+
+```text
+score | relative | coverage | path | name | description
+8.42 | 100% of top | 3/3 terms | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+```
+
+This keeps the default mode compact while still providing a deterministic diagnostic view for humans or agents that need to inspect why one result outranked another.
+
 There should be no JSON output surface for these commands in v1. Unlike lint diagnostics, discovery output is primarily an agent-facing routing tool, and compact text is the main product value.
 
-The subcommand help text should explain the output columns and field order instead of adding a header row to every result set. That is a good fit for progressive discovery: the first layer stays compact during normal use, while `--help` provides the format explanation when a human or agent needs to orient itself. The score range should also be explained in the subcommand help text.
+The subcommand help text should explain the output columns and field order instead of adding a header row to every default result set. That is a good fit for progressive discovery: the first layer stays compact during normal use, while `--help` provides the format explanation when a human or agent needs to orient itself. `--explain` is the exception: it should print a header row because its purpose is deliberate inspection rather than compact routing.
 
 ### Result Limits
 
@@ -219,7 +226,7 @@ Recommended formula:
    - boosts: `name = 3.0`, `path_prefix = 1.0`, `description = 1.0`
 5. Break ties by:
    - more matched query terms
-   - stronger field hit order (`name` before `path_prefix` before `description`)
+   - stronger field hit order (`name` before `description` before `path_prefix`)
    - lexicographic `path`
 
 This keeps the ranking deterministic and mechanical while replacing the old ad-hoc exact/prefix/substring tiers with a standard field-aware lexical scorer.
@@ -228,9 +235,9 @@ For `match --limit N`, the implementation can score all candidates and then trun
 
 ### Score Format
 
-Use `f32` scores in v1 and render them with two decimal places.
+Use `f32` scores in v1 and render them with two decimal places in `--explain`.
 
-The exact numeric range is not a semantic contract. Ordering matters first; the displayed score is a debugging and quick-scan aid within one tool version.
+The exact numeric range is not a semantic contract. Ordering matters first; the displayed score is a debugging and explain-mode aid within one tool version. Default `match` output should hide the raw score column and instead rely on sorted order plus matched-term highlighting for scanning.
 
 ### Library Options
 

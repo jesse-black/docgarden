@@ -21,19 +21,20 @@ description: "Revise `docgarden match` output to hide raw scores by default, add
 
 ## Open Questions
 - `--explain` should print a header row naming each output column before the results.
-- Hybrid explain-color thresholds should be tuned after implementation and dogfooding, once the new `% of top` and coverage outputs can be observed on real queries.
+- Hybrid explain-color thresholds should be tuned after implementation and dogfooding, once the new `% of top` and coverage outputs can be observed on real queries. Initial implementation ships `high` at `relative >= 75% && coverage >= 75%`, `medium` at `relative >= 35% || coverage >= 50%`, and `low` otherwise.
 
 ## Steps
-- [ ] Add `--explain` to `MatchArgs` in `src/cli.rs`, document the default output as `path | name | description`, and describe explain-mode fields plus explain-only color behavior in `match --help`
-- [ ] Refactor `src/matching.rs` row rendering so default mode emits three columns with no score, while `--explain` emits the expanded diagnostics alongside the existing document metadata
-- [ ] Implement matched-term highlighting for visible text fields in default and explain modes, using the same normalized query-term set as scoring and skipping stopwords/path-only output
-- [ ] Define explain-mode derived metrics: `raw score`, `% of top`, and `matched_terms/query_terms`; keep sorting on raw score unchanged
-- [ ] Change any remaining field-priority presentation or tie-break behavior that still uses `name > path > description` so it instead uses `name > description > path`
-- [ ] Replace the fixed score-band renderer with explain-only color selection based on hybrid relative-plus-coverage rules, and ensure default mode stays uncolored even when `--color always` is requested
-- [ ] Rewrite `tests/cli.rs` helpers and assertions for the new default column layout, `--explain` layout, matched-term highlighting, explain-only colors, and unchanged `--path-only` behavior
-- [ ] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` and `docs/design-docs/scoring.md` to reflect the new output contract and the role of explain-mode diagnostics
+- [x] Add `--explain` to `MatchArgs` in `src/cli.rs`, document the default output as `path | name | description`, and describe explain-mode fields plus explain-only color behavior in `match --help`
+- [x] Refactor `src/matching.rs` row rendering so default mode emits three columns with no score, while `--explain` emits the expanded diagnostics alongside the existing document metadata
+- [x] Implement matched-term highlighting for visible text fields in default and explain modes, using the same normalized query-term set as scoring and skipping stopwords/path-only output
+- [x] Define explain-mode derived metrics: `raw score`, `% of top`, and `matched_terms/query_terms`; keep sorting on raw score unchanged
+- [x] Change any remaining field-priority presentation or tie-break behavior that still uses `name > path > description` so it instead uses `name > description > path`
+- [x] Replace the fixed score-band renderer with explain-only color selection based on hybrid relative-plus-coverage rules, and ensure default mode stays uncolored even when `--color always` is requested
+- [x] Rewrite `tests/cli.rs` helpers and assertions for the new default column layout, `--explain` layout, matched-term highlighting, explain-only colors, and unchanged `--path-only` behavior
+- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` and `docs/design-docs/scoring.md` to reflect the new output contract and the role of explain-mode diagnostics
 
 ## Validation
+- `cargo fmt --check`
 - `cargo test --test cli match`
 - `cargo run -- match review`
 - `cargo run -- match --explain review`
@@ -47,6 +48,9 @@ description: "Revise `docgarden match` output to hide raw scores by default, add
 - `src/matching.rs` currently couples score rendering and color-band selection directly to default row rendering, so `--explain` is the natural place to move both score display and colorization.
 - The strongest-matched-field column is intentionally omitted from `--explain`; if field-level introspection becomes necessary later, it should likely be a fuller debug breakdown rather than a single ambiguous label.
 - Where field priority is still surfaced for `match`, the intended order is `name > description > path`, not the current `name > path > description`.
+- The shipped `--explain` columns are `score | relative | coverage | path | name | description`, with a header row even when the output is intended for human inspection.
+- Default `match --color always` now uses styling only for matched-term highlighting; score colors are explain-only.
+- Dogfooding on the real repo after implementation produced `match review` default output with no score column and explain outputs of `3.44 | 100% of top | 1/1 terms` for the top `review` hit and `11.48 | 100% of top | 4/4 terms`, `5.70 | 50% of top | 2/4 terms`, `4.99 | 43% of top | 2/4 terms` for the top three `review against the active plan` hits.
 
 ## Review
 - [ ] None yet
