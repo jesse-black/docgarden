@@ -29,16 +29,21 @@ enum Command {
         visible_alias = "m",
         about = "Rank repository documents by metadata match",
         long_about = "Rank repository Markdown documents by how well their frontmatter \
-                      and path match the given query terms.\n\
+                      fields match the given query terms.\n\
                       \n\
                       Output columns (default):\n\
                       \x20 score | path | name | description\n\
+                      \n\
+                      Scoring uses combined-field BM25F over `name`, `path_prefix`, and \
+                      `description`. Higher scores rank earlier, but sorted order is the \
+                      contract.\n\
                       \n\
                       Fields are separated by ` | `. A literal `|` in any field is \
                       escaped as `\\|`. The `name` column uses frontmatter `name` when \
                       present and otherwise falls back to the filename without its \
                       extension. The `description` column is empty when the document has \
-                      no frontmatter `description`.\n\
+                      no frontmatter `description`. Score bands are colorized as low \
+                      (`< 1.25`), medium (`1.25-2.49`), and high (`>= 2.50`).\n\
                       \n\
                       With --path-only, each result is a single repository-relative path \
                       on its own line."
@@ -126,7 +131,13 @@ pub fn run() -> Result<()> {
 }
 
 fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
-    execute(args.targets, args.config, mode, args.no_gitignore, args.color)
+    execute(
+        args.targets,
+        args.config,
+        mode,
+        args.no_gitignore,
+        args.color,
+    )
 }
 
 fn execute(

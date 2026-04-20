@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
@@ -9,13 +9,13 @@ use crate::discover::discover_markdown_files_for_targets;
 use crate::frontmatter::{FrontmatterParseResult, YamlValue, parse_from_str};
 use crate::paths::repository_relative_path;
 use crate::root::{RootMarker, infer_repository_root};
-use crate::score::{Candidate, Field, IdfTable, normalize_text};
+use crate::score::{Candidate, CombinedFieldStats, Field, normalize_text};
 
 struct MatchResult {
     repo_relative_path: String,
     name: String,
     description: Option<String>,
-    score: i32,
+    score: f32,
     matched_terms: u32,
     first_field_hit: Option<Field>,
 }
@@ -29,9 +29,13 @@ pub(crate) fn execute_match(
     path_only: bool,
 ) -> Result<()> {
     let query_str = raw_query.join(" ");
+    if query_str.trim().is_empty() {
+        bail!("query must contain at least one non-empty word");
+    }
+
     let query_terms = normalize_text(&query_str);
     if query_terms.is_empty() {
-        bail!("query must contain at least one non-empty word");
+        bail!("query must contain at least one non-stopword term");
     }
 
     let cwd = std::env::current_dir()
@@ -55,8 +59,7 @@ pub(crate) fn execute_match(
 
     let files = discover_markdown_files_for_targets(&config, &[repository_root])?;
 
-    // Owned metadata for each discovered file.
-    let mut raw: Vec<(String, String, Option<String>)> = Vec::new();
+    let mut raw: Vec<(String, String, String, Option<String>)> = Vec::new();
     for path in &files {
         let rel = repository_relative_path(&config.repository_root, path)?;
         let source = fs::read_to_string(path)
@@ -69,27 +72,25 @@ pub(crate) fn execute_match(
             _ => (None, None),
         };
         let name = normalized_match_name(&rel, frontmatter_name);
-        raw.push((rel, name, description));
+        raw.push((rel.clone(), path_prefix(&rel), name, description));
     }
 
-    // Build IDF from the full corpus.
     let candidates: Vec<Candidate<'_>> = raw
         .iter()
-        .map(|(path, name, desc)| Candidate {
+        .map(|(_path, path_prefix, name, desc)| Candidate {
             name: Some(name.as_str()),
+            path_prefix,
             description: desc.as_deref(),
-            repo_relative_path: path.as_str(),
         })
         .collect();
-    let idf = IdfTable::build(&candidates);
+    let stats = CombinedFieldStats::build(&candidates);
 
-    // Score, drop zero-score rows, sort, truncate.
     let mut results: Vec<MatchResult> = raw
         .iter()
         .zip(candidates.iter())
-        .filter_map(|((path, name, desc), candidate)| {
-            let hit = crate::score::score(&query_terms, candidate, &idf);
-            if hit.score == 0 {
+        .filter_map(|((path, _path_prefix, name, desc), candidate)| {
+            let hit = crate::score::score(&query_terms, candidate, &stats);
+            if hit.score <= 0.0 {
                 return None;
             }
             Some(MatchResult {
@@ -105,7 +106,7 @@ pub(crate) fn execute_match(
 
     results.sort_by(|a, b| {
         b.score
-            .cmp(&a.score)
+            .total_cmp(&a.score)
             .then(b.matched_terms.cmp(&a.matched_terms))
             .then(field_priority(a.first_field_hit).cmp(&field_priority(b.first_field_hit)))
             .then(a.repo_relative_path.cmp(&b.repo_relative_path))
@@ -155,20 +156,29 @@ fn normalized_match_name(repo_relative_path: &str, frontmatter_name: Option<Stri
 }
 
 fn fallback_name_from_path(repo_relative_path: &str) -> String {
-    std::path::Path::new(repo_relative_path)
+    Path::new(repo_relative_path)
         .file_stem()
         .and_then(|stem| stem.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| repo_relative_path.to_owned())
 }
 
+fn path_prefix(repo_relative_path: &str) -> String {
+    Path::new(repo_relative_path)
+        .parent()
+        .and_then(|parent| parent.to_str())
+        .unwrap_or("")
+        .to_owned()
+}
+
 fn escape_pipe(s: &str) -> String {
     s.replace('|', r"\|")
 }
 
-fn render_score(score: i32, colorize: bool) -> String {
+fn render_score(score: f32, colorize: bool) -> String {
+    let rendered = format!("{score:.2}");
     if !colorize {
-        return score.to_string();
+        return rendered;
     }
 
     let code = match score_band(score) {
@@ -176,7 +186,7 @@ fn render_score(score: i32, colorize: bool) -> String {
         ScoreBand::Medium => 33,
         ScoreBand::High => 32,
     };
-    format!("\u{1b}[1;{code}m{score}\u{1b}[0m")
+    format!("\u{1b}[1;{code}m{rendered}\u{1b}[0m")
 }
 
 fn render_match_separator(colorize: bool) -> &'static str {
@@ -195,11 +205,13 @@ fn render_match_name(name: &str, colorize: bool) -> String {
     }
 }
 
-fn score_band(score: i32) -> ScoreBand {
-    match score {
-        0..=24 => ScoreBand::Low,
-        25..=59 => ScoreBand::Medium,
-        _ => ScoreBand::High,
+fn score_band(score: f32) -> ScoreBand {
+    if score < 1.25 {
+        ScoreBand::Low
+    } else if score < 2.5 {
+        ScoreBand::Medium
+    } else {
+        ScoreBand::High
     }
 }
 
@@ -220,7 +232,8 @@ fn field_priority(field: Option<Field>) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::normalized_match_name;
+    use super::{field_priority, normalized_match_name, path_prefix};
+    use crate::score::Field;
 
     #[test]
     fn normalized_match_name_prefers_frontmatter_value() {
@@ -236,5 +249,26 @@ mod tests {
             normalized_match_name("docs/no-frontmatter.md", None),
             "no-frontmatter"
         );
+    }
+
+    #[test]
+    fn normalized_match_name_handles_path_without_file_stem() {
+        assert_eq!(normalized_match_name("", None), "");
+    }
+
+    #[test]
+    fn path_prefix_is_empty_for_repo_root_documents() {
+        assert_eq!(path_prefix("root-guide.md"), "");
+    }
+
+    #[test]
+    fn path_prefix_uses_directory_only() {
+        assert_eq!(path_prefix("docs/skills/SKILL.md"), "docs/skills");
+    }
+
+    #[test]
+    fn field_priority_orders_path_and_none_after_named_fields() {
+        assert_eq!(field_priority(Some(Field::Path)), 1);
+        assert_eq!(field_priority(None), 3);
     }
 }

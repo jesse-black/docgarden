@@ -1,4 +1,5 @@
 use std::fs;
+use std::str::FromStr;
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -10,6 +11,30 @@ use std::os::unix::fs::PermissionsExt;
 mod common;
 
 use common::fixture_repo;
+
+#[derive(Debug)]
+struct MatchRow {
+    score: f32,
+    path: String,
+    name: String,
+    description: String,
+}
+
+fn parse_match_rows(stdout: &str) -> Vec<MatchRow> {
+    stdout
+        .lines()
+        .map(|line| {
+            let cols: Vec<&str> = line.split(" | ").collect();
+            assert_eq!(cols.len(), 4, "expected 4 columns in output: {line}");
+            MatchRow {
+                score: f32::from_str(cols[0].trim()).expect("first column should be float score"),
+                path: cols[1].to_string(),
+                name: cols[2].to_string(),
+                description: cols[3].to_string(),
+            }
+        })
+        .collect()
+}
 
 // ---------------------------------------------------------------------------
 // match subcommand integration tests
@@ -28,10 +53,12 @@ fn match_help_documents_output_columns_and_flags() {
         .stdout(predicate::str::contains("--path-only"))
         .stdout(predicate::str::contains("-n"))
         .stdout(predicate::str::contains("-p"))
+        .stdout(predicate::str::contains("BM25F"))
+        .stdout(predicate::str::contains("Higher scores rank earlier"))
         .stdout(predicate::str::contains("Alias: `m`").not())
-        .stdout(predicate::str::contains("1-24 is low").not())
-        .stdout(predicate::str::contains("25-59 is medium").not())
-        .stdout(predicate::str::contains("60+ is high").not());
+        .stdout(predicate::str::contains("< 1.25"))
+        .stdout(predicate::str::contains("1.25-2.49"))
+        .stdout(predicate::str::contains(">= 2.50"));
 }
 
 #[test]
@@ -90,10 +117,8 @@ fn match_name_hit_ranks_above_description_only_hit() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).unwrap();
-    let paths: Vec<&str> = stdout
-        .lines()
-        .filter_map(|line| line.split(" | ").nth(1))
-        .collect();
+    let rows = parse_match_rows(&stdout);
+    let paths: Vec<&str> = rows.iter().map(|row| row.path.as_str()).collect();
 
     let scoring_guide_pos = paths.iter().position(|p| p.contains("scoring-guide"));
     let discovery_pos = paths.iter().position(|p| p.contains("discovery-overview"));
@@ -213,12 +238,12 @@ fn match_color_always_and_never_control_match_styling() {
 
     let low = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
-        .args(["match", "--color", "always", "etas"])
+        .args(["match", "--color", "always", "zetasoup"])
         .output()
         .unwrap();
     assert!(low.status.success());
     let low_stdout = String::from_utf8(low.stdout).unwrap();
-    assert!(low_stdout.contains("\u{1b}[1;31m1\u{1b}[0m"));
+    assert!(low_stdout.contains("\u{1b}[1;31m1.01\u{1b}[0m"));
     assert!(low_stdout.contains("\u{1b}[1m | \u{1b}[0mdocs/low.md"));
     assert!(low_stdout.contains("\u{1b}[1mlow\u{1b}[0m"));
 
@@ -229,7 +254,7 @@ fn match_color_always_and_never_control_match_styling() {
         .unwrap();
     assert!(medium.status.success());
     let medium_stdout = String::from_utf8(medium.stdout).unwrap();
-    assert!(medium_stdout.contains("\u{1b}[1;33m51\u{1b}[0m"));
+    assert!(medium_stdout.contains("\u{1b}[1;33m1.63\u{1b}[0m"));
     assert!(medium_stdout.contains("\u{1b}[1mUniquealpha\u{1b}[0m"));
 
     let high = Command::new(env!("CARGO_BIN_EXE_docgarden"))
@@ -239,7 +264,7 @@ fn match_color_always_and_never_control_match_styling() {
         .unwrap();
     assert!(high.status.success());
     let high_stdout = String::from_utf8(high.stdout).unwrap();
-    assert!(high_stdout.contains("\u{1b}[1;32m127\u{1b}[0m"));
+    assert!(high_stdout.contains("\u{1b}[1;32m2.89\u{1b}[0m"));
     assert!(high_stdout.contains("\u{1b}[1mAlpha Beta\u{1b}[0m"));
 
     let never = Command::new(env!("CARGO_BIN_EXE_docgarden"))
@@ -250,7 +275,7 @@ fn match_color_always_and_never_control_match_styling() {
     assert!(never.status.success());
     let never_stdout = String::from_utf8(never.stdout).unwrap();
     assert!(!never_stdout.contains("\u{1b}["));
-    assert!(never_stdout.contains("127 | docs/high.md"));
+    assert!(never_stdout.contains("docs/high.md"));
 }
 
 #[test]
@@ -369,9 +394,8 @@ fn match_name_column_falls_back_to_file_stem_when_frontmatter_name_is_missing() 
         .lines()
         .find(|line| line.contains("docs/no-frontmatter.md"))
         .expect("expected no-frontmatter doc in results");
-    let cols: Vec<&str> = line.split(" | ").collect();
-    assert_eq!(cols.len(), 4, "expected 4 columns in output: {line}");
-    assert_eq!(cols[2], "no-frontmatter");
+    let rows = parse_match_rows(line);
+    assert_eq!(rows[0].name, "no-frontmatter");
 }
 
 #[test]
@@ -386,19 +410,97 @@ fn match_output_format_has_four_pipe_separated_columns() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8(output.stdout).unwrap();
-    let first_line = stdout
-        .lines()
-        .next()
-        .expect("expected at least one result line");
-    let cols: Vec<&str> = first_line.split(" | ").collect();
-    assert_eq!(cols.len(), 4, "expected 4 columns in output: {first_line}");
+    let rows = parse_match_rows(&stdout);
+    assert!(!rows.is_empty(), "expected at least one result row");
+    assert!(
+        rows[0].score > 0.0,
+        "score should be positive: {}",
+        rows[0].score
+    );
+    assert!(!rows[0].path.is_empty());
+    assert!(!rows[0].name.is_empty());
+}
 
-    // First column must parse as a non-negative integer score.
-    let score: i32 = cols[0]
-        .trim()
-        .parse()
-        .expect("first column should be integer score");
-    assert!(score > 0, "score should be positive: {score}");
+#[test]
+fn match_stopword_only_query_is_rejected() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "the"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "query must contain at least one non-stopword term",
+        ));
+}
+
+#[test]
+fn match_routes_review_queries_to_expected_execplan_docs() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let review = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "review"])
+        .output()
+        .unwrap();
+    assert!(review.status.success());
+    let review_rows = parse_match_rows(&String::from_utf8(review.stdout).unwrap());
+    assert!(review_rows[0].path.contains("evaluator-execplan"));
+    assert_eq!(review_rows.len(), 1);
+
+    let review_plan = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "review", "against", "the", "active", "plan"])
+        .output()
+        .unwrap();
+    assert!(review_plan.status.success());
+    let review_plan_rows = parse_match_rows(&String::from_utf8(review_plan.stdout).unwrap());
+    assert!(review_plan_rows[0].path.contains("evaluator-execplan"));
+    assert!(review_plan_rows[0].score >= review_plan_rows[1].score * 1.5);
+}
+
+#[test]
+fn match_routes_plan_authoring_and_implementation_queries() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let implement = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "implement", "from", "the", "active", "plan"])
+        .output()
+        .unwrap();
+    assert!(implement.status.success());
+    let implement_rows = parse_match_rows(&String::from_utf8(implement.stdout).unwrap());
+    assert!(implement_rows[0].path.contains("generator-execplan"));
+    assert!(implement_rows[0].score >= implement_rows[1].score * 1.5);
+
+    let revise = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "revise", "the", "active", "plan"])
+        .output()
+        .unwrap();
+    assert!(revise.status.success());
+    let revise_rows = parse_match_rows(&String::from_utf8(revise.stdout).unwrap());
+    assert!(revise_rows[0].path.contains("planner-execplan"));
+    assert!(revise_rows[0].score >= revise_rows[1].score * 1.5);
+}
+
+#[test]
+fn match_routes_scoring_query_to_scoring_guide() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "docgarden", "match", "scoring"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert!(rows[0].path.contains("scoring-guide"));
+    assert!(rows[0].description.contains("scoring"));
+    assert!(rows[0].score >= rows[1].score * 1.5);
 }
 
 #[test]

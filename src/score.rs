@@ -1,70 +1,143 @@
 use std::collections::{HashMap, HashSet};
-
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
+use std::sync::OnceLock;
 
 pub(crate) struct Candidate<'a> {
     pub(crate) name: Option<&'a str>,
+    pub(crate) path_prefix: &'a str,
     pub(crate) description: Option<&'a str>,
-    pub(crate) repo_relative_path: &'a str,
 }
 
-/// Corpus-local IDF table built once per invocation from all discovered files.
-///
-/// `idf(t) = clamp(ln((N+1)/(df(t)+1)) + 1, 0.5, 1.8)` per term.
-/// Unknown tokens get weight 1.0 (neutral).
-pub(crate) struct IdfTable {
-    weights: HashMap<String, f32>,
+pub(crate) struct CombinedFieldStats {
+    #[cfg(test)]
+    name: FieldStats,
+    #[cfg(test)]
+    path_prefix: FieldStats,
+    #[cfg(test)]
+    description: FieldStats,
+    pseudo_doc_count: f32,
+    #[cfg(test)]
+    pseudo_sum_total_term_freq: f32,
+    avgdl: f32,
+    pseudo_df: HashMap<String, u32>,
 }
 
-impl IdfTable {
+impl CombinedFieldStats {
     pub(crate) fn build(candidates: &[Candidate<'_>]) -> Self {
-        let n = candidates.len() as f32;
-        let mut df: HashMap<String, u32> = HashMap::new();
+        let mut name = FieldStats::default();
+        let mut path_prefix = FieldStats::default();
+        let mut description = FieldStats::default();
 
         for candidate in candidates {
-            let mut seen: HashSet<&str> = HashSet::new();
-
-            let name_toks = candidate.name.map(normalize_text).unwrap_or_default();
-            let desc_toks = candidate
-                .description
-                .map(normalize_text)
-                .unwrap_or_default();
-            let path_toks = normalize_path(candidate.repo_relative_path);
-
-            for tok in name_toks
-                .iter()
-                .chain(desc_toks.iter())
-                .chain(path_toks.iter())
-            {
-                seen.insert(tok.as_str());
-            }
-            // We borrowed from owned Vecs above; collect unique strings.
-            let seen_owned: Vec<String> = seen.iter().map(|s| s.to_string()).collect();
-            for tok in seen_owned {
-                *df.entry(tok).or_default() += 1;
-            }
+            name.record(candidate.name.map(normalize_text).unwrap_or_default());
+            path_prefix.record(normalize_path(candidate.path_prefix));
+            description.record(
+                candidate
+                    .description
+                    .map(normalize_text)
+                    .unwrap_or_default(),
+            );
         }
 
-        let weights = df
-            .into_iter()
-            .map(|(tok, df_count)| {
-                let raw = ((n + 1.0) / (df_count as f32 + 1.0)).ln() + 1.0;
-                (tok, raw.clamp(0.5, 1.8))
-            })
-            .collect();
+        let pseudo_doc_count = name
+            .doc_count
+            .max(path_prefix.doc_count)
+            .max(description.doc_count) as f32;
+        let pseudo_sum_total_term_freq = name.boosted_sum_total_term_freq(NAME_BOOST)
+            + path_prefix.boosted_sum_total_term_freq(PATH_PREFIX_BOOST)
+            + description.boosted_sum_total_term_freq(DESCRIPTION_BOOST);
+        let avgdl = if pseudo_doc_count > 0.0 && pseudo_sum_total_term_freq > 0.0 {
+            pseudo_sum_total_term_freq / pseudo_doc_count
+        } else {
+            1.0
+        };
 
-        Self { weights }
+        let mut pseudo_df = HashMap::new();
+        for term in name
+            .df
+            .keys()
+            .chain(path_prefix.df.keys())
+            .chain(description.df.keys())
+        {
+            let df = name
+                .df
+                .get(term)
+                .copied()
+                .unwrap_or(0)
+                .max(path_prefix.df.get(term).copied().unwrap_or(0))
+                .max(description.df.get(term).copied().unwrap_or(0));
+            pseudo_df.insert(term.clone(), df);
+        }
+
+        Self {
+            #[cfg(test)]
+            name,
+            #[cfg(test)]
+            path_prefix,
+            #[cfg(test)]
+            description,
+            pseudo_doc_count,
+            #[cfg(test)]
+            pseudo_sum_total_term_freq,
+            avgdl,
+            pseudo_df,
+        }
     }
 
-    pub(crate) fn weight(&self, token: &str) -> f32 {
-        *self.weights.get(token).unwrap_or(&1.0)
+    fn idf(&self, term: &str) -> f32 {
+        let doc_count = self.pseudo_doc_count.max(1.0);
+        let df = self.pseudo_df.get(term).copied().unwrap_or(0) as f32;
+        (1.0 + (doc_count - df + 0.5) / (df + 0.5)).ln()
+    }
+
+    fn avgdl(&self) -> f32 {
+        self.avgdl
+    }
+
+    #[cfg(test)]
+    fn pseudo_df(&self, term: &str) -> u32 {
+        self.pseudo_df.get(term).copied().unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    fn pseudo_doc_count(&self) -> f32 {
+        self.pseudo_doc_count
+    }
+
+    #[cfg(test)]
+    fn pseudo_sum_total_term_freq(&self) -> f32 {
+        self.pseudo_sum_total_term_freq
     }
 }
 
-/// Which scoring field produced the first (highest-priority) match.
-/// Ordering: Name < Path < Description — lower enum value = higher priority.
+#[derive(Default)]
+struct FieldStats {
+    df: HashMap<String, u32>,
+    doc_count: u32,
+    sum_total_term_freq: u32,
+}
+
+impl FieldStats {
+    fn record(&mut self, tokens: Vec<String>) {
+        if tokens.is_empty() {
+            return;
+        }
+
+        self.doc_count += 1;
+        self.sum_total_term_freq += tokens.len() as u32;
+
+        let mut seen = HashSet::new();
+        for token in tokens {
+            if seen.insert(token.clone()) {
+                *self.df.entry(token).or_default() += 1;
+            }
+        }
+    }
+
+    fn boosted_sum_total_term_freq(&self, boost: f32) -> f32 {
+        boost * self.sum_total_term_freq as f32
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Field {
     Name,
@@ -73,155 +146,117 @@ pub(crate) enum Field {
 }
 
 pub(crate) struct ScoredHit {
-    pub(crate) score: i32,
+    pub(crate) score: f32,
     pub(crate) matched_terms: u32,
-    /// The highest-priority field that contained at least one matched term.
     pub(crate) first_field_hit: Option<Field>,
 }
 
-// ---------------------------------------------------------------------------
-// Normalization helpers (pub(crate) for reuse by matching.rs and tests)
-// ---------------------------------------------------------------------------
+const NAME_BOOST: f32 = 3.0;
+const PATH_PREFIX_BOOST: f32 = 1.0;
+const DESCRIPTION_BOOST: f32 = 1.0;
+// Lucene BM25Similarity defaults.
+const BM25_K1: f32 = 1.2;
+const BM25_B: f32 = 0.75;
 
-/// Lowercase and split text on whitespace and ASCII punctuation.
-pub(crate) fn normalize_text(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .collect()
+static STOPWORDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+
+pub(crate) fn is_stopword(term: &str) -> bool {
+    STOPWORDS
+        .get_or_init(|| include_str!("data/stopwords_en.txt").lines().collect())
+        .contains(term)
 }
 
-/// Split a repository-relative path into tokens.
-///
-/// Strips the `.md` extension, lowercases, and splits on `/`, `_`, `-`, `.`,
-/// whitespace, and ASCII punctuation.
+pub(crate) fn normalize_text(text: &str) -> Vec<String> {
+    tokenize(text, |c| c.is_whitespace() || c.is_ascii_punctuation())
+}
+
 pub(crate) fn normalize_path(path: &str) -> Vec<String> {
     let lower = path.to_lowercase();
     let without_ext = lower.strip_suffix(".md").unwrap_or(&lower);
-    without_ext
-        .split(|c: char| {
-            matches!(c, '/' | '_' | '-' | '.') || c.is_whitespace() || c.is_ascii_punctuation()
-        })
-        .filter(|s| !s.is_empty())
+    tokenize(without_ext, |c| {
+        matches!(c, '/' | '_' | '-' | '.') || c.is_whitespace() || c.is_ascii_punctuation()
+    })
+}
+
+fn tokenize<F>(input: &str, is_separator: F) -> Vec<String>
+where
+    F: Fn(char) -> bool,
+{
+    input
+        .to_lowercase()
+        .split(is_separator)
+        .filter(|term| !term.is_empty() && !is_stopword(term))
         .map(str::to_string)
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Scoring
-// ---------------------------------------------------------------------------
-
-/// Return the tier score for a single query term against a single field.
-///
-/// Tiers (descending): exact token (10), prefix (4), substring (1), none (0).
-/// For each (query-term, field) pair we take the best tier; tiers are not summed.
-fn match_tier(query_term: &str, field_tokens: &[String], field_normalized: &str) -> i32 {
-    // Exact token match.
-    if field_tokens.iter().any(|t| t == query_term) {
-        return 10;
-    }
-    // Prefix: any field token starts with the query term (min term length 2).
-    if query_term.len() >= 2 && field_tokens.iter().any(|t| t.starts_with(query_term)) {
-        return 4;
-    }
-    // Substring anywhere in the joined normalized field text.
-    if field_normalized.contains(query_term) {
-        return 1;
-    }
-    0
-}
-
-/// Score a single candidate against the tokenized query.
 pub(crate) fn score(
     query_terms: &[String],
     candidate: &Candidate<'_>,
-    idf: &IdfTable,
+    stats: &CombinedFieldStats,
 ) -> ScoredHit {
     if query_terms.is_empty() {
         return ScoredHit {
-            score: 0,
+            score: 0.0,
             matched_terms: 0,
             first_field_hit: None,
         };
     }
 
-    // Pre-compute normalized fields.
-    let name_toks = candidate.name.map(normalize_text).unwrap_or_default();
-    let name_norm = name_toks.join(" ");
-    let desc_toks = candidate
+    let name_terms = candidate.name.map(normalize_text).unwrap_or_default();
+    let path_prefix_terms = normalize_path(candidate.path_prefix);
+    let description_terms = candidate
         .description
         .map(normalize_text)
         .unwrap_or_default();
-    let desc_norm = desc_toks.join(" ");
-    let path_toks = normalize_path(candidate.repo_relative_path);
-    let path_norm = path_toks.join(" ");
 
-    // Path basename normalized string for phrase-bonus check.
-    let basename_raw = candidate
-        .repo_relative_path
-        .rsplit('/')
-        .next()
-        .unwrap_or(candidate.repo_relative_path);
-    let basename_norm = normalize_path(basename_raw).join(" ");
+    let combined_length = NAME_BOOST * name_terms.len() as f32
+        + PATH_PREFIX_BOOST * path_prefix_terms.len() as f32
+        + DESCRIPTION_BOOST * description_terms.len() as f32;
+    let avgdl = stats.avgdl();
 
-    let mut total: f32 = 0.0;
-    let mut matched_terms: u32 = 0;
-    let mut first_field_hit: Option<Field> = None;
+    let mut total = 0.0;
+    let mut matched_terms = 0;
+    let mut first_field_hit = None;
 
     for term in query_terms {
-        let idf_w = idf.weight(term);
-        let mut term_matched = false;
+        let name_tf = term_frequency(&name_terms, term);
+        let path_tf = term_frequency(&path_prefix_terms, term);
+        let description_tf = term_frequency(&description_terms, term);
 
-        // Name — field weight 3.
-        let name_tier = match_tier(term, &name_toks, &name_norm);
-        if name_tier > 0 {
-            total += name_tier as f32 * 3.0 * idf_w;
-            term_matched = true;
+        let combined_freq = NAME_BOOST * name_tf as f32
+            + PATH_PREFIX_BOOST * path_tf as f32
+            + DESCRIPTION_BOOST * description_tf as f32;
+
+        if combined_freq <= 0.0 {
+            continue;
+        }
+
+        matched_terms += 1;
+        if name_tf > 0 {
             first_field_hit = best_field_hit(first_field_hit, Field::Name);
         }
-
-        // Path — field weight 2.
-        let path_tier = match_tier(term, &path_toks, &path_norm);
-        if path_tier > 0 {
-            total += path_tier as f32 * 2.0 * idf_w;
-            term_matched = true;
+        if path_tf > 0 {
             first_field_hit = best_field_hit(first_field_hit, Field::Path);
         }
-
-        // Description — field weight 1.
-        let desc_tier = match_tier(term, &desc_toks, &desc_norm);
-        if desc_tier > 0 {
-            total += desc_tier as f32 * 1.0 * idf_w;
-            term_matched = true;
+        if description_tf > 0 {
             first_field_hit = best_field_hit(first_field_hit, Field::Description);
         }
 
-        if term_matched {
-            matched_terms += 1;
-        }
-    }
-
-    // Phrase bonus — flat bump for contiguous literal match, no IDF.
-    let query_phrase: String = query_terms.join(" ");
-    let mut phrase_bonus: i32 = 0;
-    if query_terms.len() > 1 && !query_phrase.is_empty() {
-        if candidate.name.is_some() && name_norm.contains(query_phrase.as_str()) {
-            phrase_bonus += 25;
-        }
-        if basename_norm.contains(query_phrase.as_str()) {
-            phrase_bonus += 25;
-        }
-        if candidate.description.is_some() && desc_norm.contains(query_phrase.as_str()) {
-            phrase_bonus += 10;
-        }
+        let norm =
+            combined_freq + BM25_K1 * (1.0 - BM25_B + BM25_B * (combined_length / avgdl.max(1e-6)));
+        total += stats.idf(term) * (((BM25_K1 + 1.0) * combined_freq) / norm);
     }
 
     ScoredHit {
-        score: total.round() as i32 + phrase_bonus,
+        score: total,
         matched_terms,
         first_field_hit,
     }
+}
+
+fn term_frequency(tokens: &[String], term: &str) -> u32 {
+    tokens.iter().filter(|token| token.as_str() == term).count() as u32
 }
 
 fn best_field_hit(current: Option<Field>, candidate: Field) -> Option<Field> {
@@ -231,29 +266,19 @@ fn best_field_hit(current: Option<Field>, candidate: Field) -> Option<Field> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Unit tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn flat_idf() -> IdfTable {
-        IdfTable {
-            weights: HashMap::new(), // all weights default to 1.0
-        }
-    }
-
     fn candidate<'a>(
         name: Option<&'a str>,
+        path_prefix: &'a str,
         description: Option<&'a str>,
-        path: &'a str,
     ) -> Candidate<'a> {
         Candidate {
             name,
+            path_prefix,
             description,
-            repo_relative_path: path,
         }
     }
 
@@ -261,323 +286,155 @@ mod tests {
         normalize_text(q)
     }
 
-    // --- Tier ordering ---
-
     #[test]
-    fn exact_beats_prefix_beats_substring() {
-        let idf = flat_idf();
-
-        // Exact name match
-        let exact = score(
-            &terms("scoring"),
-            &candidate(Some("Scoring System"), None, "docs/other.md"),
-            &idf,
-        );
-        // Prefix name match ("scor" is a prefix of "scoring")
-        let prefix = score(
-            &terms("scor"),
-            &candidate(Some("Scoring System"), None, "docs/other.md"),
-            &idf,
-        );
-        // Substring description match only ("scoring" appears in description)
-        let substr = score(
-            &terms("scoring"),
-            &candidate(None, Some("About scoring things"), "docs/other.md"),
-            &idf,
-        );
-
-        assert!(
-            exact.score > prefix.score,
-            "exact ({}) > prefix ({})",
-            exact.score,
-            prefix.score
-        );
-        assert!(
-            prefix.score > substr.score,
-            "prefix ({}) > substr ({})",
-            prefix.score,
-            substr.score
-        );
-    }
-
-    // --- Field weight priority ---
-
-    #[test]
-    fn name_match_beats_description_match() {
-        let idf = flat_idf();
-
-        let name_hit = score(
-            &terms("discovery"),
-            &candidate(Some("Discovery Guide"), None, "docs/other.md"),
-            &idf,
-        );
-        let desc_hit = score(
-            &terms("discovery"),
-            &candidate(None, Some("About discovery things"), "docs/other.md"),
-            &idf,
-        );
-
-        assert!(
-            name_hit.score > desc_hit.score,
-            "name ({}) > desc ({})",
-            name_hit.score,
-            desc_hit.score
-        );
-    }
-
-    #[test]
-    fn first_field_hit_reflects_highest_priority_field() {
-        let idf = flat_idf();
-
-        let hit = score(
-            &terms("guide"),
-            &candidate(
-                Some("User Guide"),
-                Some("A guide for users"),
-                "docs/guide.md",
-            ),
-            &idf,
-        );
-        // Name matched first (it's the highest priority field)
-        assert_eq!(hit.first_field_hit, Some(Field::Name));
-    }
-
-    #[test]
-    fn first_field_hit_falls_through_to_path_when_no_name() {
-        let idf = flat_idf();
-
-        let hit = score(
-            &terms("guide"),
-            &candidate(None, None, "docs/guide.md"),
-            &idf,
-        );
-        assert_eq!(hit.first_field_hit, Some(Field::Path));
-    }
-
-    #[test]
-    fn first_field_hit_prefers_name_even_if_later_query_term_matches_it() {
-        let idf = flat_idf();
-
-        let hit = score(
-            &terms("guide discovery"),
-            &candidate(Some("Discovery"), None, "docs/guide.md"),
-            &idf,
-        );
-
-        assert_eq!(hit.first_field_hit, Some(Field::Name));
-    }
-
-    #[test]
-    fn first_field_hit_is_stable_across_query_term_order() {
-        let idf = flat_idf();
-        let candidate = candidate(Some("Discovery"), Some("Reference guide"), "docs/guide.md");
-
-        let path_then_name = score(&terms("guide discovery"), &candidate, &idf);
-        let name_then_path = score(&terms("discovery guide"), &candidate, &idf);
-
-        assert_eq!(path_then_name.first_field_hit, Some(Field::Name));
-        assert_eq!(name_then_path.first_field_hit, Some(Field::Name));
-    }
-
-    // --- Phrase bonus ---
-
-    #[test]
-    fn phrase_bonus_fires_for_contiguous_name_match() {
-        let idf = flat_idf();
-
-        let with_phrase = score(
-            &terms("match subcommand"),
-            &candidate(Some("Implement match subcommand"), None, "docs/other.md"),
-            &idf,
-        );
-        let without_phrase = score(
-            &terms("match subcommand"),
-            &candidate(Some("Subcommand to implement match"), None, "docs/other.md"),
-            &idf,
-        );
-
-        // Both have both terms, but first doc has contiguous phrase "match subcommand"
-        assert!(
-            with_phrase.score > without_phrase.score,
-            "with phrase ({}) > without ({})",
-            with_phrase.score,
-            without_phrase.score
-        );
-    }
-
-    #[test]
-    fn phrase_bonus_does_not_fire_for_non_contiguous_query_in_name() {
-        let idf = flat_idf();
-
-        // "match subcommand" is not contiguous in "match the new subcommand"
-        let hit = score(
-            &terms("match subcommand"),
-            &candidate(Some("Match the new subcommand"), None, "docs/other.md"),
-            &idf,
-        );
-        // Score should only have per-term contributions, no phrase bonus
-        let expected_no_phrase = score(
-            &terms("subcommand"),
-            &candidate(Some("Match the new subcommand"), None, "docs/other.md"),
-            &idf,
-        )
-        .score
-            + score(
-                &terms("match"),
-                &candidate(Some("Match the new subcommand"), None, "docs/other.md"),
-                &idf,
-            )
-            .score;
-
-        // hit.score should equal the sum of individual term scores (no phrase bonus)
-        assert_eq!(hit.score, expected_no_phrase);
-    }
-
-    // --- Zero-score behavior ---
-
-    #[test]
-    fn zero_score_when_no_terms_match() {
-        let idf = flat_idf();
-
-        let hit = score(
-            &terms("xyzzy"),
-            &candidate(Some("Unrelated Document"), None, "docs/unrelated.md"),
-            &idf,
-        );
-        assert_eq!(hit.score, 0);
-        assert_eq!(hit.matched_terms, 0);
-        assert_eq!(hit.first_field_hit, None);
-    }
-
-    #[test]
-    fn zero_score_for_empty_query() {
-        let idf = flat_idf();
-        let hit = score(&[], &candidate(Some("Anything"), None, "docs/x.md"), &idf);
-        assert_eq!(hit.score, 0);
-    }
-
-    // --- Matched term count ---
-
-    #[test]
-    fn matched_terms_counts_distinct_query_terms_that_hit() {
-        let idf = flat_idf();
-
-        let hit = score(
-            &terms("discovery guide"),
-            &candidate(
-                Some("Discovery Guide"),
-                Some("A guide for discovery"),
-                "docs/x.md",
-            ),
-            &idf,
-        );
-        assert_eq!(hit.matched_terms, 2);
-    }
-
-    // --- IDF effects ---
-
-    #[test]
-    fn idf_boosts_rare_term_over_ubiquitous_term() {
-        // Build a corpus where "common" appears in all 5 docs, "rare" in only 1.
+    fn rare_term_outranks_common_term() {
         let docs = vec![
-            Candidate {
-                name: Some("Common Rare Doc"),
-                description: None,
-                repo_relative_path: "a.md",
-            },
-            Candidate {
-                name: Some("Common Doc Two"),
-                description: None,
-                repo_relative_path: "b.md",
-            },
-            Candidate {
-                name: Some("Common Doc Three"),
-                description: None,
-                repo_relative_path: "c.md",
-            },
-            Candidate {
-                name: Some("Common Doc Four"),
-                description: None,
-                repo_relative_path: "d.md",
-            },
-            Candidate {
-                name: Some("Common Doc Five"),
-                description: None,
-                repo_relative_path: "e.md",
-            },
+            candidate(Some("rare guide"), "", None),
+            candidate(Some("common guide"), "", None),
+            candidate(Some("common plan"), "", None),
+            candidate(Some("common review"), "", None),
         ];
-        let idf = IdfTable::build(&docs);
+        let stats = CombinedFieldStats::build(&docs);
 
-        // "rare" is only in doc[0]; "common" is in all 5.
-        assert!(
-            idf.weight("rare") > idf.weight("common"),
-            "rare ({}) should outweigh common ({})",
-            idf.weight("rare"),
-            idf.weight("common")
-        );
+        let rare = score(&terms("rare"), &docs[0], &stats);
+        let common = score(&terms("common"), &docs[1], &stats);
+
+        assert!(rare.score > common.score);
     }
 
     #[test]
-    fn idf_clamp_prevents_ubiquitous_term_reaching_zero() {
-        // All 5 docs have "common" — df=N, so raw_idf = ln(6/6)+1 = 1.0
-        // Clamp lower bound 0.5 means it never goes below 0.5.
-        let docs: Vec<Candidate> = (0..5)
-            .map(|i| Candidate {
-                name: Some("Common name"),
-                description: None,
-                repo_relative_path: ["a.md", "b.md", "c.md", "d.md", "e.md"][i],
-            })
-            .collect();
-        let idf = IdfTable::build(&docs);
-        assert!(idf.weight("common") >= 0.5);
-        assert!(idf.weight("common") <= 1.8);
-    }
-
-    #[test]
-    fn idf_clamp_prevents_unique_term_dominating_tiny_corpus() {
-        // Only 2 docs, one unique term — without clamp raw_idf = ln(3/2)+1 ≈ 1.4
+    fn boosted_field_outranks_weaker_field_at_equal_tf_df() {
         let docs = vec![
-            Candidate {
-                name: Some("Unique term here"),
-                description: None,
-                repo_relative_path: "a.md",
-            },
-            Candidate {
-                name: Some("Other doc"),
-                description: None,
-                repo_relative_path: "b.md",
-            },
+            candidate(Some("routing"), "", None),
+            candidate(None, "", Some("routing")),
         ];
-        let idf = IdfTable::build(&docs);
-        assert!(idf.weight("unique") <= 1.8);
+        let stats = CombinedFieldStats::build(&docs);
+
+        let name_hit = score(&terms("routing"), &docs[0], &stats);
+        let description_hit = score(&terms("routing"), &docs[1], &stats);
+
+        assert!(name_hit.score > description_hit.score);
     }
 
-    // --- Normalization ---
+    #[test]
+    fn longer_combined_length_is_penalized_at_fixed_combined_freq() {
+        let short = candidate(Some("review"), "", None);
+        let long = candidate(
+            Some("review"),
+            "",
+            Some("extra context words for a much longer description"),
+        );
+        let docs = vec![short, long];
+        let stats = CombinedFieldStats::build(&docs);
+
+        let short_score = score(&terms("review"), &docs[0], &stats);
+        let long_score = score(&terms("review"), &docs[1], &stats);
+
+        assert!(short_score.score > long_score.score);
+    }
 
     #[test]
-    fn normalize_text_lowercases_and_splits_on_punctuation() {
-        let toks = normalize_text("Hello, World!");
+    fn stopword_filter_is_symmetric_for_index_and_query() {
+        let docs = vec![
+            candidate(
+                Some("the active plan"),
+                "docs/the-active-plan",
+                Some("implement from the active plan"),
+            ),
+            candidate(Some("review"), "docs/review", None),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+
+        assert_eq!(normalize_text("the active plan"), vec!["active", "plan"]);
+        assert_eq!(
+            normalize_path("docs/the-active-plan.md"),
+            vec!["docs", "active", "plan"]
+        );
+        assert_eq!(stats.pseudo_df("the"), 0);
+        assert!(score(&terms("the active plan"), &docs[0], &stats).score > 0.0);
+    }
+
+    #[test]
+    fn empty_path_prefix_does_not_panic() {
+        let docs = vec![
+            candidate(Some("root doc"), "", Some("review plan")),
+            candidate(Some("nested doc"), "docs/active", Some("review")),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+        let hit = score(&terms("review"), &docs[0], &stats);
+
+        assert!(hit.score.is_finite());
+        assert!(hit.score > 0.0);
+    }
+
+    #[test]
+    fn deterministic_ordering_signals_are_stable() {
+        let docs = vec![
+            candidate(Some("review"), "", Some("active plan")),
+            candidate(None, "docs/review", Some("active plan")),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+
+        let first = score(&terms("review active plan"), &docs[0], &stats);
+        let second = score(&terms("review active plan"), &docs[1], &stats);
+
+        assert_eq!(first.matched_terms, second.matched_terms);
+        assert_eq!(first.first_field_hit, Some(Field::Name));
+        assert_eq!(second.first_field_hit, Some(Field::Path));
+    }
+
+    #[test]
+    fn bm25_stats_follow_combined_field_shape() {
+        let docs = vec![
+            candidate(Some("alpha"), "docs/a", Some("beta")),
+            candidate(Some("gamma"), "", None),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+
+        assert_eq!(stats.name.doc_count, 2);
+        assert_eq!(stats.path_prefix.doc_count, 1);
+        assert_eq!(stats.description.doc_count, 1);
+        assert_eq!(stats.pseudo_doc_count(), 2.0);
+        assert!(
+            (stats.pseudo_sum_total_term_freq()
+                - (NAME_BOOST * 2.0 + PATH_PREFIX_BOOST * 1.0 + DESCRIPTION_BOOST * 1.0))
+                .abs()
+                < 1e-6
+        );
+        assert!(stats.avgdl() > 0.0);
+    }
+
+    #[test]
+    fn normalize_text_lowercases_splits_and_filters_stopwords() {
+        let toks = normalize_text("Hello, The World!");
         assert_eq!(toks, vec!["hello", "world"]);
     }
 
     #[test]
     fn normalize_path_strips_extension_and_splits_separators() {
-        let toks = normalize_path("docs/design-docs/my_guide.md");
-        assert!(toks.contains(&"docs".to_string()));
-        assert!(toks.contains(&"design".to_string()));
-        assert!(toks.contains(&"docs".to_string()));
-        assert!(toks.contains(&"my".to_string()));
-        assert!(toks.contains(&"guide".to_string()));
-        // Extension should not produce a token
-        assert!(!toks.contains(&"md".to_string()));
+        let toks = normalize_path("docs/the-active-plan/my_guide.md");
+        assert_eq!(toks, vec!["docs", "active", "plan", "my", "guide"]);
     }
 
-    // --- IdfTable::build isolation helper ---
+    #[test]
+    fn can_build_stats_from_empty_corpus() {
+        let stats = CombinedFieldStats::build(&[]);
+        assert_eq!(stats.pseudo_doc_count(), 0.0);
+        assert_eq!(stats.avgdl(), 1.0);
+        assert_eq!(
+            stats.idf("anything"),
+            (1.0_f32 + (1.0_f32 - 0.0_f32 + 0.5_f32) / 0.5_f32).ln()
+        );
+    }
 
     #[test]
-    fn can_build_idf_from_empty_corpus() {
-        let idf = IdfTable::build(&[]);
-        // Unknown tokens return 1.0
-        assert_eq!(idf.weight("anything"), 1.0);
+    fn empty_query_scores_zero() {
+        let docs = vec![candidate(Some("anything"), "", None)];
+        let stats = CombinedFieldStats::build(&docs);
+        let hit = score(&[], &docs[0], &stats);
+
+        assert_eq!(hit.score, 0.0);
+        assert_eq!(hit.matched_terms, 0);
+        assert_eq!(hit.first_field_hit, None);
     }
 }

@@ -185,11 +185,11 @@ The intended v1 behavior is:
 
 The scoring corpus for each document should include:
 
-- `name` frontmatter when present
+- `name` frontmatter when present, else the filename stem
+- `path_prefix` as the directory portion of the repository-relative path
 - `description` frontmatter when present
-- repository-relative `path`
 
-If `name` or `description` is absent, the file should still remain discoverable through `path`.
+If `description` is absent, the file should still remain discoverable through `name`. The filename-stem fallback keeps path-only documents discoverable without treating the full path as one undifferentiated field.
 
 ### Normalization
 
@@ -199,47 +199,38 @@ Query text and candidate fields should be normalized in the same way:
 - split on whitespace and punctuation
 - split paths on `/`, `_`, `-`, and `.`
 - collapse repeated separators
+- filter English stopwords symmetrically at index and query time
 - preserve the original values only for display
 
-V1 should not add stemming, embeddings, or language-specific analyzers.
+V1 should not add stemming, embeddings, or analyzers beyond stopword filtering.
 
 ### Ranking Model
 
-The best v1 fit is a small weighted lexical scorer rather than a generic fuzzy-match-only library.
+The best v1 fit is a Lucene-style combined-field BM25F scorer rather than a generic fuzzy matcher.
 
 Recommended formula:
 
-1. Tokenize the query into terms.
-2. For each term, compute a simple corpus-local IDF from the current candidate set and clamp it to keep ubiquitous terms contributing while stopping tiny-corpus outliers from dominating.
-3. Score each field independently with field weights:
-   - `name`: highest weight
-   - `path`: medium weight
-   - `description`: lowest weight
-4. Within each field, reward stronger match shapes more than weaker ones:
-   - exact token match
-   - token-prefix match
-   - substring match
-5. Add a phrase bonus when a multi-term normalized query appears contiguously in `name`, `description`, or the basename portion of `path`.
-6. Break ties by:
+1. Tokenize the query into informative terms after stopword filtering.
+2. Build corpus statistics over `name`, `path_prefix`, and `description`.
+3. Combine the weighted field term frequencies and field lengths into one synthetic field.
+4. Score each query term with BM25 using:
+   - `k1 = 1.2`
+   - `b = 0.75`
+   - boosts: `name = 3.0`, `path_prefix = 1.0`, `description = 1.0`
+5. Break ties by:
    - more matched query terms
-   - stronger field hit order (`name` before `path` before `description`)
+   - stronger field hit order (`name` before `path_prefix` before `description`)
    - lexicographic `path`
 
-This is search-like in the ways that matter:
-
-- exact and prefix matches rise to the top
-- common words matter less than distinctive words
-- documents with better discovery metadata get better rankings
-- the behavior stays deterministic and explainable in CI and tests
-- v1 avoids fuzzy fallback tiers so the ordering remains easy to reason about
+This keeps the ranking deterministic and mechanical while replacing the old ad-hoc exact/prefix/substring tiers with a standard field-aware lexical scorer.
 
 For `match --limit N`, the implementation can score all candidates and then truncate to the top N. For the repository sizes this feature is aimed at, that should remain fast enough without adding indexing or cache complexity in v1.
 
 ### Score Format
 
-Use an integer score in v1 rather than a float.
+Use `f32` scores in v1 and render them with two decimal places.
 
-That makes output easier to scan, easier to snapshot-test, and less likely to imply false precision. The exact numeric range is less important than stable ordering and documented tie-break behavior.
+The exact numeric range is not a semantic contract. Ordering matters first; the displayed score is a debugging and quick-scan aid within one tool version.
 
 ### Library Options
 

@@ -50,24 +50,24 @@ description: "Rewrite `docgarden match` scorer as Lucene-style combined-field BM
 
 ## Steps
 
-- [ ] Add `src/data/stopwords_en.txt` with the Lucene `EnglishAnalyzer` English stopwords, one term per line
-- [ ] Load the list via `include_str!` into a `OnceLock<HashSet<&'static str>>` in `src/score.rs`; add `pub(crate) fn is_stopword(term: &str) -> bool`
-- [ ] Apply `is_stopword` inside `normalize_text` and `normalize_path` after lowercasing/splitting; unit tests for stopword-only input, mixed input, path tokenization (`the-active-plan` splits before filtering drops `the`)
-- [ ] In `src/matching.rs`, reject post-normalization stopword-only queries with a dedicated user-facing error distinct from the empty-query error
-- [ ] Extend `Candidate` with `path_prefix: &'a str`; construct via `Path::new(rel).parent()` in `src/matching.rs` (empty string at repo root); tokenize at scoring time via existing `normalize_path`
-- [ ] Replace `IdfTable` in `src/score.rs` with `CombinedFieldStats` (per-field `df`, `doc_count`, `sum_total_term_freq`; precomputed `pseudo_doc_count`, `pseudo_sum_total_term_freq`, per-term `pseudo_df`); single `build(&[Candidate])` entry point
-- [ ] Rewrite `score()` to implement the combined-field BM25F formula exactly as written in `docs/design-docs/scoring.md:123-131`; `k1` and `b` live as `const` with Lucene source references; return `ScoredHit { score: f32, matched_terms, first_field_hit }`
-- [ ] Delete `match_tier`, tier constants (`10 / 4 / 1`), and the full-query phrase-bonus block; remove `basename_norm` if unused
-- [ ] Rewrite `src/score.rs` unit tests: rare-term outranks common term, boosted field outranks weaker field at equal tf/df, longer combined length penalizes at fixed combined_freq, stopword filter affects index and query symmetrically, empty `path_prefix` does not panic, deterministic ordering
-- [ ] Propagate `f32` through `src/matching.rs`: `MatchResult.score: f32`; zero-drop `hit.score <= 0.0`; sort via `b.score.total_cmp(&a.score).then(...)`; `render_score` and `score_band` take `f32`
-- [ ] Render scores with `{:.2}`; keep ANSI color wrapping; update `match --help` long_about to say "BM25F, higher is better; ordering is the contract"
-- [ ] Add evaluator / planner / generator fixture docs under `tests/discovery-repo/docs/` with frontmatter `name` and `description`; do not disturb existing fixtures
-- [ ] Rewrite affected `tests/cli.rs` assertions to parse the leading column as `f32` and assert ordering relationships; keep one exact-color assertion per band with calibrated values
-- [ ] Add routing-separation tests for the five Suggested Evaluation queries (`review`, `review against the active plan`, `implement from the active plan`, `revise the active plan`, `docgarden match scoring`); assert top result and a separation floor (top ≥ 1.5 × second, or an equivalent gap fixed during dogfooding)
-- [ ] Add `tests/cli.rs` test: `docgarden match the` exits non-zero with the stopword-only error on stderr and no stdout
-- [ ] Dogfood the five Suggested Evaluation queries against this repo; record score distributions under `Discoveries`; pick `low / medium / high` thresholds; update `score_band` and `match --help`
-- [ ] Add `[[rules]] path = "**/SKILL.md"` with `[rules.frontmatter] required = ["name"]` to `docgarden.toml`; run `cargo run -- lint .` and add `name:` to any flagged skill doc
-- [ ] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` v1 scoring section: BM25F + stopwords, fields `name / path_prefix / description`, `k1 = 1.2`, `b = 0.75`, boosts `3.0 / 1.0 / 1.0`, `f32` scores, new color bands
+- [x] Add `src/data/stopwords_en.txt` with the Lucene `EnglishAnalyzer` English stopwords, one term per line
+- [x] Load the list via `include_str!` into a `OnceLock<HashSet<&'static str>>` in `src/score.rs`; add `pub(crate) fn is_stopword(term: &str) -> bool`
+- [x] Apply `is_stopword` inside `normalize_text` and `normalize_path` after lowercasing/splitting; unit tests for stopword-only input, mixed input, path tokenization (`the-active-plan` splits before filtering drops `the`)
+- [x] In `src/matching.rs`, reject post-normalization stopword-only queries with a dedicated user-facing error distinct from the empty-query error
+- [x] Extend `Candidate` with `path_prefix: &'a str`; construct via `Path::new(rel).parent()` in `src/matching.rs` (empty string at repo root); tokenize at scoring time via existing `normalize_path`
+- [x] Replace `IdfTable` in `src/score.rs` with `CombinedFieldStats` (per-field `df`, `doc_count`, `sum_total_term_freq`; precomputed `pseudo_doc_count`, `pseudo_sum_total_term_freq`, per-term `pseudo_df`); single `build(&[Candidate])` entry point
+- [x] Rewrite `score()` to implement the combined-field BM25F formula exactly as written in `docs/design-docs/scoring.md:123-131`; `k1` and `b` live as `const` with Lucene source references; return `ScoredHit { score: f32, matched_terms, first_field_hit }`
+- [x] Delete `match_tier`, tier constants (`10 / 4 / 1`), and the full-query phrase-bonus block; remove `basename_norm` if unused
+- [x] Rewrite `src/score.rs` unit tests: rare-term outranks common term, boosted field outranks weaker field at equal tf/df, longer combined length penalizes at fixed combined_freq, stopword filter affects index and query symmetrically, empty `path_prefix` does not panic, deterministic ordering
+- [x] Propagate `f32` through `src/matching.rs`: `MatchResult.score: f32`; zero-drop `hit.score <= 0.0`; sort via `b.score.total_cmp(&a.score).then(...)`; `render_score` and `score_band` take `f32`
+- [x] Render scores with `{:.2}`; keep ANSI color wrapping; update `match --help` long_about to say "BM25F, higher is better; ordering is the contract"
+- [x] Add evaluator / planner / generator fixture docs under `tests/discovery-repo/docs/` with frontmatter `name` and `description`; do not disturb existing fixtures
+- [x] Rewrite affected `tests/cli.rs` assertions to parse the leading column as `f32` and assert ordering relationships; keep one exact-color assertion per band with calibrated values
+- [x] Add routing-separation tests for the five Suggested Evaluation queries (`review`, `review against the active plan`, `implement from the active plan`, `revise the active plan`, `docgarden match scoring`); assert top result and a separation floor (top ≥ 1.5 × second, or an equivalent gap fixed during dogfooding)
+- [x] Add `tests/cli.rs` test: `docgarden match the` exits non-zero with the stopword-only error on stderr and no stdout
+- [x] Dogfood the five Suggested Evaluation queries against this repo; record score distributions under `Discoveries`; pick `low / medium / high` thresholds; update `score_band` and `match --help`
+- [x] Add `[[rules]] path = "**/SKILL.md"` with `[rules.frontmatter] required = ["name"]` to `docgarden.toml`; run `cargo run -- lint .` and add `name:` to any flagged skill doc
+- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` v1 scoring section: BM25F + stopwords, fields `name / path_prefix / description`, `k1 = 1.2`, `b = 0.75`, boosts `3.0 / 1.0 / 1.0`, `f32` scores, new color bands
 
 ## Validation
 
@@ -87,8 +87,15 @@ description: "Rewrite `docgarden match` scorer as Lucene-style combined-field BM
 
 ## Discoveries
 
-- None yet
+- Score-band calibration from dogfooding and fixture checks landed at `low < 1.25`, `medium 1.25-2.49`, `high >= 2.50`; the fixture color checks resolve to `1.01`, `1.63`, and `2.89`.
+- Suggested-evaluation query distributions in the discovery fixture:
+  - `review` -> `evaluator-execplan` only hit at `1.86`
+  - `review against the active plan` -> `evaluator 5.78`, `generator 2.62`, `planner 2.41`
+  - `implement from the active plan` -> `generator 6.25`, `planner 2.41`, `evaluator 2.06`
+  - `revise the active plan` -> `planner 4.22`, `generator 2.62`, `evaluator 2.06`
+  - `docgarden match scoring` -> `scoring-guide 1.74`, `discovery-overview 1.03`, `common-word 0.81`
+- Repository dogfooding with the real skills/docs corpus still routes the active-plan queries correctly, with top scores `3.40` (`review`), `11.35` (`review against the active plan`), `12.46` (`implement from the active plan`), and `7.28` (`revise the active plan`); `cargo run -- lint .` passed without requiring additional `SKILL.md` frontmatter edits.
 
 ## Review
 
-- [ ] None yet
+- [x] 2026-04-20 evaluator review: no actionable findings. The worktree matches the active plan's scoring/model changes, targeted validation passed (`cargo test --lib score`, `cargo test --test cli match`, `cargo run -- match review`, `cargo run -- match review against the active plan`, `cargo run -- match implement from the active plan`, `cargo run -- match revise the active plan`, `cargo run -- match docgarden match scoring`, `cargo run -- match the`, `cargo run -- lint .`), and the recorded dogfooding numbers in `Discoveries` matched the observed command outputs during review.
