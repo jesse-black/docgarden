@@ -72,10 +72,43 @@ fn count_lines(source: &str) -> usize {
 }
 
 fn tokenizer() -> Result<&'static CoreBPE> {
-    static TOKENIZER: OnceLock<Result<CoreBPE, String>> = OnceLock::new();
+    static TOKENIZER: OnceLock<Result<CoreBPE>> = OnceLock::new();
 
-    match TOKENIZER.get_or_init(|| o200k_base().map_err(|error| error.to_string())) {
-        Ok(tokenizer) => Ok(tokenizer),
-        Err(error) => Err(anyhow!(error.clone())),
+    cached_result(&TOKENIZER, o200k_base)
+        .as_ref()
+        .map_err(|error| anyhow!("{error}"))
+}
+
+fn cached_result<T, E>(
+    cache: &OnceLock<Result<T, E>>,
+    init: impl FnOnce() -> Result<T, E>,
+) -> &Result<T, E> {
+    cache.get_or_init(init)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::OnceLock;
+
+    use super::{cached_result, count_tokens, tokenizer};
+
+    #[test]
+    fn tokenizer_is_cached_across_calls() {
+        let first = tokenizer().unwrap() as *const _;
+        let second = tokenizer().unwrap() as *const _;
+
+        assert_eq!(first, second);
+        assert!(count_tokens("hello world").unwrap() > 0);
+    }
+
+    #[test]
+    fn cached_result_initializes_once_and_reuses_cached_value() {
+        let cache = OnceLock::new();
+
+        let first = cached_result(&cache, || Ok::<_, ()>(41)).as_ref().unwrap();
+        let second = cached_result(&cache, || Ok::<_, ()>(99)).as_ref().unwrap();
+
+        assert_eq!(*first, 41);
+        assert_eq!(*second, 41);
     }
 }

@@ -527,7 +527,7 @@ fn normalize_extension(value: &str) -> String {
 mod tests {
     use std::fs;
 
-    use super::{BudgetLimit, Config, RuleSeverity};
+    use super::{BudgetLimit, CompiledRuleTarget, Config, RuleSeverity};
     use crate::diagnostics::Severity;
     use tempfile::TempDir;
 
@@ -595,6 +595,33 @@ disable = ["unresolved-link-path"]
                 .disable,
             vec!["unresolved-link-path".to_string()]
         );
+    }
+
+    #[test]
+    fn compiled_rule_target_debug_and_equality_ignore_compiled_matchers() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let first = CompiledRuleTarget::new(
+            &repository_root,
+            "**/*.md".to_string(),
+            vec!["AGENTS.md".to_string()],
+        )
+        .unwrap();
+        let second = CompiledRuleTarget::new(
+            &repository_root,
+            "**/*.md".to_string(),
+            vec!["AGENTS.md".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(first, second);
+
+        let rendered = format!("{first:?}");
+        assert!(rendered.contains("CompiledRuleTarget"));
+        assert!(rendered.contains("**/*.md"));
+        assert!(rendered.contains("AGENTS.md"));
     }
 
     #[test]
