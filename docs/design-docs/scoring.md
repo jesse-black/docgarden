@@ -83,13 +83,15 @@ The next scorer should improve separation without turning `docgarden match` into
 
 ## Proposed Directions
 
-The current scorer is a hand-rolled approximation of BM25F with ad-hoc constants that have no principled grounding. The recommended approach is to replace the scoring model with BM25F, then add stopword filtering on top. Phrase bonuses remain optional and should be deferred until BM25F is in place and dogfooding shows a remaining gap.
+The current scorer is a hand-rolled approximation of BM25F with ad-hoc constants that have no principled grounding. The recommended approach is to replace the scoring model with BM25F together with analyzer-level stopword filtering, shipped as a single change — the two are coupled through the corpus statistics (`pseudo_df`, `avgdl`, `combined_length`), which must be built over the same token stream the scorer sees. The existing full-query phrase bonus is dropped in this change; bigram/phrase bonuses can be reconsidered later if dogfooding shows a remaining gap.
+
+Lucene's `CombinedFieldQuery` and `BM25Similarity` are the source of truth for the algorithm. Where a choice is under-specified by IR literature, match Lucene's behavior rather than inventing a variant.
 
 ### 1. Replace The Scoring Model With BM25F
 
 BM25F is the standard field-weighted lexical ranking formula. It directly encodes coverage, rare-term emphasis, and field weighting — the three problems the current ad-hoc scorer patches around separately.
 
-### Field Model
+#### Field Model
 
 The BM25F field model uses three fields:
 
@@ -103,35 +105,32 @@ The BM25F field model uses three fields:
 
 The reason `name` falls back to the filename stem rather than treating them as separate fields is that many documents do not have a frontmatter `name`, so the filename is the next-best identity source. For skills the inverse is true: every skill file is named `SKILL.md`, so the filename carries no useful signal and the frontmatter `name` is the actual identifier. Merging them into one field with frontmatter taking priority handles both cases cleanly.
 
+Under default `docgarden lint` configuration, skills are required to have a frontmatter `name` (per the Agent Skills spec) and non-skill documents are required to have a frontmatter `description`. This means the filename-stem fallback branch is primarily meaningful for non-skill documents that intentionally omit a frontmatter `name`. When frontmatter `name` is present, the filename stem is dropped from scoring entirely — this is an accepted trade-off because in the skills case the filename stem is the uninformative `SKILL.md`, and in the non-skill case the frontmatter author has deliberately chosen a distinct identity over the filename.
+
 The current unified `path` field is split because filename stem and directory prefix are semantically different signals. A query term matching the filename stem is strong evidence of identity; matching a directory segment is weaker context. Giving them the same weight obscures this difference.
 
-### Formula
+#### Lucene-Derived Scoring Shape
 
-```
-score(d, q) = Σ_t  IDF(t) × TF_combined(t, d)
+The intended implementation should follow Lucene's [`CombinedFieldQuery`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/CombinedFieldQuery.java), [`MultiNormsLeafSimScorer`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/MultiNormsLeafSimScorer.java), and [`BM25Similarity`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java) shape:
 
-TF_combined(t, d) = Σ_f  boost_f × tf_f(t, d)
-                         ────────────────────────────────────────────────
-                         k1 × (1 − b_f + b_f × |d_f| / avgdl_f) + tf_f(t, d)
+    // Treat multiple fields as one synthetic weighted field.
+    for each query term t:
+        pseudo_df(t) = max(df_f(t) for each field f)
 
-IDF(t) = ln((N − df(t) + 0.5) / (df(t) + 0.5) + 1)
-```
+    pseudo_doc_count = max(doc_count_f for each field f)
+    pseudo_sum_total_term_freq = sum(boost_f * sum_total_term_freq_f for each field f)
 
-Where:
+    for each document d:
+        combined_freq(t, d) = sum(boost_f * tf_f(t, d) for each field f)
+        combined_length(d) = sum(boost_f * len_f(d) for each field f)
 
-- `t` ranges over query terms
-- `f` ranges over fields (`name`, `path_prefix`, `description`)
-- `boost_f` replaces the current field weights
-- `k1` controls term frequency saturation (standard starting value: `1.2`)
-- `b_f` controls length normalization per field (standard starting value: `0.75`; `b=0` may be appropriate for `name` since skill names are short and length normalization adds noise)
-- `tf_f(t, d)` is term frequency of `t` in field `f` for document `d`
+        idf(t) = ln(1 + (pseudo_doc_count - pseudo_df(t) + 0.5) / (pseudo_df(t) + 0.5))
+        avgdl = pseudo_sum_total_term_freq / pseudo_doc_count
+        score contribution for t =
+            idf(t) * ((k1 + 1) * combined_freq(t, d))
+                     / (combined_freq(t, d) + k1 * (1 - b + b * combined_length(d) / avgdl))
 
-Since the current scorer already uses binary presence (0 or 1) per field rather than raw term frequency, `tf_f` simplifies to 0 or 1 and `TF_combined` becomes:
-
-```
-TF_combined(t, d) = Σ_f  boost_f / (k1 × (1 − b_f + b_f × |d_f| / avgdl_f) + 1)
-                         (for fields where t is present)
-```
+This is the validation target to mirror: combine weighted field statistics, term frequency, and field length first, then apply one BM25 scorer over the synthetic field. It is not equivalent to running BM25 independently per field and summing the results.
 
 How BM25F eliminates the current pain points:
 
@@ -143,38 +142,39 @@ Implementation changes in `src/score.rs` and `src/matching.rs`:
 
 - extract `name_field` from each candidate: frontmatter `name` if present, else filename stem
 - extract `path_prefix_field` as the directory portion of the repo-relative path
-- replace the per-term tier calculation with the BM25F `TF_combined` formula
+- replace the per-term tier calculation with the Lucene-style combined-field BM25F scorer
 - replace the current `raw_idf` with the standard BM25 IDF formula
-- replace the hard-coded field weights with named `boost_f` constants
+- replace the hard-coded field weights with named `boost_f` constants; starting values are `name = 3.0`, `path_prefix = 1.0`, `description = 1.0` — these mirror the relative shape of the current 3/2/1 scheme while acknowledging `path_prefix` is a weaker identity signal than the current unified `path`
+- use Lucene's `BM25Similarity` defaults as starting points: `k1 = 1.2`, `b = 0.75`
 - remove the match-tier constants (`exact = 10`, `prefix = 4`, `substring = 1`)
-- keep the existing phrase bonus for now; it sits on top of the base score and is independent
+- remove the existing full-query phrase bonus entirely; BM25F alone is the baseline, and phrase/bigram evidence is deferred as described below
+- change `ScoredHit.score` from `i32` to `f32`; BM25F contributions are floating-point and rounding to integers collapses small-but-meaningful separation (e.g. `3.12` vs `3.48`) — the sort comparator should compare `f32` with a total-ordering wrapper or stable tiebreakers
 
-The `ScoredHit` struct and sort order do not need to change structurally. Score magnitudes will change so the color band thresholds in `src/cli.rs` will need recalibration after dogfooding.
+The sort order does not need to change structurally. Score magnitudes will change so the color band thresholds in `src/cli.rs` will need recalibration after dogfooding.
 
 ### 2. Stopword Filtering
 
 BM25F's IDF suppresses common terms, but in a small corpus IDF cannot fully separate universal function words from moderately common content words. `docgarden` should use analyzer-style stopword filtering:
 
-- apply stopword filtering in the analyzer, not as an afterthought in scoring
+- apply stopword filtering inside the tokenizer itself, not as a post-processing pass
 - apply it symmetrically at index time and query time for normal bag-of-words retrieval
-- use standard language stopword lists as a starting point, then customize conservatively
+- use Lucene's `EnglishAnalyzer` stopword list as a starting point, then customize conservatively
 
 Concrete design:
 
-- filter stopwords during candidate field normalization as well as query normalization
+- filter stopwords inside `normalize_text` and `normalize_path` so every caller (candidate indexing, query parsing, phrase checks, tests) receives already-filtered tokens by construction — this guarantees the index-time / query-time symmetry without additional plumbing
 - compute BM25F term statistics and field lengths from the filtered token streams so scoring and normalization stay aligned
 - use a Lucene-derived English stopword list
 - keep the stopwords in `src/data/stopwords_en.txt`, one term per line
 - load the file at compile time with `include_str!`
-- if every query term is filtered out, fall back to the unfiltered query so single-word queries like `the` still behave mechanically instead of erroring
+- if every query term is filtered out, treat the query as invalid and return a user-facing error for a stopword-only query; no fallback to unfiltered matching is needed
 
 Implementation:
 
 - add `src/data/stopwords_en.txt`
-- parse `include_str!("data/stopwords_en.txt")` into a static stopword set in `src/score.rs`
+- parse `include_str!("data/stopwords_en.txt")` into a static stopword set (e.g. `OnceLock<HashSet<&'static str>>`) in `src/score.rs`
 - add `fn is_stopword(term: &str) -> bool`
-- add `fn informative_query_terms(query_terms: &[String]) -> Vec<String>`
-- score against the filtered query when it is non-empty
+- apply the filter inside `normalize_text` and `normalize_path` after lowercasing and token splitting
 
 ### 3. Partial Phrase And Proximity Bonuses (Deferred)
 
@@ -191,25 +191,28 @@ If implemented:
 
 ## Recommended Order
 
-1. Replace the scoring model with BM25F
-2. Add stopword filtering
-3. Recalibrate score-color band thresholds
-4. Optionally add bigram bonuses if dogfooding shows a remaining gap
+1. Replace the scoring model with BM25F *and* add analyzer-level stopword filtering as a single change — they share corpus statistics and splitting them doubles the calibration work
+2. Recalibrate score-color band thresholds
+3. Optionally add bigram bonuses if dogfooding shows a remaining gap
 
 ## What Implementation Would Look Like
 
 - `src/score.rs`
-  - replace the per-term tier and IDF calculation with BM25F
-  - add stopword utilities and `informative_query_terms`
-  - remove match-tier constants
+  - replace the per-term tier and IDF calculation with the Lucene-style combined-field BM25F scorer
+  - change `ScoredHit.score` from `i32` to `f32`
+  - remove match-tier constants and the full-query phrase bonus
+  - add `is_stopword` and a static stopword set sourced from `src/data/stopwords_en.txt`
+  - filter stopwords inside `normalize_text` and `normalize_path` so every caller sees filtered tokens
+- `src/data/stopwords_en.txt`
+  - new file, Lucene-derived English stopwords, one term per line
 - `src/matching.rs`
-  - no major structural changes expected
+  - no major structural changes expected; any `i32` score consumers must accept `f32`
 - `src/cli.rs`
   - recalibrate the score-color band thresholds after dogfooding
 - `tests/cli.rs`
   - add routing-separation tests for evaluator vs planner vs generator queries
   - add tests that stopwords do not dominate rankings
-  - add a test for the stopword-only query fallback (`the` still returns results)
+  - add a test documenting that a stopword-only query (`the`) returns a user-facing error
 - `docs/design-docs/frontmatter-driven-discovery-commands.md`
   - update if the shipped v1 scoring description changes materially
 - `docs/exec-plans/active/*.md`
@@ -225,6 +228,9 @@ References:
 
 - BM25F in Lucene discussion: https://opensourceconnections.com/blog/2016/10/19/bm25f-in-lucene/
 - Lucene `BM25Similarity` docs: https://lucene.apache.org/core/9_9_1/core/org/apache/lucene/search/similarities/BM25Similarity.html
+- Lucene `CombinedFieldQuery` source: https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/CombinedFieldQuery.java
+- Lucene `MultiNormsLeafSimScorer` source: https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/MultiNormsLeafSimScorer.java
+- Lucene `BM25Similarity` source: https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java
 
 ### Phrase And Proximity Evidence
 
@@ -244,7 +250,7 @@ Reference:
 
 ## Open Questions
 
-- What are the right BM25F `k1` and `b_f` values for this corpus? The `name` field likely wants `b=0` (no length normalization) since skill names are short and uniform. The `path_prefix` and `description` fields may benefit from `b=0.75` but need dogfooding to confirm.
+- What are the right BM25F `k1` and `b` values for this corpus? Lucene's `BM25Similarity` defaults are `k1 = 1.2`, `b = 0.75` and are the right starting point. The combined-field length is dominated by short `name` and `path_prefix` content, so a lower `b` may reduce length penalty for documents with longer descriptions; dogfooding will confirm whether the defaults hold.
 - Should score-color band thresholds be recalibrated after BM25F changes the score distribution, or derived dynamically from the result set?
 
 ## Suggested Evaluation
