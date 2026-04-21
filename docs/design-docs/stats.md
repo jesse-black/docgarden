@@ -29,13 +29,19 @@ The working command shape is:
 
 The command should be informational by default. Exceeding a configured limit should not make `docgarden stats` fail; `docgarden lint` remains the enforcement command. A future option such as `--fail-over-budget` may be useful for scripts, but it should not be required for the first version because it would duplicate existing lint behavior.
 
+For directory targets, `stats` should support:
+
+- `-R, --recurse`
+
+With `--recurse`, the command should descend into nested directories under each target. Without it, directory targets should be limited to Markdown files directly within the named directory. The flag only changes target expansion; ignore rules and Markdown-file filtering should still match the shared discovery behavior used elsewhere in `docgarden`.
+
 ## Default Output
 
 The default human output should be a compact table:
 
     path                                      lines  tokens
     AGENTS.md                                    25     921
-    docs/design-docs/context-budget-limits.md  184    2360
+    docs/design-docs/line-and-token-limits.md  184    2360
 
 If the loaded configuration supplies `max_lines` or `max_tokens` for a reported file, the command may include those effective limits as additional columns:
 

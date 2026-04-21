@@ -16,7 +16,7 @@ description: "Revise `docgarden match` output to hide raw scores by default, add
 - `src/matching.rs` — restructure row rendering, compute explain-only relative metrics, render matched-term highlighting, and gate color output to explain mode
 - `src/score.rs` — expose any additional scoring metadata needed for explain mode, especially the strongest matched field signal if the current `first_field_hit` is not sufficient
 - `tests/cli.rs` — replace score-first parsing helpers, add assertions for default output, explain output, highlighting, and explain-only color behavior
-- `docs/design-docs/frontmatter-driven-discovery-commands.md` — update the shipped output contract and explain-mode guidance
+- `docs/design-docs/match-and-list.md` — update the shipped output contract and explain-mode guidance
 - `docs/design-docs/scoring.md` — document that raw BM25F score is primarily an explain/debug signal and that color bands are relative in explain mode
 
 ## Open Questions
@@ -31,7 +31,7 @@ description: "Revise `docgarden match` output to hide raw scores by default, add
 - [x] Change any remaining field-priority presentation or tie-break behavior that still uses `name > path > description` so it instead uses `name > description > path`
 - [x] Replace the fixed score-band renderer with explain-only color selection based on hybrid relative-plus-coverage rules, and ensure default mode stays uncolored even when `--color always` is requested
 - [x] Rewrite `tests/cli.rs` helpers and assertions for the new default column layout, `--explain` layout, matched-term highlighting, explain-only colors, and unchanged `--path-only` behavior
-- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` and `docs/design-docs/scoring.md` to reflect the new output contract and the role of explain-mode diagnostics
+- [x] Update `docs/design-docs/match-and-list.md` and `docs/design-docs/scoring.md` to reflect the new output contract and the role of explain-mode diagnostics
 
 ## Validation
 - `cargo fmt --check`

@@ -24,7 +24,7 @@ The visible proof is a small repository with a config entry such as the example 
 - [x] (2026-04-07 01:02Z) Confirmed the modularization prerequisite passed evaluator review before this reopening.
 - [x] (2026-04-07 01:06Z) Added and passed focused config and CLI tests for explicit `max_tokens`, explicit `max_lines`, entry-level severity, disable behavior, duplicate path entries, stale rejected shapes, and non-fixability.
 - [x] (2026-04-07 01:06Z) Implemented context-budget configuration lowering, `tiktoken-rs` token counting, line counting, diagnostics, and file-level rule execution.
-- [x] (2026-04-07 01:08Z) Updated `ARCHITECTURE.md`, `docs/PRODUCT.md`, `docs/design-docs/configuration.md`, and `docs/design-docs/context-budget-limits.md` to reflect explicit v1 context-budget behavior.
+- [x] (2026-04-07 01:08Z) Updated `ARCHITECTURE.md`, `docs/PRODUCT.md`, `docs/design-docs/configuration.md`, and `docs/design-docs/line-and-token-limits.md` to reflect explicit v1 context-budget behavior.
 - [x] (2026-04-07 01:10Z) Ran focused tests, full validation, and doc linting. This plan is ready for evaluator review and remains active.
 - [x] (2026-04-07 03:23Z) Reopened this plan after evaluator review recorded a blocking finding: budget rule disables were also lowered into global per-file ignores, preventing a later matching budget entry from re-enabling the same budget kind.
 - [x] (2026-04-07 03:23Z) Added a focused CLI regression test for `max_tokens`, then `disable = ["max_tokens"]`, then a later matching `max_tokens` entry restoring the token budget.
@@ -75,7 +75,7 @@ The visible proof is a small repository with a config entry such as the example 
 
 2026-04-07 implementation outcome: The modularization prerequisite is complete. The first context-budget implementation is in place with config parsing, effective budget lookup, token and line diagnostics, CLI tests, and documentation updates. Focused tests, `cargo test`, doc linting, and `cargo xtask validate` passed. This plan is ready for evaluator review.
 
-2026-04-07 evaluator outcome: Passed clean-room evaluation against `main` at `3cd15b7b34972b6e5dfab0de4901c96e164d0a63`. Evidence reviewed included the plan itself, `ARCHITECTURE.md`, `src/config.rs`, `src/lint/mod.rs`, `src/lint/rules/file.rs`, `tests/cli.rs`, `tests/path_behavior.rs`, `cargo test`, `cargo run -- lint docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/PRODUCT.md ARCHITECTURE.md` plus the then-active copy of this plan, and `cargo xtask validate`. No blocking findings remained, and the solution stayed intentionally simple: explicit path-targeted budget rules, entry-level severity, file-level diagnostics, and no autofix.
+2026-04-07 evaluator outcome: Passed clean-room evaluation against `main` at `3cd15b7b34972b6e5dfab0de4901c96e164d0a63`. Evidence reviewed included the plan itself, `ARCHITECTURE.md`, `src/config.rs`, `src/lint/mod.rs`, `src/lint/rules/file.rs`, `tests/cli.rs`, `tests/path_behavior.rs`, `cargo test`, `cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/PRODUCT.md ARCHITECTURE.md` plus the then-active copy of this plan, and `cargo xtask validate`. No blocking findings remained, and the solution stayed intentionally simple: explicit path-targeted budget rules, entry-level severity, file-level diagnostics, and no autofix.
 
 2026-04-07 reopened-generator outcome: A later evaluator pass found that the first closeout missed an ordering bug in budget disables. The reopened implementation now keeps `max_tokens` and `max_lines` disables out of global per-file ignores so the ordered `context_budgets_for_path` logic can apply last matching entry wins per budget kind. Focused validation passed with `cargo test config` and `cargo test --test cli context_budget -- --nocapture`. Broader validation also passed with active-plan doc lint, `cargo test`, and `cargo xtask validate`.
 
@@ -115,7 +115,7 @@ Add file-level diagnostics. A `max_tokens` diagnostic should be emitted at line 
     File has 17 tokens, which exceeds configured max_tokens = 10.
     File has 8 lines, which exceeds configured max_lines = 5.
 
-Update docs after implementation. `docs/design-docs/context-budget-limits.md` and `docs/design-docs/configuration.md` should reflect the implemented explicit-only shape. If `ARCHITECTURE.md` has been updated by modularization, add the budget rule family in the new rule-module description without turning the architecture doc into an implementation log.
+Update docs after implementation. `docs/design-docs/line-and-token-limits.md` and `docs/design-docs/configuration.md` should reflect the implemented explicit-only shape. If `ARCHITECTURE.md` has been updated by modularization, add the budget rule family in the new rule-module description without turning the architecture doc into an implementation log.
 
 ## Concrete Steps
 
@@ -156,7 +156,7 @@ Expected result: the Rust test suite and repository validation pass. If `cargo x
 
 6. Dogfood lint changed docs.
 
-    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/exec-plans/completed/context-budget-limits.md --color never
+    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/exec-plans/completed/context-budget-limits.md --color never
 
 Expected result: the command reports no documentation-path or style-policy errors.
 
@@ -186,7 +186,7 @@ If the budget implementation starts to require a broader targeting model, stop a
 
 ## Artifacts and Notes
 
-Evaluator review note (2026-04-07): Re-reviewed the current `feat/contextBudget` PR branch against `main` at merge base `3cd15b7b34972b6e5dfab0de4901c96e164d0a63`. One blocking finding remains: budget rule disables are lowered into both the ordered context-budget rule list and the global per-file ignore list, so a later matching budget entry cannot re-enable that budget kind even though the plan requires last matching entry wins per budget kind. Evidence: `src/config.rs` adds every non-empty `disable` list to `per_file_ignores` before filtering budget rules into `context_budget_rules`, and `src/lint/mod.rs` suppresses any finding whose rule id is in the merged ignore set. A manual repro with `max_tokens = 1`, then `disable = ["max_tokens"]`, then later `max_tokens = 1` for `README.md` exited 0 with no diagnostic for a five-word file. Evidence reviewed: this completed plan; `git diff --name-status main...HEAD`; `src/config.rs`; `src/lint/mod.rs`; `src/lint/rules/file.rs`; `src/lint/rules/local_paths.rs`; `tests/cli.rs`; `ARCHITECTURE.md`; `docs/PRODUCT.md`; `docs/design-docs/configuration.md`; `docs/design-docs/context-budget-limits.md`; `cargo test`; the then-current doc-lint command for both completed plan copies; `cargo xtask validate`; and the manual repro using `/workspaces/dglint/target/debug/docgarden lint README.md --color never` from a temporary repository. The review also observed pre-existing uncommitted worktree edits in `.agents/skills/`, `AGENTS.md`, and `docs/EXECPLAN_PERSONAS.md`; those were outside the `main...HEAD` implementation diff for this context-budget plan.
+Evaluator review note (2026-04-07): Re-reviewed the current `feat/contextBudget` PR branch against `main` at merge base `3cd15b7b34972b6e5dfab0de4901c96e164d0a63`. One blocking finding remains: budget rule disables are lowered into both the ordered context-budget rule list and the global per-file ignore list, so a later matching budget entry cannot re-enable that budget kind even though the plan requires last matching entry wins per budget kind. Evidence: `src/config.rs` adds every non-empty `disable` list to `per_file_ignores` before filtering budget rules into `context_budget_rules`, and `src/lint/mod.rs` suppresses any finding whose rule id is in the merged ignore set. A manual repro with `max_tokens = 1`, then `disable = ["max_tokens"]`, then later `max_tokens = 1` for `README.md` exited 0 with no diagnostic for a five-word file. Evidence reviewed: this completed plan; `git diff --name-status main...HEAD`; `src/config.rs`; `src/lint/mod.rs`; `src/lint/rules/file.rs`; `src/lint/rules/local_paths.rs`; `tests/cli.rs`; `ARCHITECTURE.md`; `docs/PRODUCT.md`; `docs/design-docs/configuration.md`; `docs/design-docs/line-and-token-limits.md`; `cargo test`; the then-current doc-lint command for both completed plan copies; `cargo xtask validate`; and the manual repro using `/workspaces/dglint/target/debug/docgarden lint README.md --color never` from a temporary repository. The review also observed pre-existing uncommitted worktree edits in `.agents/skills/`, `AGENTS.md`, and `docs/EXECPLAN_PERSONAS.md`; those were outside the `main...HEAD` implementation diff for this context-budget plan.
 
 Expected config examples:
 
@@ -218,7 +218,7 @@ Validation evidence collected during implementation:
     cargo test config
     cargo test --test cli context_budget -- --nocapture
     cargo test
-    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/PRODUCT.md ARCHITECTURE.md docs/exec-plans/completed/context-budget-limits.md docs/exec-plans/completed/modularize-lint-rules.md --color never
+    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/PRODUCT.md ARCHITECTURE.md docs/exec-plans/completed/context-budget-limits.md docs/exec-plans/completed/modularize-lint-rules.md --color never
     cargo xtask validate
 
 The first unprivileged `cargo check` after adding `tiktoken-rs` failed because the sandbox could not resolve `index.crates.io`; rerunning `cargo check` with approved network access downloaded `tiktoken-rs v0.7.0` and its transitive dependencies. The final `cargo xtask validate` passed with diff region coverage of 96.02 percent.

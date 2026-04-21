@@ -40,7 +40,7 @@ description: "ExecPlan for shipping the `docgarden match` subcommand, including 
 - `src/root.rs`, `src/paths.rs`, `src/config.rs` — used as-is.
 - `tests/cli.rs` — pattern from existing `--help` and discovery tests (lines 11-24) is the template for new match tests.
 - `tests/common/mod.rs` — `fixture_repo(name)` is the existing helper for copying fixtures into tempdirs.
-- `docs/design-docs/frontmatter-driven-discovery-commands.md` — source of truth for output shape, flag names, and scoring direction.
+- `docs/design-docs/match-and-list.md` — source of truth for output shape, flag names, and command-level discovery behavior.
 - `Cargo.toml` — no new runtime deps. IDF is hand-rolled on `HashMap` / `HashSet` using only `std` and `f32`.
 
 ## Resolved decisions
@@ -127,7 +127,7 @@ IDF is safe here because the corpus is fully determined by `Config::load` + `dis
 - [x] Add a dedicated fixture `tests/discovery-repo/` with a minimal `docgarden.toml`, a couple of docs with rich `name`/`description`, one doc with only `name`, one doc with no frontmatter (path-only discoverability), and one doc inside a gitignored subdir. `tests/common/mod.rs::fixture_repo` already loads `tests/<name>`, so no helper changes were needed.
 - [x] Fix the remaining score/test mismatch around phrase bonus semantics, then rerun targeted and full tests.
 - [x] Run full test + lint suite; iterate on scoring thresholds if dogfooding output against this repo's own docs and skills feels off.
-- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` to reflect the v1 divergences: clamped corpus-local IDF in place of uncapped IDF; `match` takes no positional targets; no fuzzy tier in v1. Follow the doc's own working-draft voice.
+- [x] Update `docs/design-docs/match-and-list.md` to reflect the v1 divergences: clamped corpus-local IDF in place of uncapped IDF; `match` takes no positional targets; no fuzzy tier in v1. Follow the doc's own working-draft voice.
 
 ## Validation
 
@@ -150,7 +150,7 @@ IDF is safe here because the corpus is fully determined by `Config::load` + `dis
 - Current failing test indicates the intended phrase bonus semantics are "bonus only for multi-term contiguous queries"; single-term exact matches should rely on normal tier scoring only.
 - `cargo run -- match discovery` ranks the design doc first and related discovery docs next, which is a reasonable smoke test for the shipped scorer on the live repo.
 - `cargo run -- m planner --limit 3 --path-only` currently returns a single planner skill path, which is expected because only one discovered document in this repo clearly matches that token.
-- `cargo run -- lint docs/exec-plans/active/implement-match-subcommand.md docs/design-docs/frontmatter-driven-discovery-commands.md` passes after adding required frontmatter to the active ExecPlan.
+- `cargo run -- lint docs/exec-plans/active/implement-match-subcommand.md docs/design-docs/match-and-list.md` passes after adding required frontmatter to the active ExecPlan.
 - `match --color` now uses fixed score bands documented in help text: `1-24` low/red, `25-59` medium/yellow, `60+` high/green; `--path-only` bypasses color even when forced.
 - `first_field_hit` now records the best matched field across the full query, so tie-breaks stay stable even when a lower-priority field matches an earlier query term.
 
