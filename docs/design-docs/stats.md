@@ -35,6 +35,8 @@ For directory targets, `stats` should support:
 
 With `--recurse`, the command should descend into nested directories under each target. Without it, directory targets should be limited to Markdown files directly within the named directory. The flag only changes target expansion; ignore rules and Markdown-file filtering should still match the shared discovery behavior used elsewhere in `docgarden`.
 
+Recursive output should stay flat. `stats -R` should report one file per row using the normal table format, not per-directory sections, nested tree rendering, or subtotal rows.
+
 ## Default Output
 
 The default human output should be a compact table:

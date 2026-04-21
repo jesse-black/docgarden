@@ -94,8 +94,9 @@ For `docgarden list`, directory targets should support an explicit recursion fla
 - `-R, --recurse`
 
 With `--recurse`, `list` should descend into nested directories under each directory target. Without it, directory targets should be limited to Markdown files directly within the named directory. This gives `list` a predictable "shallow by default, deep on request" shape while still reusing the same ignore and include/exclude rules as lint for the files it considers.
+Recursive output should stay flat: one discovered document per output row, with no per-directory headings or nested tree rendering.
 
-For shipped v1, `docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
+`docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
 
 This keeps repository traversal behavior consistent across lint and discovery commands, reduces implementation duplication, and avoids subtle cases where `lint` and `list` or `match` disagree about which documents exist.
 
@@ -205,6 +206,7 @@ For directory targets, `list` should support:
 - `-R, --recurse`
 
 That flag should recurse into nested subdirectories under each target. Without it, directory targets should be shallow.
+Even with `--recurse`, the output should remain a flat result list rather than grouped directory sections.
 
 A reasonable first output shape is:
 
