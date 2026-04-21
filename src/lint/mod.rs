@@ -77,7 +77,6 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         edits: &mut edits,
     };
     let file_context = rules::file::FileRuleContext {
-        config,
         policy,
         file: &relative_path,
         source: &source,

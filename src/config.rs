@@ -85,19 +85,15 @@ impl From<RuleSeverity> for Severity {
 
 #[derive(Clone)]
 struct CompiledRuleTarget {
-    pattern: String,
-    exclude: Vec<String>,
     path_matcher: Gitignore,
     exclude_matcher: Gitignore,
 }
 
 impl CompiledRuleTarget {
-    fn new(root: &Path, pattern: String, exclude: Vec<String>) -> Result<Self> {
+    fn new(root: &Path, pattern: &str, exclude: &[String]) -> Result<Self> {
         Ok(Self {
-            path_matcher: compile_rule_matcher(root, std::slice::from_ref(&pattern))?,
-            exclude_matcher: compile_rule_matcher(root, &exclude)?,
-            pattern,
-            exclude,
+            path_matcher: compile_rule_matcher(root, &[pattern.to_string()])?,
+            exclude_matcher: compile_rule_matcher(root, exclude)?,
         })
     }
 
@@ -107,24 +103,7 @@ impl CompiledRuleTarget {
     }
 }
 
-impl std::fmt::Debug for CompiledRuleTarget {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompiledRuleTarget")
-            .field("pattern", &self.pattern)
-            .field("exclude", &self.exclude)
-            .finish()
-    }
-}
-
-impl PartialEq for CompiledRuleTarget {
-    fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern && self.exclude == other.exclude
-    }
-}
-
-impl Eq for CompiledRuleTarget {}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct FrontmatterRule {
     target: CompiledRuleTarget,
     pub required: Vec<String>,
@@ -140,7 +119,7 @@ impl FrontmatterRule {
         field_max_chars: BTreeMap<String, usize>,
     ) -> Result<Self> {
         Ok(Self {
-            target: CompiledRuleTarget::new(root, pattern, exclude)?,
+            target: CompiledRuleTarget::new(root, &pattern, &exclude)?,
             required,
             field_max_chars,
         })
@@ -167,7 +146,7 @@ pub struct BudgetLimit {
 ///
 /// Stored in source order in `Config.rule_applications` so that
 /// `effective_rule_policy_for_path` can apply last-writer-wins semantics.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct RuleApplication {
     target: CompiledRuleTarget,
     pub disable: Vec<String>,
@@ -196,7 +175,7 @@ pub struct EffectiveRulePolicy {
     pub max_lines: Option<BudgetLimit>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub repository_root: PathBuf,
     pub include: Vec<String>,
@@ -208,6 +187,23 @@ pub struct Config {
     pub config_was_explicit: bool,
     pub frontmatter_rules: Vec<FrontmatterRule>,
     pub respect_gitignore: bool,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("repository_root", &self.repository_root)
+            .field("include", &self.include)
+            .field("exclude", &self.exclude)
+            .field("rule_application_count", &self.rule_applications.len())
+            .field("known_extensions", &self.known_extensions)
+            .field("special_filenames", &self.special_filenames)
+            .field("config_path", &self.config_path)
+            .field("config_was_explicit", &self.config_was_explicit)
+            .field("frontmatter_rule_count", &self.frontmatter_rules.len())
+            .field("respect_gitignore", &self.respect_gitignore)
+            .finish()
+    }
 }
 
 impl Config {
@@ -413,7 +409,7 @@ fn lower_rules(
 
         if has_rule_content {
             applications.push(RuleApplication {
-                target: CompiledRuleTarget::new(root, pattern.clone(), exclude.clone())?,
+                target: CompiledRuleTarget::new(root, &pattern, &exclude)?,
                 disable: disabled_rules,
                 enable: enabled_rules,
                 severity,
@@ -525,9 +521,9 @@ fn normalize_extension(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::Path};
 
-    use super::{BudgetLimit, CompiledRuleTarget, Config, RuleSeverity};
+    use super::{BudgetLimit, Config, RuleSeverity};
     use crate::diagnostics::Severity;
     use tempfile::TempDir;
 
@@ -586,42 +582,33 @@ disable = ["unresolved-link-path"]
         assert!(!config.known_extensions.contains(".md"));
         assert!(config.special_filenames.contains("Tiltfile"));
         assert!(!config.special_filenames.contains("LICENSE"));
-        assert_eq!(
-            config
-                .rule_applications
-                .iter()
-                .find(|a| a.target.pattern == "docs/generated/**")
-                .unwrap()
-                .disable,
-            vec!["unresolved-link-path".to_string()]
+
+        let generated_policy = config
+            .effective_rule_policy_for_path("docs/generated/output.md")
+            .unwrap();
+        assert!(
+            generated_policy
+                .ignored_rules
+                .contains("unresolved-link-path")
         );
+
+        let other_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        assert!(!other_policy.ignored_rules.contains("unresolved-link-path"));
     }
 
     #[test]
-    fn compiled_rule_target_debug_and_equality_ignore_compiled_matchers() {
+    fn compiled_rule_target_matches_path_and_respects_excludes() {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
         fs::create_dir_all(&repository_root).unwrap();
 
-        let first = CompiledRuleTarget::new(
-            &repository_root,
-            "**/*.md".to_string(),
-            vec!["AGENTS.md".to_string()],
-        )
-        .unwrap();
-        let second = CompiledRuleTarget::new(
-            &repository_root,
-            "**/*.md".to_string(),
-            vec!["AGENTS.md".to_string()],
-        )
-        .unwrap();
+        let target =
+            super::CompiledRuleTarget::new(&repository_root, "**/*.md", &["AGENTS.md".to_string()])
+                .unwrap();
 
-        assert_eq!(first, second);
-
-        let rendered = format!("{first:?}");
-        assert!(rendered.contains("CompiledRuleTarget"));
-        assert!(rendered.contains("**/*.md"));
-        assert!(rendered.contains("AGENTS.md"));
+        assert!(target.matches(Path::new("docs/guide.md")));
+        assert!(!target.matches(Path::new("AGENTS.md")));
+        assert!(!target.matches(Path::new("Cargo.toml")));
     }
 
     #[test]
@@ -633,6 +620,22 @@ disable = ["unresolved-link-path"]
         let config = Config::load(&repository_root, None).unwrap();
 
         assert!(config.respect_gitignore);
+    }
+
+    #[test]
+    fn config_debug_reports_stable_summary_fields() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+        let rendered = format!("{config:?}");
+
+        assert!(rendered.contains("Config"));
+        assert!(rendered.contains("repository_root"));
+        assert!(rendered.contains("rule_application_count: 0"));
+        assert!(rendered.contains("frontmatter_rule_count: 0"));
+        assert!(rendered.contains("respect_gitignore: true"));
     }
 
     #[test]
@@ -969,23 +972,16 @@ required = ["description"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        assert_eq!(config.frontmatter_rules.len(), 2);
-        assert_eq!(config.frontmatter_rules[0].target.pattern, "**/*.md");
-        assert!(config.frontmatter_rules[0].target.exclude.is_empty());
-        assert!(config.frontmatter_rules[0].required.is_empty());
+        let guide_policy = config.frontmatter_policy_for_path("docs/guide.md").unwrap();
+        assert_eq!(guide_policy.required, vec!["description".to_string()]);
+        assert_eq!(guide_policy.field_max_chars.get("description"), Some(&1024));
+
+        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md").unwrap();
+        assert_eq!(agents_policy.required, Vec::<String>::new());
         assert_eq!(
-            config.frontmatter_rules[0]
-                .field_max_chars
-                .get("description"),
+            agents_policy.field_max_chars.get("description"),
             Some(&1024)
         );
-        assert_eq!(config.frontmatter_rules[1].target.pattern, "**/*.md");
-        assert_eq!(config.frontmatter_rules[1].target.exclude, ["AGENTS.md"]);
-        assert_eq!(
-            config.frontmatter_rules[1].required,
-            vec!["description".to_string()]
-        );
-        assert!(config.frontmatter_rules[1].field_max_chars.is_empty());
     }
 
     #[test]
