@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use ignore::gitignore::GitignoreBuilder;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 
 use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special_filenames};
@@ -83,12 +83,51 @@ impl From<RuleSeverity> for Severity {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
+struct CompiledRuleTarget {
+    path_matcher: Gitignore,
+    exclude_matcher: Gitignore,
+}
+
+impl CompiledRuleTarget {
+    fn new(root: &Path, pattern: &str, exclude: &[String]) -> Result<Self> {
+        Ok(Self {
+            path_matcher: compile_rule_matcher(root, &[pattern.to_string()])?,
+            exclude_matcher: compile_rule_matcher(root, exclude)?,
+        })
+    }
+
+    fn matches(&self, relative_path: &Path) -> bool {
+        matcher_matches(&self.path_matcher, relative_path)
+            && !matcher_matches(&self.exclude_matcher, relative_path)
+    }
+}
+
+#[derive(Clone)]
 pub struct FrontmatterRule {
-    pub pattern: String,
-    pub exclude: Vec<String>,
+    target: CompiledRuleTarget,
     pub required: Vec<String>,
     pub field_max_chars: BTreeMap<String, usize>,
+}
+
+impl FrontmatterRule {
+    fn new(
+        root: &Path,
+        pattern: String,
+        exclude: Vec<String>,
+        required: Vec<String>,
+        field_max_chars: BTreeMap<String, usize>,
+    ) -> Result<Self> {
+        Ok(Self {
+            target: CompiledRuleTarget::new(root, &pattern, &exclude)?,
+            required,
+            field_max_chars,
+        })
+    }
+
+    fn matches(&self, relative_path: &Path) -> bool {
+        self.target.matches(relative_path)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -107,16 +146,21 @@ pub struct BudgetLimit {
 ///
 /// Stored in source order in `Config.rule_applications` so that
 /// `effective_rule_policy_for_path` can apply last-writer-wins semantics.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct RuleApplication {
-    pub pattern: String,
-    pub exclude: Vec<String>,
+    target: CompiledRuleTarget,
     pub disable: Vec<String>,
     pub enable: Vec<String>,
     /// Severity used when `enable` contains `"unresolved-backtick-path"`.
     pub severity: RuleSeverity,
     pub max_tokens: Option<BudgetLimit>,
     pub max_lines: Option<BudgetLimit>,
+}
+
+impl RuleApplication {
+    fn matches(&self, relative_path: &Path) -> bool {
+        self.target.matches(relative_path)
+    }
 }
 
 /// The effective per-file rule state derived by the ordered reducer.
@@ -131,7 +175,7 @@ pub struct EffectiveRulePolicy {
     pub max_lines: Option<BudgetLimit>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub repository_root: PathBuf,
     pub include: Vec<String>,
@@ -143,6 +187,23 @@ pub struct Config {
     pub config_was_explicit: bool,
     pub frontmatter_rules: Vec<FrontmatterRule>,
     pub respect_gitignore: bool,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("repository_root", &self.repository_root)
+            .field("include", &self.include)
+            .field("exclude", &self.exclude)
+            .field("rule_application_count", &self.rule_applications.len())
+            .field("known_extensions", &self.known_extensions)
+            .field("special_filenames", &self.special_filenames)
+            .field("config_path", &self.config_path)
+            .field("config_was_explicit", &self.config_was_explicit)
+            .field("frontmatter_rule_count", &self.frontmatter_rules.len())
+            .field("respect_gitignore", &self.respect_gitignore)
+            .finish()
+    }
 }
 
 impl Config {
@@ -203,7 +264,7 @@ impl Config {
             bail!("include patterns must not be empty");
         }
 
-        let (rule_applications, frontmatter_rules) = lower_rules(parsed.rules)?;
+        let (rule_applications, frontmatter_rules) = lower_rules(&repository_root, parsed.rules)?;
 
         Ok(Self {
             repository_root,
@@ -231,6 +292,7 @@ impl Config {
         &self,
         relative_path: &str,
     ) -> Result<EffectiveRulePolicy> {
+        let relative_path = Path::new(relative_path);
         let mut ignored_rules: BTreeSet<String> = BTreeSet::new();
         let mut backtick_severity: Option<Severity> = None;
         let mut prefer_links = false;
@@ -238,12 +300,7 @@ impl Config {
         let mut max_lines: Option<BudgetLimit> = None;
 
         for app in &self.rule_applications {
-            if !rule_entry_matches(
-                &self.repository_root,
-                &app.pattern,
-                &app.exclude,
-                relative_path,
-            )? {
+            if !app.matches(relative_path) {
                 continue;
             }
 
@@ -290,14 +347,10 @@ impl Config {
         &self,
         relative_path: &str,
     ) -> Result<EffectiveFrontmatterPolicy> {
+        let relative_path = Path::new(relative_path);
         let mut policy = EffectiveFrontmatterPolicy::default();
         for rule in &self.frontmatter_rules {
-            if !rule_entry_matches(
-                &self.repository_root,
-                &rule.pattern,
-                &rule.exclude,
-                relative_path,
-            )? {
+            if !rule.matches(relative_path) {
                 continue;
             }
             if !rule.required.is_empty() {
@@ -311,7 +364,10 @@ impl Config {
     }
 }
 
-fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<FrontmatterRule>)> {
+fn lower_rules(
+    root: &Path,
+    rules: Vec<RuleConfig>,
+) -> Result<(Vec<RuleApplication>, Vec<FrontmatterRule>)> {
     let mut applications: Vec<RuleApplication> = Vec::new();
     let mut frontmatter_rules: Vec<FrontmatterRule> = Vec::new();
 
@@ -353,8 +409,7 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<Fron
 
         if has_rule_content {
             applications.push(RuleApplication {
-                pattern: pattern.clone(),
-                exclude: exclude.clone(),
+                target: CompiledRuleTarget::new(root, &pattern, &exclude)?,
                 disable: disabled_rules,
                 enable: enabled_rules,
                 severity,
@@ -379,12 +434,13 @@ fn lower_rules(rules: Vec<RuleConfig>) -> Result<(Vec<RuleApplication>, Vec<Fron
                 }
             }
             if !fm.required.is_empty() || !field_max_chars.is_empty() {
-                frontmatter_rules.push(FrontmatterRule {
+                frontmatter_rules.push(FrontmatterRule::new(
+                    root,
                     pattern,
                     exclude,
-                    required: fm.required,
+                    fm.required,
                     field_max_chars,
-                });
+                )?);
             }
         }
     }
@@ -435,35 +491,20 @@ fn is_supported_enabled_rule(rule: &str) -> bool {
     )
 }
 
-fn pattern_matches(root: &Path, pattern: &str, relative_path: &str) -> Result<bool> {
+fn compile_rule_matcher(root: &Path, patterns: &[String]) -> Result<Gitignore> {
     let mut builder = GitignoreBuilder::new(root);
-    builder
-        .add_line(None, pattern)
-        .with_context(|| format!("invalid rule path pattern {pattern}"))?;
-    let matcher = builder.build()?;
-    Ok(matcher
-        .matched_path_or_any_parents(Path::new(relative_path), false)
-        .is_ignore())
+    for pattern in patterns {
+        builder
+            .add_line(None, pattern)
+            .with_context(|| format!("invalid rule path pattern {pattern}"))?;
+    }
+    Ok(builder.build()?)
 }
 
-/// Returns `true` when `relative_path` matches `pattern` and does not match
-/// any of the `exclude` patterns.  This is the single shared implementation
-/// of the per-rule-entry targeting logic used by every rule family.
-fn rule_entry_matches(
-    root: &Path,
-    pattern: &str,
-    exclude: &[String],
-    relative_path: &str,
-) -> Result<bool> {
-    if !pattern_matches(root, pattern, relative_path)? {
-        return Ok(false);
-    }
-    for excl in exclude {
-        if pattern_matches(root, excl, relative_path)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+fn matcher_matches(matcher: &Gitignore, relative_path: &Path) -> bool {
+    matcher
+        .matched_path_or_any_parents(relative_path, false)
+        .is_ignore()
 }
 
 fn default_respect_gitignore() -> bool {
@@ -480,7 +521,7 @@ fn normalize_extension(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::Path};
 
     use super::{BudgetLimit, Config, RuleSeverity};
     use crate::diagnostics::Severity;
@@ -541,15 +582,33 @@ disable = ["unresolved-link-path"]
         assert!(!config.known_extensions.contains(".md"));
         assert!(config.special_filenames.contains("Tiltfile"));
         assert!(!config.special_filenames.contains("LICENSE"));
-        assert_eq!(
-            config
-                .rule_applications
-                .iter()
-                .find(|a| a.pattern == "docs/generated/**")
-                .unwrap()
-                .disable,
-            vec!["unresolved-link-path".to_string()]
+
+        let generated_policy = config
+            .effective_rule_policy_for_path("docs/generated/output.md")
+            .unwrap();
+        assert!(
+            generated_policy
+                .ignored_rules
+                .contains("unresolved-link-path")
         );
+
+        let other_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        assert!(!other_policy.ignored_rules.contains("unresolved-link-path"));
+    }
+
+    #[test]
+    fn compiled_rule_target_matches_path_and_respects_excludes() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let target =
+            super::CompiledRuleTarget::new(&repository_root, "**/*.md", &["AGENTS.md".to_string()])
+                .unwrap();
+
+        assert!(target.matches(Path::new("docs/guide.md")));
+        assert!(!target.matches(Path::new("AGENTS.md")));
+        assert!(!target.matches(Path::new("Cargo.toml")));
     }
 
     #[test]
@@ -561,6 +620,22 @@ disable = ["unresolved-link-path"]
         let config = Config::load(&repository_root, None).unwrap();
 
         assert!(config.respect_gitignore);
+    }
+
+    #[test]
+    fn config_debug_reports_stable_summary_fields() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+        let rendered = format!("{config:?}");
+
+        assert!(rendered.contains("Config"));
+        assert!(rendered.contains("repository_root"));
+        assert!(rendered.contains("rule_application_count: 0"));
+        assert!(rendered.contains("frontmatter_rule_count: 0"));
+        assert!(rendered.contains("respect_gitignore: true"));
     }
 
     #[test]
@@ -897,23 +972,16 @@ required = ["description"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        assert_eq!(config.frontmatter_rules.len(), 2);
-        assert_eq!(config.frontmatter_rules[0].pattern, "**/*.md");
-        assert!(config.frontmatter_rules[0].exclude.is_empty());
-        assert!(config.frontmatter_rules[0].required.is_empty());
+        let guide_policy = config.frontmatter_policy_for_path("docs/guide.md").unwrap();
+        assert_eq!(guide_policy.required, vec!["description".to_string()]);
+        assert_eq!(guide_policy.field_max_chars.get("description"), Some(&1024));
+
+        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md").unwrap();
+        assert_eq!(agents_policy.required, Vec::<String>::new());
         assert_eq!(
-            config.frontmatter_rules[0]
-                .field_max_chars
-                .get("description"),
+            agents_policy.field_max_chars.get("description"),
             Some(&1024)
         );
-        assert_eq!(config.frontmatter_rules[1].pattern, "**/*.md");
-        assert_eq!(config.frontmatter_rules[1].exclude, vec!["AGENTS.md"]);
-        assert_eq!(
-            config.frontmatter_rules[1].required,
-            vec!["description".to_string()]
-        );
-        assert!(config.frontmatter_rules[1].field_max_chars.is_empty());
     }
 
     #[test]
@@ -1055,10 +1123,7 @@ enable = ["prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
-        let config = Config::load(&repository_root, None).unwrap();
-
-        let error = config
-            .effective_rule_policy_for_path("README.md")
+        let error = Config::load(&repository_root, None)
             .unwrap_err()
             .to_string();
 
