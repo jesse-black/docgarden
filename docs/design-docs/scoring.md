@@ -121,7 +121,7 @@ The motivation would be repository-routing quality, not fidelity to Lucene. In s
 If this is explored, it should be treated as a deliberate scoring-model change:
 
 - compare ranking quality against the current Lucene-shaped baseline on real repo queries
-- update `docs/design-docs/frontmatter-driven-discovery-commands.md` if the ranking contract changes materially
+- update `docs/design-docs/match-and-list.md` if the ranking contract changes materially
 - document clearly that `docgarden` is no longer mirroring Lucene's pseudo-statistics approximation exactly
 
 This is worth evaluating before more speculative scoring additions if dogfooding shows corpus-statistics shape matters more than token normalization.
@@ -198,7 +198,7 @@ If implemented:
   - keep routing-separation tests for evaluator vs planner vs generator queries
   - keep tests that stopwords do not dominate rankings
   - if stemming lands, add tests showing highlighting and scoring agree on stemmed query/document forms
-- `docs/design-docs/frontmatter-driven-discovery-commands.md`
+- `docs/design-docs/match-and-list.md`
   - update if future scoring or highlighting semantics change materially
 - `docs/exec-plans/active/*.md`
   - if this becomes active work, capture the accepted tuning scope in an ExecPlan rather than only in this design draft

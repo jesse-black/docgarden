@@ -1,23 +1,28 @@
 # AGENTS
 
+## Must Follow
+- ALWAYS default to `cargo run -- match <query>` from the repository root when you need to route to the right repository document or agent skill for a task or topic. Use `rg` or other plain-text search only when you need exact text matches or broad body-text retrieval rather than metadata-based routing.
+- ALWAYS run `cargo run -- lint <changed-files> --color never` from the repository root after updating documentation so required `description` frontmatter stays present for `match` routing and configured line/token budgets are enforced.
+- ALWAYS treat `AGENTS.md` as a routing layer, not an encyclopedia. Keep repo-wide guidance here short and move long procedures or rationale into `docs/` or repository-local skills.
+- ALWAYS treat `docs/` as the repository knowledge system of record for product, architecture, planning, testing, and operating-context guidance.
+- ALWAYS use targeted test commands while iterating. Reserve `cargo xtask validate` for the final validation pass before handoff.
+- ALWAYS address bug reports and review findings with TDD: reproduce the issue in a failing test first, then fix it and rerun the relevant tests until they pass.
+
 ## Repository Map
-- `ARCHITECTURE.md` – High-level code map, module boundaries, and architectural invariants for `docgarden`. *Use for system structure, rule-engine boundaries, and stable implementation invariants.*
-- `docs/` – Repository knowledge system of record, including product documentation, execution plans, tool guidance, and supporting references.
-- `docs/PRODUCT.md` – Product overview for `docgarden`, focused on the agentic-engineering and repository-knowledge use case. *Use for product intent, target users, core workflows, and non-goals.*
-- `docs/TOOLS.md` – Brief guide to tooling available to agents in this environment. *Use for environment capabilities and local tool discovery.*
-- `docs/PLANS.md` – Execution plan authoring and maintenance rules. *Use when creating, updating, or completing ExecPlans in `docs/exec-plans/`.*
-- `src/` – Rust code for the `docgarden` linter. *Use for implementation details once the relevant repository-knowledge doc has identified the area to change.*
+### Start Here for Architecture and Implementation
+- `ARCHITECTURE.md` – Top-level code map, module boundaries, and architectural invariants for `docgarden`. Read this first when you need the current system boundaries, shared seams, or architectural intent.
+- `src/` – Rust implementation for the `docgarden` CLI, matcher, and lint engine. Start here once the architecture docs have identified the area to change.
+- `docs/design-docs/` – Deeper feature and policy rationale for specific subsystems. Use this when `ARCHITECTURE.md` is not enough and you need the design history behind a behavior or rule family.
 
-## Documentation Guidance
-- Treat `AGENTS.md` as a map, not an encyclopedia. Keep it short, stable, and routing-oriented, and move deeper guidance into `docs/` so agents can load context progressively.
-- Treat `docs/` as the repository knowledge system of record. Important product, architecture, plan, and operating-context knowledge should live in versioned repository documents rather than external notes or ad hoc prompts.
-- NEVER modify files under `docs/references/` except when explicitly importing or refreshing an external source. Treat those files as raw source material, not as normal repo-authored documentation to be edited in place.
-- In this repository, live repository-local path mentions in prose should normally use backticked repo-relative paths such as `docs/PLANS.md`. Keep Markdown links for external destinations or for local references whose label adds meaning beyond repeating the path.
-- When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
-- Keep live repository references in normal prose only when they are intended to resolve and be linted.
-- After updating documentation, run `cargo run -- lint <changed-files>` from the repository root before finishing so hypothetical examples and stale references are caught locally during repo dogfooding. Use `cargo run -- fix <targets>` only when you want the tool to apply safe rewrites.
+### Start Here for Product and Repository Context
+- `docs/` – Repository knowledge system of record, including product docs, plans, testing guidance, design docs, and references.
+- `docs/PRODUCT.md` – Product overview for `docgarden`, focused on the agentic-engineering and repository-knowledge use case. Use this for product intent, target users, core workflows, and non-goals.
+- `docs/TOOLS.md` – Environment and tooling guide for agents working in this repository. Start here when choosing local commands or checking runtime/tool availability.
 
-## Rust Workflow
-- During implementation, run targeted test commands (`cargo test <filter>`, `cargo test --test cli`) rather than the full validate suite.
-- Run `cargo xtask validate` only as a final gate before handing off for review. It runs fmt, clippy, tests, and coverage; `cargo-deny` and `cargo-machete` are left to CI.
-- Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
+### Start Here for Planning and Backlog
+- `docs/PLANS.md` – Execution plan authoring and maintenance rules. Use this when creating, updating, or completing ExecPlans in `docs/exec-plans/`.
+- `docs/exec-plans/` – Active and completed execution plans. Start here when continuing plan-driven work or checking how a change was scoped and implemented.
+
+### Start Here for Testing and Validation
+- `docs/TESTING.md` – Canonical testing workflow, TDD expectations, and validation guidance. Read this when adding features, fixing regressions, or deciding how to verify a change.
+- `tests/` – Integration tests, fixture-backed regression coverage, and shared CLI harness code. Start here for bug repros, CLI behavior, repository-walking scenarios, and end-to-end validation.

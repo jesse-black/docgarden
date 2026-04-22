@@ -219,7 +219,6 @@ This means `AGENTS.md` may omit `description`, but if it has one, the same `max_
 
 Imported-reference behavior should avoid hard-coded directories.
 
-In this repository, `docs/references/` is one example. Another repository might use a different path entirely.
+One repository might use `docs/references/`. Another repository might use a different path entirely.
 
 The first useful configuration may be a narrow imported-reference path setting or path-targeted rules.
-

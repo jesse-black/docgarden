@@ -38,7 +38,7 @@ description: "Rewrite `docgarden match` scorer as Lucene-style combined-field BM
 - `tests/cli.rs` — rewrite score-literal assertions at `:221,:232,:242,:253` and `parse::<i32>` at `:397-401`; add routing and stopword-only tests
 - `tests/discovery-repo/docs/` — add evaluator/planner/generator fixture docs
 - `docgarden.toml` — add `SKILL.md` frontmatter rule
-- `docs/design-docs/frontmatter-driven-discovery-commands.md` — refresh the v1 scoring section
+- `docs/design-docs/match-and-list.md` — refresh the command-level ranking contract
 
 ## Open Questions
 
@@ -67,7 +67,7 @@ description: "Rewrite `docgarden match` scorer as Lucene-style combined-field BM
 - [x] Add `tests/cli.rs` test: `docgarden match the` exits non-zero with the stopword-only error on stderr and no stdout
 - [x] Dogfood the five Suggested Evaluation queries against this repo; record score distributions under `Discoveries`; pick `low / medium / high` thresholds; update `score_band` and `match --help`
 - [x] Add `[[rules]] path = "**/SKILL.md"` with `[rules.frontmatter] required = ["name"]` to `docgarden.toml`; run `cargo run -- lint .` and add `name:` to any flagged skill doc
-- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` v1 scoring section: BM25F + stopwords, fields `name / path_prefix / description`, `k1 = 1.2`, `b = 0.75`, boosts `3.0 / 1.0 / 1.0`, `f32` scores, new color bands
+- [x] Update `docs/design-docs/match-and-list.md` and `docs/design-docs/scoring.md` so the command contract and the scoring details reflect BM25F + stopwords, fields `name / path_prefix / description`, `k1 = 1.2`, `b = 0.75`, boosts `3.0 / 1.0 / 1.0`, `f32` scores, and the revised explain guidance
 
 ## Validation
 

@@ -1,12 +1,12 @@
 ---
-description: "Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior."
+description: "Working design draft for `docgarden match` and `list`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior."
 ---
 
-# Frontmatter-Driven Discovery Commands
+# Match and List
 
 ## Purpose
 
-This document is a working design draft for metadata-driven discovery commands in `docgarden`.
+This document is a working design draft for the `docgarden match` and `list` commands.
 
 The goal is to make repository knowledge discoverable without requiring handwritten index-style files as the default navigation mechanism. If repositories adopt standardized YAML front matter with fields such as `name` and `description`, `docgarden` should be able to derive useful catalog and matching views directly from that metadata.
 
@@ -30,7 +30,7 @@ For v1, the discovery surface should stay intentionally small and deterministic:
 - `path` is always present
 - frontmatter `name` is surfaced when present
 - frontmatter `description` is surfaced when present
-- `match` may add a numeric score, but ordering matters more than the absolute score value
+- `match` uses numeric ranking internally, but the default output should emphasize result order rather than score display
 
 ## Why Frontmatter Instead Of Mandatory Index Files
 
@@ -78,8 +78,6 @@ That gives the repository a clean contract:
 - `docgarden match` operates on the discovery layer
 - `rg` and similar tools remain the body-search fallback
 
-## Preliminary Command Semantics
-
 ## Discovery Traversal
 
 `docgarden list` and `docgarden match` should reuse the existing lint file-traversal system rather than introducing a separate discovery walker.
@@ -91,7 +89,14 @@ For v1, that means discovery commands should:
 - respect `.gitignore`, `.ignore`, and related git exclude behavior by default
 - support the same `--no-gitignore` flag so callers can opt out of gitignore-based filtering when needed
 
-For shipped v1, `docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
+For `docgarden list`, directory targets should support an explicit recursion flag:
+
+- `-R, --recurse`
+
+With `--recurse`, `list` should descend into nested directories under each directory target. Without it, directory targets should be limited to Markdown files directly within the named directory. This gives `list` a predictable "shallow by default, deep on request" shape while still reusing the same ignore and include/exclude rules as lint for the files it considers.
+Recursive output should stay flat: one discovered document per output row, with no per-directory headings or nested tree rendering.
+
+`docgarden match` does not take positional filesystem targets. It scores against the full repository-root discovery set determined by config and `--no-gitignore`, which keeps the corpus-local IDF table deterministic for a given repo state.
 
 This keeps repository traversal behavior consistent across lint and discovery commands, reduces implementation duplication, and avoids subtle cases where `lint` and `list` or `match` disagree about which documents exist.
 
@@ -119,13 +124,13 @@ Default text output should stay compact and token-conscious.
 `docgarden list` should emit one result per line in a stable field order:
 
 ```text
-docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+docs/design-docs/example.md | Example Guide | Short description for discovery output.
 ```
 
 `docgarden match <QUERY>` should emit:
 
 ```text
-docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+docs/design-docs/example.md | Example Guide | Short description for discovery output.
 ```
 
 This keeps the path first for quick scanning and makes it easy for agents to strip trailing fields when they only need candidates.
@@ -134,7 +139,7 @@ This keeps the path first for quick scanning and makes it easy for agents to str
 
 ```text
 score | relative | coverage | path | name | description
-8.42 | 100% of top | 3/3 terms | docs/design-docs/frontmatter-driven-discovery-commands.md | Frontmatter-Driven Discovery Commands | Working design draft for frontmatter-driven discovery commands such as `docgarden list` and `match`; read when planning metadata-based document discovery, skills discovery, or search-versus-routing behavior.
+8.42 | 100% of top | 3/3 terms | docs/design-docs/example.md | Example Guide | Short description for discovery output.
 ```
 
 This keeps the default mode compact while still providing a deterministic diagnostic view for humans or agents that need to inspect why one result outranked another.
@@ -177,84 +182,16 @@ That should print one repository-relative path per line.
 
 `-p` is a reasonable short flag here because it reads naturally as "path" and does not compete with `-n` for result count.
 
-## Match Scoring Design
+## Relationship To Scoring
 
-The scoring model should feel search-like without turning `docgarden` into a full-text search engine.
+`match` is a ranked discovery command, but the scoring design no longer lives in this document.
 
-The intended v1 behavior is:
+The contract here is intentionally narrow:
 
-- match only over discovery metadata, not Markdown body text
-- score deterministically and locally
-- prefer explainable ranking over opaque fuzzy heuristics
-- reward good frontmatter without hiding path-only documents completely
-
-### Candidate Fields
-
-The scoring corpus for each document should include:
-
-- `name` frontmatter when present, else the filename stem
-- `path_prefix` as the directory portion of the repository-relative path
-- `description` frontmatter when present
-
-If `description` is absent, the file should still remain discoverable through `name`. The filename-stem fallback keeps path-only documents discoverable without treating the full path as one undifferentiated field.
-
-### Normalization
-
-Query text and candidate fields should be normalized in the same way:
-
-- lowercase
-- split on whitespace and punctuation
-- split paths on `/`, `_`, `-`, and `.`
-- collapse repeated separators
-- filter English stopwords symmetrically at index and query time
-- preserve the original values only for display
-
-V1 should not add stemming, embeddings, or analyzers beyond stopword filtering.
-
-### Ranking Model
-
-The best v1 fit is a Lucene-style combined-field BM25F scorer rather than a generic fuzzy matcher.
-
-Recommended formula:
-
-1. Tokenize the query into informative terms after stopword filtering.
-2. Build corpus statistics over `name`, `path_prefix`, and `description`.
-3. Combine the weighted field term frequencies and field lengths into one synthetic field.
-4. Score each query term with BM25 using:
-   - `k1 = 1.2`
-   - `b = 0.75`
-   - boosts: `name = 3.0`, `path_prefix = 1.0`, `description = 1.0`
-5. Break ties by:
-   - more matched query terms
-   - stronger field hit order (`name` before `description` before `path_prefix`)
-   - lexicographic `path`
-
-This keeps the ranking deterministic and mechanical while replacing the old ad-hoc exact/prefix/substring tiers with a standard field-aware lexical scorer.
-
-For `match --limit N`, the implementation can score all candidates and then truncate to the top N. For the repository sizes this feature is aimed at, that should remain fast enough without adding indexing or cache complexity in v1.
-
-### Score Format
-
-Use `f32` scores in v1 and render them with two decimal places in `--explain`.
-
-The exact numeric range is not a semantic contract. Ordering matters first; the displayed score is a debugging and explain-mode aid within one tool version. Default `match` output should hide the raw score column and instead rely on sorted order plus matched-term highlighting for scanning.
-
-### Library Options
-
-There are Rust crates that can help, but none should fully define the ranking contract.
-
-Possible helpers:
-
-- `strsim`: useful for typo-tolerance or a low-weight tie-breaker on short single-token inputs, but not sufficient as the whole ranking model
-- `sublime_fuzzy`: useful if we want editor-style subsequence scoring as a fallback signal
-- `nucleo-matcher`: stronger fuzzy matcher, but probably heavier than this feature needs in v1
-
-The cleanest product shape is:
-
-- own the weighted lexical ranking in `docgarden`
-- optionally use a small fuzzy-scoring crate only as the weakest match tier or a tie-breaker
-
-That preserves mechanical explainability and avoids locking the product to an external scoring philosophy that may not match repository discovery well.
+- `match` ranks over discovery metadata rather than Markdown body text
+- ordering is the primary contract for default output
+- raw numeric score is an explain-mode aid, not the main user-facing interface
+- changes to scoring, normalization, tie-breaking, or explain-specific score semantics belong in `docs/design-docs/scoring.md`
 
 ### `docgarden list`
 
@@ -263,6 +200,13 @@ That preserves mechanical explainability and avoids locking the product to an ex
 `list` should remain the canonical subcommand name in help text and documentation, with `ls` provided as a convenience alias.
 
 By default, it should operate over the same Markdown traversal system used by lint, scoped by invocation targets and configuration rather than by a separate filesystem walk.
+
+For directory targets, `list` should support:
+
+- `-R, --recurse`
+
+That flag should recurse into nested subdirectories under each target. Without it, directory targets should be shallow.
+Even with `--recurse`, the output should remain a flat result list rather than grouped directory sections.
 
 A reasonable first output shape is:
 
@@ -289,9 +233,9 @@ The implementation should consider:
 - description
 - path
 
-The default output should stay compact and include score plus the common result fields.
+The default output should stay compact and show the common result fields in ranked order without a raw score column.
 
-An optional future `--explain` mode could surface field-level score breakdowns or matched terms, but that should not be part of the default token budget.
+`--explain` is the diagnostic output mode for ranking inspection. The scoring model, normalization rules, and explain-only score semantics belong in `docs/design-docs/scoring.md`.
 
 ### `docgarden skills list`
 

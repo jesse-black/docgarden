@@ -121,7 +121,7 @@ Run targeted tests during development:
 
 After documentation edits, run targeted doc linting for changed docs:
 
-    cargo run -- lint README.md docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/design-docs/frontmatter-driven-discovery-commands.md docs/design-docs/skill-root-and-templated-agent-guidance.md docs/design-docs/standardized-yaml-front-matter.md docs/exec-plans/active/configuration-rule-application.md --color never
+    cargo run -- lint README.md docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/design-docs/match-and-list.md docs/design-docs/skills.md docs/design-docs/standardized-frontmatter.md docs/exec-plans/active/configuration-rule-application.md --color never
 
 Before marking ready for evaluation, run:
 
@@ -147,7 +147,7 @@ Acceptance requires all of these independently verifiable behaviors:
         cargo test config
         cargo test --test path_behavior
         cargo test --test cli
-        cargo run -- lint README.md docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/design-docs/frontmatter-driven-discovery-commands.md docs/design-docs/skill-root-and-templated-agent-guidance.md docs/design-docs/standardized-yaml-front-matter.md docs/exec-plans/active/configuration-rule-application.md --color never
+        cargo run -- lint README.md docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/design-docs/match-and-list.md docs/design-docs/skills.md docs/design-docs/standardized-frontmatter.md docs/exec-plans/active/configuration-rule-application.md --color never
         cargo xtask validate
 
 ## Idempotence and Recovery
@@ -165,7 +165,7 @@ After the full cleanup, these commands passed:
     cargo test config
     cargo test --test path_behavior
     cargo test --test cli
-    cargo run -- lint README.md docs/design-docs/backtick-path-classification.md docs/design-docs/configuration.md docs/design-docs/context-budget-limits.md docs/design-docs/frontmatter-driven-discovery-commands.md docs/design-docs/path-style-policy.md docs/design-docs/skill-root-and-templated-agent-guidance.md docs/design-docs/standardized-yaml-front-matter.md docs/exec-plans/active/configuration-rule-application.md --color never
+    cargo run -- lint README.md docs/design-docs/backtick-path-classification.md docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/design-docs/match-and-list.md docs/design-docs/path-style-policy.md docs/design-docs/skills.md docs/design-docs/standardized-frontmatter.md docs/exec-plans/active/configuration-rule-application.md --color never
     cargo xtask validate
 
 ## Interfaces and Dependencies

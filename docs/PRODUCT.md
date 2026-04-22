@@ -1,97 +1,126 @@
 ---
-description: "Product overview for `docgarden`, covering users, goals, workflows, boundaries, and planned capabilities; read when making roadmap, scope, naming, or positioning decisions about the repository-knowledge linter and agentic engineering use case."
+description: "Product overview for `docgarden`, covering users, current workflows, shipped scope, boundaries, and near-term product direction; read when making roadmap, scope, naming, or positioning decisions."
 ---
 
 # Product
 
 ## Purpose
 
-`docgarden` is a documentation-maintenance CLI for agentic engineering repositories.
+`docgarden` is repository knowledge tooling for agentic engineering repositories.
 
-It is designed for repositories that treat in-repo documentation as the system of record within a repository agent operating system. In those environments, agents need documentation that is mechanically legible, cross-linked, fresh, and cheap to navigate in tokens and context.
+Its job is to help repositories keep Markdown knowledge both discoverable and mechanically trustworthy for agents. Today that means two complementary capabilities:
 
-Its job is to enforce repository-knowledge invariants that help agents load the right context progressively instead of pulling large, stale, or weakly structured docs into context by default. In practice, that means keeping references like `AGENTS.md`, `ARCHITECTURE.md`, and `docs/` accurate, structured, and suitable for CI enforcement and recurring doc-gardening automation.
+- `docgarden match` routes an agent toward the right document using frontmatter and path metadata
+- `docgarden lint` and `docgarden fix` enforce the documentation rules that keep that routing reliable
+
+The product is intentionally narrower than a general documentation platform. It focuses on repository-local knowledge, deterministic checks, and metadata that supports progressive disclosure.
 
 ## Primary Users
 
 The primary users are:
 
 - teams practicing agentic engineering
-- heavily agent-led repositories where humans steer and agents execute
-- agent-only or near-agent-only repositories that rely on repository-local documentation as executable context
-- maintainers building a repository knowledge system for Codex-style agents and related tooling
+- repositories where agents frequently need to discover and load the right Markdown context
+- maintainers who want repository knowledge quality enforced in CI
+- tool builders shaping repository-local docs into a dependable operating surface for agents
 
-`docgarden` is not primarily aimed at teams that merely have a lot of Markdown. Its value depends on agentic workflows where documentation quality directly affects agent reliability, token efficiency, and autonomy.
+`docgarden` is not aimed at every repository with Markdown. Its value is highest when documentation quality directly affects agent routing, context cost, and execution reliability.
+
+## Current Product Surface
+
+The currently shipped command surface is:
+
+- `docgarden match <QUERY>`
+- `docgarden lint [TARGETS]`
+- `docgarden fix [TARGETS]`
+
+`match` is a metadata-routing command. It ranks repository Markdown documents by metadata relevance and, by default, prints:
+
+- `path`
+- `name`
+- `description`
+
+The current ranking model uses frontmatter `name` when present, falls back to filename stem when needed, uses frontmatter `description`, and incorporates path-prefix signal for routing. It is intentionally metadata-first rather than full-text body search.
+
+`lint` is the check-only enforcement command. `fix` applies the safe rewrite subset for issues that can be rewritten mechanically.
 
 ## Core Workflows
 
-The product is built around a small set of workflows:
+The main workflows today are:
 
-- lint a repository knowledge system in CI so agent-facing docs stay mechanically valid
-- power a recurring Doc Gardener agent that loads doc-gardening skills, runs `docgarden`, and opens maintenance fixes
-- fail CI when repository-local references are unresolved, stale, oversized, weakly structured, or insufficiently cross-linked
-- enforce size limits on high-traffic auto-loaded files such as `AGENTS.md` so agents spend fewer tokens on entry-point context
-- enforce YAML front matter used for agent navigation and repository operations, including fields such as `description`, `owner`, and `last_reviewed`
-- enforce cross-linking so repository knowledge remains discoverable through file references instead of hidden in isolated documents
-- enforce a consistent style policy for repository-local references: inline backticks or Markdown links; in agent-first repositories, backticks can be a strong default because agents often emit them naturally and they avoid the extra token cost of path-repeating Markdown labels
-- apply safe autofixes for rules that can be rewritten mechanically
-- tune scanning and rule behavior with `docgarden.toml`
-- suppress specific rules for specific files when a repository intentionally makes an exception
+- route an agent to the best candidate docs for a task before opening file bodies
+- lint repository-authored Markdown in local development or CI
+- keep local repository path references valid and consistently styled
+- require `description` frontmatter across repository docs where the repository has opted into that policy
+- enforce frontmatter constraints such as required fields and maximum field length for targeted document types
+- enforce explicit file-level size budgets on high-traffic docs such as `AGENTS.md` or `SKILL.md`
+- apply deterministic safe rewrites for the subset of style issues that do not require intent inference
+- tune discovery and rule behavior with repository-owned `docgarden.toml`
 
-## Current Capabilities
+## Shipped Capabilities
 
-Capabilities that are clearly part of the current product:
+Capabilities that are clearly part of the product today:
 
-- repository root inference from `docgarden.toml`, `.git`, or the current working directory
-- Markdown file discovery from default or configured include and exclude patterns
-- recognition of repository-local references in inline code and Markdown links
-- existence checks for resolved local paths within the repository
-- diagnostics for unresolved local paths
-- diagnostics and autofixes for style-policy mismatches between backticks and links
-- optional warnings for ambiguous inline code that looks path-adjacent
-- explicit line-count and token-budget diagnostics configured with `max_lines` and `max_tokens`
-- human-readable output and JSON output for automation
+- repository-root inference from `docgarden.toml`, `.git`, or an explicit config path
+- shared Markdown discovery for both matching and linting, with include/exclude patterns and gitignore-aware traversal
+- shared frontmatter parsing used by both routing and linting
+- metadata ranking over `name`, `path_prefix`, and `description`
+- compact match output plus `--path-only`, `--limit`, and `--explain` modes
+- deterministic validation of repository-local path references in Markdown prose
+- configurable style-policy enforcement for repository-local references
+- frontmatter validation for required fields and field-length constraints
+- explicit `max_lines` and `max_tokens` budget rules
+- human-readable CLI output for routing and diagnostics
 
-Durable product inputs that exist today:
+## Repository Conventions The Product Assumes
 
-- the repository filesystem
-- Markdown files selected for linting
-- `docgarden.toml` configuration when present
+`docgarden` works best when a repository treats Markdown as a maintained knowledge system rather than a loose pile of notes.
 
-## Planned Or Intended Capabilities
+The product assumes repositories will:
 
-These capabilities fit the product direction but should not be described as already complete:
+- keep important operational knowledge in versioned repo documents
+- attach short, useful `description` frontmatter to documents that should be discoverable through `match`
+- encode exceptions in configuration rather than rely on ad hoc tool behavior
+- distinguish between repository-authored docs and raw imported references
 
-- generated or built-in default budget policy for high-traffic docs such as `AGENTS.md`
-- YAML front matter enforcement for `description`, `owner`, `last_reviewed`, and similar fields that improve agent routing and repository operations
-- freshness checks for repository knowledge documents
-- cross-linking enforcement across the repository knowledge graph
-- rule messages and output shaped for a future Doc Gardener agent workflow in CI
+This is why `docgarden` is best understood as repository knowledge tooling, not just a Markdown linter.
+
+## Near-Term Direction
+
+Design docs in `docs/design-docs/` describe likely next capabilities, but they should not be mistaken for shipped scope.
+
+Near-term directions that fit the current product shape include:
+
+- additional discovery commands such as `list`
+- scope-specific commands such as `skills`
+- broader frontmatter schemas beyond the current required-field and max-length checks
+- more repository-knowledge rules that stay deterministic and repository-local
+- richer informational commands such as repository stats
+
+Those ideas belong to the product direction, not the current release contract.
 
 ## Non-Goals
 
 The current product is not trying to be:
 
 - a general-purpose Markdown style linter
-- an external link checker
+- a full-text search engine for Markdown bodies
 - a semantic documentation reviewer driven by natural-language understanding
 - a documentation site generator
-- a repository knowledge system on its own
-- a tool that requires any LLM or natural-language runtime to make lint decisions
+- a hosted repository knowledge platform
+- a tool that needs network access or model inference to decide whether a rule passes
 
-`docgarden` is intentionally mechanical. Any task that requires summarization, judgment, interpretation, or broader natural-language reasoning should be performed by the agent using this tool, not by the tool itself.
+If a task requires interpretation, summarization, or broader judgment, that remains the job of the agent using `docgarden`, not `docgarden` itself.
 
 ## Product Boundaries That Affect Architecture
 
 Some product choices directly constrain the implementation:
 
-- the tool should optimize for agent legibility rather than human-only reading convenience
-- lint decisions should be deterministic from repository contents plus config, without remote dependencies or model inference
-- the product should be reliable in CI because CI is the primary enforcement point
-- the tool should support recurring autonomous maintenance runs, especially a future Doc Gardener agent workflow
-- the product should help repositories conserve agent tokens and context on high-traffic entry-point docs
-- fixes should remain conservative and mechanically safe
-- the product should stay useful for plain CLI invocation as well as automation pipelines
-- configuration should remain repository-owned rather than requiring external services
+- discovery and enforcement should both stay repository-local
+- the same repository config should shape both routing and linting behavior
+- routing should reward well-maintained metadata rather than encourage body-text search as the primary path
+- rule behavior should remain deterministic and CI-friendly
+- fixes should stay conservative and mechanically safe
+- repositories should own policy through `docgarden.toml`, not through remote services or hidden defaults
 
-For the current technical structure and module boundaries, see `ARCHITECTURE.md`.
+For the current module layout and code boundaries, see `ARCHITECTURE.md`. For command-specific design direction beyond the shipped product, see the relevant files under `docs/design-docs/`.

@@ -16,7 +16,7 @@ description: "ExecPlan for tightening discovery to `.md` files only and removing
 - `src/defaults.rs` — default include patterns that currently imply broader-than-`.md` discovery.
 - `src/cli.rs` — existing target model and `--no-gitignore` behavior that discovery commands should reuse.
 - `tests/cli.rs` — existing integration coverage for gitignore and explicit-target behavior; likely place for traversal acceptance tests.
-- `docs/design-docs/frontmatter-driven-discovery-commands.md` — discovery design contract that now says `list` and `match` should reuse lint traversal and discover only Markdown docs.
+- `docs/design-docs/match-and-list.md` — discovery design contract that now says `list` and `match` should reuse lint traversal and discover only Markdown docs.
 
 ## Open Questions
 - None yet
@@ -27,12 +27,12 @@ description: "ExecPlan for tightening discovery to `.md` files only and removing
 - [x] Add a shared `.md` path check and apply it to both walked entries and explicit file targets before they enter the discovered file set.
 - [x] Update any default scan-pattern assumptions in `src/defaults.rs` and related tests so the effective discovery contract is `.md`-only.
 - [x] Add targeted tests covering: `.gitignore` default behavior, `--no-gitignore`, explicit `.md` file targets, explicit non-`.md` targets, and directory traversal that contains non-`.md` files under `docs/`.
-- [x] Update `docs/design-docs/frontmatter-driven-discovery-commands.md` only if implementation decisions change the current design wording.
+- [x] Update `docs/design-docs/match-and-list.md` only if implementation decisions change the current design wording.
 
 ## Validation
 - `cargo test --test cli`
 - `cargo test config`
-- `cargo run -- lint docs/design-docs/frontmatter-driven-discovery-commands.md docs/exec-plans/active/discovery-traversal-cleanups.md --color never`
+- `cargo run -- lint docs/design-docs/match-and-list.md docs/exec-plans/active/discovery-traversal-cleanups.md --color never`
 - Manual check: confirm the discovery path used for future `list` and `match` would return only `.md` files for the same targets and gitignore settings that `lint` sees.
 
 ## Discoveries
