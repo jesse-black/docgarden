@@ -53,4 +53,4 @@ description: "Revise `docgarden match` output to hide raw scores by default, add
 - Dogfooding on the real repo after implementation produced `match review` default output with no score column and explain outputs of `3.44 | 100% of top | 1/1 terms` for the top `review` hit and `11.48 | 100% of top | 4/4 terms`, `5.70 | 50% of top | 2/4 terms`, `4.99 | 43% of top | 2/4 terms` for the top three `review against the active plan` hits.
 
 ## Review
-- [ ] None yet
+- [ ] No findings
