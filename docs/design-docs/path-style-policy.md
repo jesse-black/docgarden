@@ -22,7 +22,7 @@ This document is about repository-local path style in agent-facing Markdown pros
 
 It is not a complete design for all Markdown linking behavior, and it does not redefine the path-classification details already covered in `docs/design-docs/backtick-path-classification.md`.
 
-It also does not treat imported external reference captures as normal style-managed docs. Files under `docs/references/` are raw source material in this repository and should not be rewritten merely to satisfy local path-style preferences.
+It also does not treat imported external reference captures as normal style-managed docs. Raw source captures should not be rewritten merely to satisfy local path-style preferences.
 
 ## Why This Matters
 
@@ -84,7 +84,7 @@ Markdown links are strongest when the label adds meaning beyond repeating the pa
 
 ## Wikilinks
 
-Wiki-style links are the native representation for Obsidian-style Markdown wikis and LLM-maintained wiki workflows like `docs/references/llm-wiki.md`.
+Wiki-style links are the native representation for Obsidian-style Markdown wikis and LLM-maintained wiki workflows like [llm-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 
 Strengths:
 
@@ -92,7 +92,7 @@ Strengths:
 - highly aligned with wiki-oriented graph navigation and backlink workflows
 - familiar to users building Obsidian-native or Zettelkasten-like knowledge systems
 - enables a human user to open the repository in Obsidian and navigate it as a wiki-like knowledge base
-- aligns with the workflow described in `docs/references/llm-wiki.md`, where Obsidian is the human-facing IDE and the LLM maintains an interlinked Markdown wiki
+- aligns with the workflow described in [llm-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), where Obsidian is the human-facing IDE and the LLM maintains an interlinked Markdown wiki
 
 Weaknesses:
 
@@ -175,7 +175,7 @@ Those use cases overlap, but they optimize for different workflows. A repository
 
 Path-style policy should apply to repository-authored documents, not to raw imported sources.
 
-In this repository, files under `docs/references/` are local captures of external material. Even when they contain path-shaped text or alternate link styles, those files should be treated as source-derived inputs rather than as style-normalized first-party prose.
+Imported external material should be treated as source-derived input rather than as style-normalized first-party prose, even when those files contain path-shaped text or alternate link styles.
 
 This distinction matters for configuration:
 

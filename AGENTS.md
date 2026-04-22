@@ -11,7 +11,6 @@
 ## Documentation Guidance
 - Treat `AGENTS.md` as a map, not an encyclopedia. Keep it short, stable, and routing-oriented, and move deeper guidance into `docs/` so agents can load context progressively.
 - Treat `docs/` as the repository knowledge system of record. Important product, architecture, plan, and operating-context knowledge should live in versioned repository documents rather than external notes or ad hoc prompts.
-- NEVER modify files under `docs/references/` except when explicitly importing or refreshing an external source. Treat those files as raw source material, not as normal repo-authored documentation to be edited in place.
 - In this repository, live repository-local path mentions in prose should normally use backticked repo-relative paths such as `docs/PLANS.md`. Keep Markdown links for external destinations or for local references whose label adds meaning beyond repeating the path.
 - When writing hypothetical repository paths or sample Markdown links that are examples rather than live references, prefer indented code blocks. For short inline hypothetical examples, plain inline code such as `` `example/path.md` `` is also acceptable.
 - Keep live repository references in normal prose only when they are intended to resolve and be linted.

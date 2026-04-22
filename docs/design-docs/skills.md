@@ -96,7 +96,7 @@ That distinction matters for vendored or externally managed skills. For example,
 - report skill-specific diagnostics without applying unrelated repository documentation lint rules
 - avoid safe rewrites unless a future explicit fix mode is added
 
-The built-in schema should follow the Agent Skills specification captured in `docs/references/agent-skills-specification.md`.
+The built-in schema should follow the [Agent Skills specification](https://agentskills.io/specification).
 
 Structural validity means:
 

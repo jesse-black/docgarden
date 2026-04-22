@@ -135,11 +135,11 @@ Typical additions may include:
 - optional front matter for discovery and routing
 - clear documentation boundaries between source-derived and repo-authored docs
 
-This design direction is aligned with the repository-knowledge and LLM-wiki references already captured in:
+This design direction is aligned with the repository-knowledge and LLM-wiki references captured in:
 
-- `docs/references/harness-engineering.md`
-- `docs/references/llm-wiki.md`
-- `docs/references/agent-skills-specification.md`
+- [Harness engineering: leveraging Codex in an agent-first world](https://openai.com/index/harness-engineering/)
+- [llm-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+- [Agent Skills specification](https://agentskills.io/specification)
 
 The benchmark should treat the knowledge repo as the "agent-legible repository" condition even before `docgarden` is introduced.
 
