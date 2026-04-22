@@ -7,9 +7,13 @@ Repository knowledge tooling for agentic engineering repositories — routes age
 
 ## Why
 
-Agent-first repositories treat `docs/` as the system of record. The hard part isn't storing knowledge — it's loading the *right* knowledge without blowing up context. `docgarden` approaches this as a routing problem: every document carries a `description` frontmatter field, and `docgarden match` does a BM25F search over that metadata to return ranked paths. No central routing table to maintain; the docs route themselves.
+Agent-first repositories treat their Markdown — design docs, product specs, skills, agent instructions — as the system of record. The hard part isn't storing knowledge — it's loading the *right* knowledge without blowing up context. `docgarden` approaches this as a routing problem: every document carries a `description` frontmatter field, and `docgarden match` does a BM25F search over that metadata to return ranked paths. No central routing table to maintain; the docs route themselves.
 
-`docgarden lint` enforces the invariants that keep routing accurate: `description` frontmatter on every doc, and size budgets on high-traffic entry-points like `AGENTS.md` so agents spend fewer tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/) — "give agents a map, not a 1,000-page instruction manual."
+`docgarden lint` enforces the invariants that keep routing accurate: `description` frontmatter on every doc, and size budgets on high-traffic entry-points like `AGENTS.md` so agents spend fewer tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/): "give agents a map, not a 1,000-page instruction manual."
+
+## Philosophy
+
+`docgarden` is designed to work *with* agents: it handles everything that can be decided mechanically and deterministically from repository contents, so agents can spend their tokens and context on work that actually requires judgment. Anything that needs summarization, interpretation, or natural-language reasoning belongs to the agent, not the tool.
 
 ## Usage
 
@@ -55,10 +59,6 @@ Checks include: unresolved local references, missing `description` frontmatter, 
 ## Configuration
 
 `docgarden.toml` at the repository root controls include/exclude patterns, rule behavior, and size budgets. See [docs/design-docs/configuration.md](docs/design-docs/configuration.md) for details.
-
-## Philosophy
-
-Rules are deterministic, repository-local, and enforceable without model inference. Any task that requires summarization, judgment, or natural-language reasoning belongs to the agent using this tool — not to the tool itself.
 
 ## Contributing
 
