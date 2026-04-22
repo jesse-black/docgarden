@@ -3,13 +3,13 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/docgarden/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-Repository knowledge tooling for agentic engineering repositories — routes agents to the right context with minimum tokens, and enforces the doc hygiene that makes routing reliable.
+Repository knowledge tooling for agentic engineering repositories: route agents to the right context with minimum tokens, and enforce the doc hygiene that makes routing reliable.
 
 ## Why
 
 Agent-first repositories keep their working knowledge in Markdown: design docs, product specs, skills, and agent instructions. `docgarden` applies progressive disclosure to that knowledge base, so agents load the right context instead of the whole repo. Every document carries a `description` frontmatter field, and `docgarden match` uses BM25F to rank the right paths. Instead of maintaining a central routing table, the docs route themselves.
 
-`docgarden lint` enforces the rules that keep routing accurate: `description` frontmatter on every doc, plus size budgets on high-traffic entry points like `AGENTS.md` so agents do not burn tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/): give agents a map, not a 1,000-page instruction manual.
+`docgarden lint` checks the rules that keep routing accurate: `description` frontmatter on every doc, plus size budgets on high-traffic entry points like `AGENTS.md` so agents do not burn tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/): give agents a map, not a 1,000-page instruction manual.
 
 ## Philosophy
 
