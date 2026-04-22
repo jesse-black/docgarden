@@ -7,17 +7,17 @@ Repository knowledge tooling for agentic engineering repositories — routes age
 
 ## Why
 
-Agent-first repositories treat their Markdown — design docs, product specs, skills, agent instructions — as the system of record. The hard part isn't storing knowledge — it's loading the *right* knowledge without blowing up context. `docgarden` approaches this as a routing problem: every document carries a `description` frontmatter field, and `docgarden match` does a BM25F search over that metadata to return ranked paths. No central routing table to maintain; the docs route themselves.
+Agent-first repositories keep their working knowledge in Markdown: design docs, product specs, skills, and agent instructions. `docgarden` applies progressive disclosure to that knowledge base, so agents load the right context instead of the whole repo. Every document carries a `description` frontmatter field, and `docgarden match` uses BM25F to rank the right paths. Instead of maintaining a central routing table, the docs route themselves.
 
-`docgarden lint` enforces the invariants that keep routing accurate: `description` frontmatter on every doc, and size budgets on high-traffic entry-points like `AGENTS.md` so agents spend fewer tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/): "give agents a map, not a 1,000-page instruction manual."
+`docgarden lint` enforces the rules that keep routing accurate: `description` frontmatter on every doc, plus size budgets on high-traffic entry points like `AGENTS.md` so agents do not burn tokens just getting oriented. To paraphrase [Ryan Lopopolo](https://openai.com/index/harness-engineering/): give agents a map, not a 1,000-page instruction manual.
 
 ## Philosophy
 
-`docgarden` is designed to work *with* agents: it handles everything that can be decided mechanically and deterministically from repository contents, so agents can spend their tokens and context on work that actually requires judgment. Anything that needs summarization, interpretation, or natural-language reasoning belongs to the agent, not the tool.
+`docgarden` is meant to work with agents as a context engineering tool for repository knowledge. It handles the parts that can be done deterministically, so agents can spend their context on work that actually requires judgment. If something depends on summarization, interpretation, or natural-language reasoning, it belongs to the agent, not the tool.
 
 ## Usage
 
-### `match` — route an agent to the right document
+### `match`: route an agent to the right document
 
 ```
 docgarden match <QUERY>
@@ -38,7 +38,7 @@ docgarden match --explain "rate limiting"
 
 Options: `-n <LIMIT>` to cap results, `-p` / `--path-only` for plain paths, `--explain` for BM25F score breakdown.
 
-### `lint` — enforce repository knowledge hygiene
+### `lint`: enforce repository knowledge hygiene
 
 ```
 docgarden lint [TARGETS]
@@ -58,11 +58,11 @@ Checks include: unresolved local references, missing `description` frontmatter, 
 
 ## Configuration
 
-`docgarden.toml` at the repository root controls include/exclude patterns, rule behavior, and size budgets. See [docs/design-docs/configuration.md](docs/design-docs/configuration.md) for details.
+`docgarden.toml` at the repository root controls include and exclude patterns, rule behavior, and size budgets. See [docs/design-docs/configuration.md](docs/design-docs/configuration.md) for details.
 
 ## Contributing
 
-Contributions are welcome! If you want to add support for a new repository-knowledge check, please ensure it aligns with our philosophy: rules must be deterministic, repository-local, and enforceable without model inference.
+Contributions are welcome. If you want to add a new repository-knowledge check, keep it aligned with the project's philosophy: rules should be deterministic, repository-local, and enforceable without model inference.
 
 ## License
 
