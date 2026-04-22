@@ -10,7 +10,7 @@ max_chars = 1024
 
 [[rules]]
 path = "*.md"
-exclude = ["AGENTS.md", "README.md"]
+exclude = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "README.md"]
 
 [rules.frontmatter]
 required = ["description"]
