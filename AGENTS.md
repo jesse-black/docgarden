@@ -1,7 +1,10 @@
 # AGENTS
 
-## Step 0 (required before any search, explore, or agent call)
-Run `cargo run -- match <query>` to route the task. Do not spawn agents or run any search commands (rg, grep, find) until this is done.
+## Step 0 (required before discovering documentation, repository context, or skills)
+Run `cargo run -- match <query>` to route the task.
+Do not spawn agents or run any search commands (`rg`, `grep`, `find`) to locate docs, plans, guidance, context, or skills until this is done.
+This step is not required for code-first tasks.
+Use it when you need non-code context; otherwise inspect and search code directly.
 
 ## Must Follow
 - ALWAYS run `cargo run -- lint <changed-files> --color never` after modifying any `.md` file.

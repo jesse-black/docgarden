@@ -38,11 +38,14 @@ docgarden match --explain docgarden match scoring
 
 Options: `-n <LIMIT>` to cap results, `-p` / `--path-only` for plain paths, `--explain` for BM25F score breakdown.
 
-Example `AGENTS.md` instruction:
+Example `AGENTS.md` instruction for non-code context discovery:
 
 ```md
-## Step 0 (required before any search, explore, or agent call)
-Run `docgarden match <query>` to route the task. Do not spawn agents or run any search commands (`rg`, `grep`, `find`) until this is done.
+## Step 0 (required before discovering documentation, repository context, or skills)
+Run `docgarden match <query>` to route the task.
+Do not spawn agents or run any search commands (`rg`, `grep`, `find`) to locate docs, plans, guidance, context, or skills until this is done.
+This step is not required for code-first tasks.
+Use it when you need non-code context; otherwise inspect and search code directly.
 ```
 
 ### `lint`: enforce repository knowledge hygiene
