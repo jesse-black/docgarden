@@ -18,8 +18,6 @@ The initial command family under consideration is:
 
 - `docgarden list` with `ls` as an alias
 - `docgarden match <QUERY>` with `m` as an alias
-- `docgarden skills list`
-- `docgarden skills match <QUERY>`
 
 These commands should operate on Markdown documents that opt into recognizable front matter schemas and belong to configured scopes.
 
@@ -30,7 +28,10 @@ For v1, the discovery surface should stay intentionally small and deterministic:
 - `path` is always present
 - frontmatter `name` is surfaced when present
 - frontmatter `description` is surfaced when present
+- scope switches such as `--skills`, `--plans`, `--active-plans`, and `--completed-plans` restrict discovery to configured or conventional document sets
 - `match` uses numeric ranking internally, but the default output should emphasize result order rather than score display
+
+Skill-specific validation remains outside this command family. `docgarden skills validate` is covered in `docs/design-docs/skills.md`.
 
 ## Why Frontmatter Instead Of Mandatory Index Files
 
@@ -217,6 +218,30 @@ A reasonable first output shape is:
 
 The command should be useful both for humans scanning the output and for agents consuming it in a deterministic workflow.
 
+#### Scope switches
+
+`docgarden list` should support scope switches for high-value repository knowledge sets:
+
+- `--skills`: list configured skills, usually under `skills_dir`
+- `--plans`: list all ExecPlans
+- `--active-plans`: list active ExecPlans
+- `--completed-plans`: list completed ExecPlans
+
+These switches answer inventory questions rather than ranking questions. Active plans are usually one file or a small handful, so `docgarden list --active-plans` is a better affordance than teaching the scorer repo-specific active-plan boosts.
+
+Scope switches should be mutually exclusive with positional directory targets unless a later design gives target-plus-scope filtering a clear use case.
+
+The output shape should remain the common discovery row:
+
+- path
+- name frontmatter if present
+- description frontmatter if present
+- optional scope label if known
+
+For skills, the path is the skill's `SKILL.md` path, `name` is the skill frontmatter `name`, and `description` is the skill frontmatter `description`.
+
+For ExecPlans, the path is the plan Markdown path. The `name` field can use frontmatter `name` when present and otherwise fall back to the filename stem, matching normal discovery behavior.
+
 ### `docgarden match <QUERY>`
 
 `docgarden match <QUERY>` should rank candidate documents based on metadata fields rather than full body text.
@@ -237,24 +262,16 @@ The default output should stay compact and show the common result fields in rank
 
 `--explain` is the diagnostic output mode for ranking inspection. The scoring model, normalization rules, and explain-only score semantics belong in `docs/design-docs/scoring.md`.
 
-### `docgarden skills list`
+#### Scope switches
 
-`docgarden skills list` should behave like `docgarden list`, but scoped to the configured skills directory, which in this repository would usually be `.agents/skills`.
+`docgarden match` may support scope switches when ranked routing within a scope is useful:
 
-This command should surface the discovery metadata for skills without requiring the caller to know the exact skill paths in advance.
+- `--skills`: rank only configured skills
+- `--plans`: rank only ExecPlans
 
-A reasonable first output shape is:
+Do not add `--active-plans` to `match` unless dogfooding shows a real need. Active-plan discovery is mostly deterministic inventory, so `docgarden list --active-plans` should be the first tool agents use when they need the current plan.
 
-- skill path
-- skill `name`
-- skill `description`
-- optional compatibility or other skill-schema metadata if configured for display
-
-Because skill front matter is already the trigger surface for agent use, this command is a natural fit for `docgarden`.
-
-### `docgarden skills match <QUERY>`
-
-`docgarden skills match <QUERY>` should behave like `docgarden match <QUERY>`, but restricted to the configured skills directory and skill front matter schema.
+`docgarden match --skills <QUERY>` should behave like normal metadata matching, but restricted to the configured skills directory and skill front matter schema.
 
 The initial matching fields should likely be:
 
@@ -269,7 +286,9 @@ This command should help answer questions like:
 - whether the repository already has a skill for a workflow
 - which skill names or descriptions overlap with a given topic
 
-Because the skill body is only relevant after a skill has been selected, this command should stay focused on the metadata that determines triggering rather than on full-text body search.
+Because the skill body is only relevant after a skill has been selected, skill-scoped matching should stay focused on the metadata that determines triggering rather than on full-text body search.
+
+`docgarden match --plans <QUERY>` should use the same matching fields as normal metadata routing, restricted to active and completed ExecPlans. It is useful when a repository has enough plans that exact inventory is too broad, but it should not replace `list --active-plans` for current-plan workflows.
 
 ## Optional Index Files
 

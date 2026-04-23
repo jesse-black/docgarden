@@ -1,0 +1,4 @@
+interface:
+  display_name: "Description Frontmatter Authoring"
+  short_description: "Write match-friendly frontmatter descriptions."
+  default_prompt: "Use this skill to create or revise Markdown description frontmatter so docgarden match routes agents to the right documents."

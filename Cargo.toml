@@ -1,6 +1,6 @@
 [package]
 name = "docgarden"
-version = "0.1.0"
+version = "0.1.0-rc0"
 edition = "2024"
 description = "Mechanical repository-knowledge linter for agentic engineering repositories"
 license = "Apache-2.0"

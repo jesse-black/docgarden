@@ -1,5 +1,5 @@
 ---
-description: "Follow-up tasks and cleanup items that are not part of an active ExecPlan; read when looking for deferred implementation work, small backlog items, or candidate topics to promote into a future plan."
+description: "Follow-up tasks and cleanup items; read when looking for deferred implementation work, small backlog items, or candidate topics to promote into a future plan."
 ---
 
 # TODO
