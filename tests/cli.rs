@@ -11,6 +11,17 @@ mod common;
 
 use common::fixture_repo;
 
+const PACKAGED_DOCS_DIR: &str = concat!(
+    "target/package/docgarden-",
+    env!("CARGO_PKG_VERSION"),
+    "/docs"
+);
+const PACKAGED_STALE_DOC: &str = concat!(
+    "target/package/docgarden-",
+    env!("CARGO_PKG_VERSION"),
+    "/docs/stale.md"
+);
+
 #[derive(Debug)]
 struct MatchRow {
     path: String,
@@ -766,11 +777,11 @@ fn explicit_directory_target_does_not_scan_outside_directory() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::create_dir_all(root.join(PACKAGED_DOCS_DIR)).unwrap();
     fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
+        root.join(PACKAGED_STALE_DOC),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
@@ -787,12 +798,12 @@ fn gitignored_files_are_skipped_by_default() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::create_dir_all(root.join(PACKAGED_DOCS_DIR)).unwrap();
     fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(
-        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
+        root.join(PACKAGED_STALE_DOC),
         "See `scripts/setup-jules.sh`.\n",
     )
     .unwrap();
@@ -809,24 +820,18 @@ fn no_gitignore_flag_scans_gitignored_files() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::create_dir_all(root.join(PACKAGED_DOCS_DIR)).unwrap();
     fs::write(root.join("docgarden.toml"), "").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
-    fs::write(
-        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
-        "[Missing](missing.md)\n",
-    )
-    .unwrap();
+    fs::write(root.join(PACKAGED_STALE_DOC), "[Missing](missing.md)\n").unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
         .args(["lint", ".", "--no-gitignore", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains(
-            "target/package/docgarden-0.1.0/docs/stale.md",
-        ))
+        .stdout(predicate::str::contains(PACKAGED_STALE_DOC))
         .stdout(predicate::str::contains("unresolved-link-path"));
 }
 
@@ -835,24 +840,18 @@ fn config_can_opt_out_of_gitignore_support() {
     let temp = tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::create_dir_all(root.join("target/package/docgarden-0.1.0/docs")).unwrap();
+    fs::create_dir_all(root.join(PACKAGED_DOCS_DIR)).unwrap();
     fs::write(root.join("docgarden.toml"), "respect_gitignore = false\n").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
-    fs::write(
-        root.join("target/package/docgarden-0.1.0/docs/stale.md"),
-        "[Missing](missing.md)\n",
-    )
-    .unwrap();
+    fs::write(root.join(PACKAGED_STALE_DOC), "[Missing](missing.md)\n").unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
         .args(["lint", ".", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains(
-            "target/package/docgarden-0.1.0/docs/stale.md",
-        ))
+        .stdout(predicate::str::contains(PACKAGED_STALE_DOC))
         .stdout(predicate::str::contains("unresolved-link-path"));
 }
 
