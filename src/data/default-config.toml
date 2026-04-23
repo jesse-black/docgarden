@@ -1,0 +1,25 @@
+[[rules]]
+path = "*.md"
+
+[rules.frontmatter.fields.description]
+max_chars = 1024
+
+[[rules]]
+path = "*.md"
+exclude = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "README.md"]
+
+[rules.frontmatter]
+required = ["description"]
+
+[[rules]]
+path = "AGENTS.md"
+max_lines = 100
+max_tokens = 1000
+
+[[rules]]
+path = "SKILL.md"
+max_lines = 500
+max_tokens = 5000
+
+[rules.frontmatter]
+required = ["name", "description"]

@@ -229,10 +229,8 @@ impl Config {
             toml::from_str::<FileConfig>(&content)
                 .with_context(|| format!("failed to parse {}", path.display()))?
         } else {
-            FileConfig {
-                respect_gitignore: default_respect_gitignore(),
-                ..FileConfig::default()
-            }
+            toml::from_str::<FileConfig>(include_str!("data/default-config.toml"))
+                .context("failed to parse embedded default config")?
         };
 
         let mut known_extensions = default_extensions();
@@ -528,6 +526,19 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    fn load_applies_embedded_default_when_no_config_found() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert!(config.config_path.is_none());
+        assert!(!config.rule_applications.is_empty());
+        assert!(!config.frontmatter_rules.is_empty());
+    }
+
+    #[test]
     fn load_ignores_nested_config_when_root_config_is_absent() {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
@@ -546,7 +557,8 @@ mod tests {
             repository_root.canonicalize().unwrap()
         );
         assert!(config.config_path.is_none());
-        assert!(config.rule_applications.is_empty());
+        // embedded default applies — rules come from it, not the nested docs/docgarden.toml
+        assert!(!config.rule_applications.is_empty());
         assert_eq!(config.include, vec!["*.md"]);
     }
 
@@ -633,8 +645,8 @@ disable = ["unresolved-link-path"]
 
         assert!(rendered.contains("Config"));
         assert!(rendered.contains("repository_root"));
-        assert!(rendered.contains("rule_application_count: 0"));
-        assert!(rendered.contains("frontmatter_rule_count: 0"));
+        assert!(rendered.contains("rule_application_count:"));
+        assert!(rendered.contains("frontmatter_rule_count:"));
         assert!(rendered.contains("respect_gitignore: true"));
     }
 

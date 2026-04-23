@@ -865,13 +865,32 @@ fn git_root_is_used_when_no_docgarden_toml_is_found() {
     fs::create_dir_all(root.join(".git")).unwrap();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::create_dir_all(&outside).unwrap();
-    fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "---\ndescription: A guide.\n---\n\nGuide text.\n",
+    )
+    .unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(&outside)
         .args(["lint", root.join("docs/guide.md").to_str().unwrap()])
         .assert()
         .success();
+}
+
+#[test]
+fn lint_applies_embedded_default_when_no_config_found() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docs/no-frontmatter.md"), "# Missing description\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", "--color", "never", root.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stdout(predicates::str::contains("frontmatter-field-missing"));
 }
 
 #[test]

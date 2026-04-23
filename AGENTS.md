@@ -1,8 +1,10 @@
 # AGENTS
 
+## Step 0 (required before any search, explore, or agent call)
+Run `cargo run -- match <query>` to route the task. Do not spawn agents or run any search commands (rg, grep, find) until this is done.
+
 ## Must Follow
-- ALWAYS default to `cargo run -- match <query>` from the repository root when you need to route to the right repository document or agent skill for a task or topic. Use `rg` or other plain-text search only when you need exact text matches or broad body-text retrieval rather than metadata-based routing.
-- ALWAYS run `cargo run -- lint <changed-files> --color never` from the repository root after updating documentation so required `description` frontmatter stays present for `match` routing and configured line/token budgets are enforced.
+- ALWAYS run `cargo run -- lint <changed-files> --color never` after modifying any `.md` file.
 - ALWAYS treat `AGENTS.md` as a routing layer, not an encyclopedia. Keep repo-wide guidance here short and move long procedures or rationale into `docs/` or repository-local skills.
 - ALWAYS treat `docs/` as the repository knowledge system of record for product, architecture, planning, testing, and operating-context guidance.
 - ALWAYS use targeted test commands while iterating. Reserve `cargo xtask validate` for the final validation pass before handoff.
