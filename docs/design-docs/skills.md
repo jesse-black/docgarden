@@ -1,14 +1,14 @@
 ---
-description: "Working design draft for the `docgarden skills` subcommand family, including skills discovery, validation scope, and configured skills directories; read when planning skill-related commands, metadata behavior, or agent guidance generation."
+description: "Working design draft for `docgarden` skill-specific validation, configured skills directories, and generated agent guidance; read when planning `skills validate`, skills directory config, or skill-related repository guidance generation."
 ---
 
-# Skills Subcommand
+# Skills Validation
 
 ## Purpose
 
-This document is a short working design draft for the `docgarden skills` subcommand family.
+This document is a short working design draft for `docgarden`'s skill-specific validation and related configuration.
 
-The goal is to make skill collections discoverable and locally checkable without forcing every repository to express skills through a generic document-family model first. Skill front matter remains part of this design for now because it is the natural discovery surface for agents deciding which skill to load.
+The goal is to make skill collections locally checkable and configurable without forcing every repository to express skills through a generic document-family model first. Skill front matter remains part of this design because it is the natural validation surface and the same metadata that drives discovery elsewhere in the product.
 
 ## Why This Needs A Separate Design
 
@@ -16,8 +16,8 @@ Skills are a first-class product concept in `docgarden`.
 
 They sit at the intersection of three needs:
 
-- `docgarden skills ...` commands need a canonical skills directory
-- skill discovery should use the same front matter agents use for triggering
+- `docgarden skills validate ...` needs a canonical skills directory
+- skill discovery should use the same front matter agents use for triggering, but that discovery design now lives with `list` and `match`
 - repositories may want generated agent guidance that is templated to configured paths and policy
 
 Those needs are related, but they are not the same as a broader document-family configuration model. The near-term design should keep the skills path explicit, keep the command surface small, and avoid baking this repository's layout into product behavior.
@@ -26,12 +26,12 @@ Those needs are related, but they are not the same as a broader document-family 
 
 The proposed command family is:
 
-- `docgarden skills list`
-- `docgarden skills match <QUERY>`
 - `docgarden skills validate <TARGET>`
 - later, possibly `docgarden skills init` or `docgarden init --skills`
 
-`list` and `match` are discovery commands. `validate` is an explicit skill-schema checking command for users who want the built-in skill defaults without applying repository-wide lint policy to their skills directory.
+`validate` is the explicit skill-schema checking command for users who want the built-in skill defaults without applying repository-wide lint policy to their skills directory.
+
+Skill discovery is still part of the product, but it no longer needs a separate `skills list` or `skills match` command family. Keep that discussion in `docs/design-docs/match-and-list.md`, where scope switches such as `docgarden list --skills` and `docgarden match --skills <QUERY>` belong.
 
 ## Skills Directory As Repo-Wide Config
 
@@ -43,43 +43,21 @@ The shape is:
 
 This is similar to `path_style = "backticks"`: it is a foundational repository convention that should be easy to read without requiring an explicit catch-all scope entry.
 
-The main reason is ergonomics. The `docgarden skills list` and `docgarden skills match <QUERY>` commands need a default place to look, and requiring every repository to express that only through a `[[documents]]` entry feels too indirect.
+The main reason is ergonomics. Skill-scoped discovery and validation need a default place to look, and requiring every repository to express that only through a `[[documents]]` entry feels too indirect.
 
 The public key is `skills_dir` because the configured value is a directory path, not a repository root. The spelling follows the rest of the new `docgarden` configuration by using snake_case in TOML.
 
 ## Inferred Skills Scope
 
-Once the skills directory exists, `docgarden` can infer a built-in skills scope for rule and discovery purposes.
+Once the skills directory exists, `docgarden` can infer a built-in skills scope for validation and discovery purposes.
 
 The practical direction is:
 
-- `skills_dir` is enough to make `docgarden skills ...` commands work
+- `skills_dir` is enough to make skill-scoped discovery and `docgarden skills validate ...` work
 - skills validation rules can apply automatically under that directory when a repository opts into linting those files
 - rule configuration may later target the built-in `skills` scope explicitly when users need overrides
 
 That keeps the common case ergonomic without requiring a public generic grouping layer first.
-
-## Frontmatter-Driven Discovery
-
-`docgarden skills list` should surface the discovery metadata for skills without requiring the caller to know the exact skill paths in advance.
-
-A reasonable first output shape is:
-
-- skill path
-- skill `name`
-- skill `description`
-- optional compatibility or other skill-schema metadata if configured for display
-
-`docgarden skills match <QUERY>` should behave like metadata search restricted to the configured skills directory and skill front matter schema.
-
-The initial matching fields should likely be:
-
-- `name`
-- `description`
-- path
-- optional compatibility metadata
-
-Because the skill body is only relevant after a skill has been selected, `match` should stay focused on the metadata that determines triggering rather than on full-text body search. If an agent wants body-text retrieval, it can use `rg` directly.
 
 ## `skills validate`
 
@@ -184,8 +162,8 @@ The current design direction is:
 
 - add a repo-wide skills directory config
 - use the public TOML spelling `skills_dir`
-- let that config power `docgarden skills ...` commands directly
-- keep `docgarden skills list` and `docgarden skills match <QUERY>` frontmatter-driven for now
+- let that config power skill-scoped discovery and validation directly
+- keep skill discovery under `docgarden list` and `docgarden match` via scope switches documented in `docs/design-docs/match-and-list.md`
 - add `docgarden skills validate <TARGET>` as the built-in skill-schema validation path
 - use the Agent Skills structural, character, line, and token limits for `skills validate`
 - infer a built-in `skills` scope from the skills directory for default skill validation and future rule targeting
