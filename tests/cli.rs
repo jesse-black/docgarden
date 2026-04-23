@@ -884,7 +884,11 @@ fn lint_applies_embedded_default_when_no_config_found() {
     let root = temp.path();
     fs::create_dir_all(root.join(".git")).unwrap();
     fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(root.join("docs/no-frontmatter.md"), "# Missing description\n").unwrap();
+    fs::write(
+        root.join("docs/no-frontmatter.md"),
+        "# Missing description\n",
+    )
+    .unwrap();
 
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["lint", "--color", "never", root.to_str().unwrap()])

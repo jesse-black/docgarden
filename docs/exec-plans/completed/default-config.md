@@ -64,4 +64,5 @@ When `docgarden lint` runs in a tree with no `docgarden.toml` (and no `--config`
 
 ## Review
 
-- [ ] None yet.
+- [x] No functional findings in the planned default-config implementation. Reviewed `src/config.rs`, `src/data/default-config.toml`, and the updated CLI/unit tests against the Goal and Scope; targeted validation passed.
+
