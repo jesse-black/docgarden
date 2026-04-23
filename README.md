@@ -26,14 +26,14 @@ docgarden match <QUERY>
 Ranks repository Markdown documents by how well their frontmatter fields match the query. Returns `path | name | description` by default.
 
 ```
-# find the most relevant doc for a task
-docgarden match "auth middleware session tokens"
+# route a review task to the active-plan workflow
+docgarden match review against the active plan
 
-# path-only for piping into agent context
-docgarden match -p -n 3 "deployment rollback"
+# path-only for piping the top few candidates into agent context
+docgarden match -p -n 3 implement from the active plan
 
 # show scoring diagnostics
-docgarden match --explain "rate limiting"
+docgarden match --explain docgarden match scoring
 ```
 
 Options: `-n <LIMIT>` to cap results, `-p` / `--path-only` for plain paths, `--explain` for BM25F score breakdown.
