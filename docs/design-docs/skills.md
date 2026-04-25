@@ -35,17 +35,17 @@ Skill discovery is still part of the product, but it no longer needs a separate 
 
 ## Skills Directory As Repo-Wide Config
 
-`docgarden` should have a repo-wide top-level config for the skills directory.
+`docgarden` should use a repo-wide top-level config for the skills directory.
 
-The shape is:
+The public TOML shape is:
 
     skills_dir = ".agents/skills"
 
 This is similar to `path_style = "backticks"`: it is a foundational repository convention that should be easy to read without requiring an explicit catch-all scope entry.
 
-The main reason is ergonomics. Skill-scoped discovery and validation need a default place to look, and requiring every repository to express that only through a `[[documents]]` entry feels too indirect.
+The main reason is ergonomics. Skill-scoped discovery and validation need a default place to look, and `skills_dir` gives that concept a direct home in configuration.
 
-The public key is `skills_dir` because the configured value is a directory path, not a repository root. The spelling follows the rest of the new `docgarden` configuration by using snake_case in TOML.
+The key is `skills_dir` because the configured value is a directory path, not a repository root. The spelling follows the rest of the new `docgarden` configuration by using snake_case in TOML.
 
 ## Inferred Skills Scope
 
@@ -58,6 +58,8 @@ The practical direction is:
 - rule configuration may later target the built-in `skills` scope explicitly when users need overrides
 
 That keeps the common case ergonomic without requiring a public generic grouping layer first.
+
+`skills_dir` remains a top-level setting rather than a member of a generic `[directories]` table. It is a first-class product convention, not just an arbitrary filesystem path.
 
 ## `skills validate`
 
@@ -172,7 +174,6 @@ The current design direction is:
 
 ## Open Questions
 
-- Should the skills directory be a single path, or should repositories eventually support multiple skill directories?
 - Should the inferred `skills` scope exist only internally, or should it be surfaced in diagnostics and command output?
 - How should repositories mark configured raw/source-derived paths or scopes so generated skills can tell agents not to edit them?
 - Should generated skills be fully regenerated on demand, or only scaffolded once and then left entirely to repository owners?

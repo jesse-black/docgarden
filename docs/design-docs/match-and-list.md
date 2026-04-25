@@ -10,7 +10,7 @@ This document is a working design draft for the `docgarden match` and `list` com
 
 The goal is to make repository knowledge discoverable without requiring handwritten index-style files as the default navigation mechanism. If repositories adopt standardized YAML front matter with fields such as `name` and `description`, `docgarden` should be able to derive useful catalog and matching views directly from that metadata.
 
-The product should describe these commands in terms of explicit configuration, not in terms of this repository's current directory layout. The strongest near-term example is the configured skills directory. Broader discovery roots or named groups can wait until a concrete feature needs them.
+The product should describe these commands in terms of explicit configuration, not in terms of this repository's current directory layout. The selected near-term conventions are `skills_dir` for repository-local skills and `plans_dir` for ExecPlans. Broader discovery roots or named groups can wait until a concrete feature needs them.
 
 ## Proposed Commands
 
@@ -28,7 +28,7 @@ For v1, the discovery surface should stay intentionally small and deterministic:
 - `path` is always present
 - frontmatter `name` is surfaced when present
 - frontmatter `description` is surfaced when present
-- scope switches such as `--skills`, `--plans`, `--active-plans`, and `--completed-plans` restrict discovery to configured or conventional document sets
+- scope switches such as `--skills`, `--plans`, `--active-plans`, and `--completed-plans` restrict discovery to configured document sets
 - `match` uses numeric ranking internally, but the default output should emphasize result order rather than score display
 
 Skill-specific validation remains outside this command family. `docgarden skills validate` is covered in `docs/design-docs/skills.md`.
@@ -222,10 +222,10 @@ The command should be useful both for humans scanning the output and for agents 
 
 `docgarden list` should support scope switches for high-value repository knowledge sets:
 
-- `--skills`: list configured skills, usually under `skills_dir`
-- `--plans`: list all ExecPlans
-- `--active-plans`: list active ExecPlans
-- `--completed-plans`: list completed ExecPlans
+- `--skills`: list configured skills under `skills_dir`
+- `--plans`: list all ExecPlans under `plans_dir`
+- `--active-plans`: list ExecPlans under `{plans_dir}/active/`
+- `--completed-plans`: list ExecPlans under `{plans_dir}/completed/`
 
 These switches answer inventory questions rather than ranking questions. Active plans are usually one file or a small handful, so `docgarden list --active-plans` is a better affordance than teaching the scorer repo-specific active-plan boosts.
 
@@ -240,7 +240,7 @@ The output shape should remain the common discovery row:
 
 For skills, the path is the skill's `SKILL.md` path, `name` is the skill frontmatter `name`, and `description` is the skill frontmatter `description`.
 
-For ExecPlans, the path is the plan Markdown path. The `name` field can use frontmatter `name` when present and otherwise fall back to the filename stem, matching normal discovery behavior.
+For ExecPlans, the path is the plan Markdown path under `plans_dir`. The `name` field can use frontmatter `name` when present and otherwise fall back to the filename stem, matching normal discovery behavior.
 
 ### `docgarden match <QUERY>`
 
@@ -288,7 +288,7 @@ This command should help answer questions like:
 
 Because the skill body is only relevant after a skill has been selected, skill-scoped matching should stay focused on the metadata that determines triggering rather than on full-text body search.
 
-`docgarden match --plans <QUERY>` should use the same matching fields as normal metadata routing, restricted to active and completed ExecPlans. It is useful when a repository has enough plans that exact inventory is too broad, but it should not replace `list --active-plans` for current-plan workflows.
+`docgarden match --plans <QUERY>` should use the same matching fields as normal metadata routing, restricted to ExecPlans under `plans_dir`. It is useful when a repository has enough plans that exact inventory is too broad, but it should not replace `list --active-plans` for current-plan workflows.
 
 ## Optional Index Files
 

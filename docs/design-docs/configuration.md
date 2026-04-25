@@ -14,9 +14,10 @@ The main goal is to avoid baking one repository's directory layout into product 
 
 Several `docgarden` feature areas depend on the same underlying question: which files should a feature operate on?
 
-For near-term features, the most concrete case is skills:
+For near-term features, the concrete cases are skills and ExecPlans:
 
-- `docgarden skills list` and `docgarden skills match <QUERY>` need to know where repository-local skills live.
+- `docgarden list --skills` and `docgarden match --skills <QUERY>` need to know where repository-local skills live.
+- `docgarden list --plans`, `docgarden list --active-plans`, `docgarden list --completed-plans`, and `docgarden match --plans <QUERY>` need to know where ExecPlans live.
 - Skills validation rules should apply automatically to that same directory.
 
 Other future areas may need path-targeted configuration too, including front matter validation, context-budget defaults, imported-reference policy, and optional curated indexes. Those future needs are not enough by themselves to justify a broad generic grouping layer today.
@@ -25,11 +26,19 @@ Other future areas may need path-targeted configuration too, including front mat
 
 Prefer first-class configuration for first-class product concepts.
 
-For skills, that means a top-level skills directory setting rather than requiring users to express skills through a generic document-family entry. The exact key name is still open; `skills_dir` may be clearer than `skills_root` because it describes the value as a directory.
+For skills and ExecPlans, that means top-level directory settings rather than a generic `[directories]` bucket or a broad document-family entry.
 
     skills_dir = ".agents/skills"
+    plans_dir = "docs/exec-plans"
 
-That single setting should be enough for `docgarden skills ...` commands and for default skills validation. Internally, `docgarden` may derive skill-file paths from that directory, but users should not have to define the same directory twice.
+`skills_dir` is enough for skill-scoped discovery and default skills validation. Internally, `docgarden` derives skill-file paths from that directory, so users do not define the same directory twice.
+
+`plans_dir` is enough for plan-scoped discovery. The active and completed plan directories are status partitions under that directory:
+
+- active plans: `{plans_dir}/active/`
+- completed plans: `{plans_dir}/completed/`
+
+Those derived paths are not public v1 config keys. Keeping only `plans_dir` public avoids duplicate configuration and keeps active/completed plans tied to the ExecPlan concept.
 
 ## Scan Selection
 
@@ -55,19 +64,12 @@ This distinction matters because excluded files disappear from all lint checks, 
 
 ## Why Not Generic Groups First
 
-A top-level configuration key such as `raw_directory = "docs/references"` is easy to understand at first, but it does not scale well.
-
-That approach tends to multiply into more one-off keys over time:
-
-- `skills_directory`
-- `references_directory`
-- `plans_directory`
-- `generated_directory`
-
-That concern is real, but it is not enough to justify a generic grouping layer before the product has multiple concrete consumers for it. The near-term design should avoid both extremes:
+The near-term design should avoid both extremes:
 
 - do not hard-code this repository's paths into product behavior
 - do not introduce broad named groups before they earn their keep
+
+Top-level `skills_dir` and `plans_dir` are first-class product conventions. They should not live under a generic `[directories]` table, because that would group settings by value type rather than product meaning.
 
 `[[documents]]` may become useful later for user-defined groups such as imported references, generated docs, or curated indexes. It should stay deferred until at least two concrete features need the same named group.
 
@@ -166,8 +168,10 @@ Discovery commands should depend on explicit repository conventions rather than 
 
 That means:
 
-- `docgarden skills list` and `docgarden skills match` should operate over the configured skills directory.
-- Broader `docgarden list`, `tree`, and `match` commands may later need configured knowledge roots or named groups.
+- `docgarden list --skills` and `docgarden match --skills` should operate over `skills_dir`.
+- `docgarden list --plans` and `docgarden match --plans` should operate over `plans_dir`.
+- `docgarden list --active-plans` should operate over the `active/` directory under `plans_dir`.
+- `docgarden list --completed-plans` should operate over the `completed/` directory under `plans_dir`.
 - Optional curated indexes should avoid assuming this repository's path names.
 
 This keeps command behavior portable across repositories with different structures.
@@ -179,6 +183,7 @@ Front matter validation should reuse explicit repository conventions and path-ta
 That means the product can say things like:
 
 - files under the configured skills directory use the Agent Skills schema
+- files under the configured plans directory use the ExecPlan schema
 - imported-reference paths require provenance fields
 - some paths require no front matter by default
 
