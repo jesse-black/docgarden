@@ -1,6 +1,8 @@
 # docgarden
 
 [![CI](https://img.shields.io/github/actions/workflow/status/jesse-black/docgarden/ci.yml?branch=main&label=CI)](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/docgarden.svg)](https://crates.io/crates/docgarden)
+[![docs.rs](https://img.shields.io/docsrs/docgarden)](https://docs.rs/docgarden)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 Repository knowledge tooling for agentic engineering repositories: route agents to the right context with minimum tokens, and enforce the doc hygiene that makes routing reliable.
