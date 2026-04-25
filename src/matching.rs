@@ -26,7 +26,7 @@ pub(crate) fn execute_match(
     config_path: Option<PathBuf>,
     no_gitignore: bool,
     color: ColorChoice,
-    limit: Option<usize>,
+    limit: usize,
     path_only: bool,
     explain: bool,
 ) -> Result<()> {
@@ -114,9 +114,7 @@ pub(crate) fn execute_match(
             .then(a.repo_relative_path.cmp(&b.repo_relative_path))
     });
 
-    if let Some(n) = limit {
-        results.truncate(n);
-    }
+    results.truncate(limit);
 
     let style_output = colorize_stdout(color) && !path_only;
     let query_term_set: HashSet<&str> = query_terms.iter().map(String::as_str).collect();

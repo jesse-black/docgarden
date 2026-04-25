@@ -11,6 +11,8 @@ use crate::lint::{Mode, lint_file, summarize};
 use crate::matching;
 use crate::root::{RootMarker, infer_repository_root};
 
+const DEFAULT_MATCH_LIMIT: usize = 5;
+
 #[derive(Parser, Debug)]
 #[command(name = "docgarden")]
 #[command(about = "Repository knowledge tooling for agentic engineering repositories")]
@@ -90,8 +92,13 @@ struct MatchArgs {
         help = "Control colored human-readable output"
     )]
     color: ColorChoice,
-    #[arg(short = 'n', long, help = "Limit results to the top N matches")]
-    limit: Option<usize>,
+    #[arg(
+        short = 'n',
+        long,
+        default_value_t = DEFAULT_MATCH_LIMIT,
+        help = "Limit results to the top N matches"
+    )]
+    limit: usize,
     #[arg(
         short = 'p',
         long,

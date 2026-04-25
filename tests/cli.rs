@@ -215,6 +215,36 @@ fn match_limit_truncates_to_n_results() {
 }
 
 #[test]
+fn match_default_limit_returns_top_five_results() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+
+    for n in 1..=6 {
+        fs::write(
+            root.join(format!("docs/alpha-{n}.md")),
+            format!("---\nname: Alpha {n}\ndescription: Alpha result {n}.\n---\n# Alpha {n}\n"),
+        )
+        .unwrap();
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "alpha"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line_count = stdout.lines().count();
+    assert_eq!(
+        line_count, 5,
+        "expected default limit of 5 results, got {line_count}: {stdout}"
+    );
+}
+
+#[test]
 fn match_path_only_emits_one_path_per_line() {
     let (_temp, root) = fixture_repo("discovery-repo");
 
