@@ -1,10 +1,10 @@
 # AGENTS
 
-## Step 0 (required before discovering documentation, repository context, or skills)
-Run `cargo run -- match <query>` to route the task.
-Do not spawn agents or run any search commands (`rg`, `grep`, `find`) to locate docs, plans, guidance, context, or skills until this is done.
-This step is not required for code-first tasks.
-Use it when you need non-code context; otherwise inspect and search code directly.
+## Step 0 (required before keyword-searching for documentation)
+Run `cargo run -- match <query>` before using `rg`, `grep`, `find`, or agents to locate Markdown documentation, plans, repository guidance, or repository-local skills.
+Use this when your first instinct is to search docs or guidance by keyword.
+Do not repeat this step when the relevant file is already named by the user, listed in this file, or still in active context.
+Do not use this step for code-first work, code symbol searches, test names, compiler errors, or known file paths; inspect and search code directly.
 
 ## Must Follow
 - ALWAYS run `cargo run -- lint <changed-files> --color never` after modifying any `.md` file.
