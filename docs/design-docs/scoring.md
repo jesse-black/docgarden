@@ -195,14 +195,6 @@ If implemented:
 - keep bonuses small relative to the BM25F baseline
 - validate against routing queries such as `review against the active plan`
 
-## Recommended Order
-
-1. Recalibrate explain-mode color thresholds
-2. Evaluate whether document-union pseudo statistics outperform the current Lucene-shaped max-based approximation on real routing queries
-3. Evaluate stemming with a single shared normalization path if recall and highlighting consistency still need improvement
-4. Tune a relevancy cutoff using the post-union-statistics and post-stemming score distribution
-5. Optionally add bigram or proximity bonuses if dogfooding still shows a remaining gap after stemming and relevance filtering
-
 ## What Implementation Would Look Like
 
 - `src/score.rs`
