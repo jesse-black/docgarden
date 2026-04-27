@@ -1,5 +1,5 @@
 ---
-description: "Canonical testing workflow for `docgarden`, including validation commands, unit-versus-integration guidance, and fixture rules; read when adding features, fixing regressions, addressing review findings, or deciding how to verify repository-local behavior."
+description: "Canonical testing workflow for `docgarden`, including validation commands, unit-versus-integration guidance, and fixture rules; read when adding features, fixing regressions, addressing review findings, reviewing test changes, or deciding how to verify repository-local behavior."
 ---
 
 # Testing
@@ -65,6 +65,15 @@ CLI integration tests are the right home for:
 - human-readable and JSON CLI output
 - subcommand help text and flag exposure
 - autofix behavior and rerun safety
+
+## Test Observable Behavior, Not Internals
+
+Tests should assert what callers can see, not the shape of the implementation that produces it. Two anti-patterns recur and both should be rejected at review:
+
+- Do not write tests that assert an implementation matches its own formula. If a test re-derives the BM25 score from `NAME_BOOST`, `BM25_K1`, etc. and asserts the function produces the same number, the test only fails when the constants drift out of sync with themselves; it does not catch a behavior regression. Replace such tests with assertions about ranking order, monotonicity, or other externally observable properties (e.g. "rare term outranks common term", "longer combined length is penalized at fixed combined freq").
+- Do not fence production fields with `#[cfg(test)]` so tests can read them. A struct that has different fields in `cargo test` vs `cargo build` is two types pretending to be one, and any assertion against the test-only fields is by definition a white-box check that locks in implementation. Expose deliberately-test-visible state through `pub(crate) fn` accessors that exist in both profiles, or — more often — replace the white-box test with a behavioral one. The corresponding rule for code shape lives in `docs/CODESTYLE.md`.
+
+When tempted to introduce either pattern, restate the test as "what would a caller observe if this regressed?" If the answer is "nothing", the test is not earning its keep.
 
 ## TDD for Bugs and Review Findings
 

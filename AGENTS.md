@@ -13,6 +13,7 @@ Do not use this step for code-first work, code symbol searches, test names, comp
 - ALWAYS treat `docs/` as the repository knowledge system of record for product, architecture, planning, testing, and operating-context guidance.
 - ALWAYS use targeted test commands while iterating. Reserve `cargo xtask validate` for the final validation pass before handoff.
 - ALWAYS address bug reports and review findings with TDD: reproduce the issue in a failing test first, then fix it and rerun the relevant tests until they pass.
+- ALWAYS consult `docs/CODESTYLE.md` before adding handwritten validators, wrapper structs, parallel collections, or stringly-typed identifiers; it captures the recurring code smells this repo rejects at review.
 
 ## Repository Map
 ### Start Here for Architecture and Implementation
@@ -32,3 +33,6 @@ Do not use this step for code-first work, code symbol searches, test names, comp
 ### Start Here for Testing and Validation
 - `docs/TESTING.md` – Canonical testing workflow, TDD expectations, and validation guidance. Read this when adding features, fixing regressions, or deciding how to verify a change.
 - `tests/` – Integration tests, fixture-backed regression coverage, and shared CLI harness code. Start here for bug repros, CLI behavior, repository-walking scenarios, and end-to-end validation.
+
+### Start Here for Code Style and Quality
+- `docs/CODESTYLE.md` – Rust coding conventions and prohibited code smells for the crate. Read this before introducing new structs, validators, parsers, or CLI flags, and when reviewing a refactor.
