@@ -11,13 +11,6 @@ use crate::paths::repository_relative_path;
 pub fn discover_markdown_files_for_targets(
     config: &Config,
     targets: &[PathBuf],
-) -> Result<Vec<PathBuf>> {
-    discover_markdown_files_for_targets_with_depth(config, targets, DirectoryDepth::Recursive)
-}
-
-pub fn discover_markdown_files_for_targets_with_depth(
-    config: &Config,
-    targets: &[PathBuf],
     depth: DirectoryDepth,
 ) -> Result<Vec<PathBuf>> {
     let include = PatternMatcher::new(&config.include)?;
@@ -125,7 +118,9 @@ mod tests {
 
         let config = Config::load(root, None).unwrap();
         let targets = vec![root.join("docs").canonicalize().unwrap()];
-        let discovered = discover_markdown_files_for_targets(&config, &targets).unwrap();
+        let discovered =
+            discover_markdown_files_for_targets(&config, &targets, DirectoryDepth::Recursive)
+                .unwrap();
 
         let names: Vec<_> = discovered
             .iter()

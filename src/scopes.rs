@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 
 use crate::config::Config;
-use crate::discover::discover_markdown_files_for_targets;
+use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Scope {
@@ -24,40 +24,12 @@ pub(crate) fn discover_scope_files(config: &Config, scope: Scope) -> Result<Vec<
     }
     ensure_directory_if_exists(scope_field_name(scope), &root)?;
 
-    let mut files = discover_markdown_files_for_targets(config, &[root])?;
+    let mut files =
+        discover_markdown_files_for_targets(config, &[root], DirectoryDepth::Recursive)?;
     if scope == Scope::Skills {
         files.retain(|path| path.file_name().and_then(|name| name.to_str()) == Some("SKILL.md"));
     }
     Ok(files)
-}
-
-pub(crate) fn scope_from_switches(skills: bool, plans: bool) -> Option<Scope> {
-    if skills {
-        Some(Scope::Skills)
-    } else if plans {
-        Some(Scope::Plans)
-    } else {
-        None
-    }
-}
-
-pub(crate) fn list_scope_from_switches(
-    skills: bool,
-    plans: bool,
-    active_plans: bool,
-    completed_plans: bool,
-) -> Option<Scope> {
-    if skills {
-        Some(Scope::Skills)
-    } else if plans {
-        Some(Scope::Plans)
-    } else if active_plans {
-        Some(Scope::ActivePlans)
-    } else if completed_plans {
-        Some(Scope::CompletedPlans)
-    } else {
-        None
-    }
 }
 
 fn scope_root(config: &Config, scope: Scope) -> PathBuf {

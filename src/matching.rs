@@ -5,8 +5,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
-use crate::discover::discover_markdown_files_for_targets;
-use crate::documents::{escape_pipe, load_document_metadata_for_paths, path_prefix};
+use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
+use crate::documents::{escape_pipe, load_document_metadata_for_paths};
 use crate::root::{RootMarker, infer_repository_root};
 use crate::scopes::{Scope, discover_scope_files};
 use crate::score::{Candidate, CombinedFieldStats, Field, normalize_text};
@@ -64,20 +64,15 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
     let files = if let Some(scope) = options.scope {
         discover_scope_files(&config, scope)?
     } else {
-        discover_markdown_files_for_targets(&config, &[repository_root])?
+        discover_markdown_files_for_targets(&config, &[repository_root], DirectoryDepth::Recursive)?
     };
     let documents = load_document_metadata_for_paths(&config, &files)?;
-    let path_prefixes: Vec<String> = documents
-        .iter()
-        .map(|document| path_prefix(&document.repo_relative_path))
-        .collect();
 
     let candidates: Vec<Candidate<'_>> = documents
         .iter()
-        .zip(path_prefixes.iter())
-        .map(|(document, path_prefix)| Candidate {
+        .map(|document| Candidate {
             name: Some(document.name.as_str()),
-            path_prefix,
+            path_prefix: document.path_prefix.as_str(),
             description: document.description.as_deref(),
         })
         .collect();

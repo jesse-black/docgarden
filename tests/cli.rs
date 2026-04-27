@@ -127,7 +127,7 @@ fn list_help_documents_output_columns_and_flags() {
         .stdout(predicate::str::contains("--plans"))
         .stdout(predicate::str::contains("--active-plans"))
         .stdout(predicate::str::contains("--completed-plans"))
-        .stdout(predicate::str::contains("--color <COLOR>"));
+        .stdout(predicate::str::contains("--color <COLOR>").not());
 }
 
 #[test]

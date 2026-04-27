@@ -2,20 +2,16 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::discover::{
-    DirectoryDepth, discover_markdown_files_for_targets,
-    discover_markdown_files_for_targets_with_depth,
-};
+use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
 use crate::lint::{Mode, lint_file, summarize};
 use crate::listing;
-use crate::listing::ListRenderOptions;
 use crate::matching;
 use crate::root::{RootMarker, infer_repository_root};
-use crate::scopes::{discover_scope_files, list_scope_from_switches, scope_from_switches};
+use crate::scopes::{Scope, discover_scope_files};
 
 const DEFAULT_MATCH_LIMIT: usize = 5;
 
@@ -95,6 +91,7 @@ struct LintArgs {
 }
 
 #[derive(ClapArgs, Debug)]
+#[command(group(ArgGroup::new("match-scope").args(["skills", "plans"]).multiple(false)))]
 struct MatchArgs {
     #[arg(
         required = true,
@@ -144,6 +141,9 @@ struct MatchArgs {
 }
 
 #[derive(ClapArgs, Debug)]
+#[command(
+    group(ArgGroup::new("list-scope").args(["skills", "plans", "active_plans", "completed_plans"]).multiple(false))
+)]
 struct ListArgs {
     #[arg(
         num_args = 0..,
@@ -157,13 +157,6 @@ struct ListArgs {
         help = "Ignore .gitignore and related exclude files during discovery"
     )]
     no_gitignore: bool,
-    #[arg(
-        long,
-        value_enum,
-        default_value_t = ColorChoice::Auto,
-        help = "Control colored human-readable output"
-    )]
-    color: ColorChoice,
     #[arg(short = 'R', long, help = "Recurse into nested directory targets")]
     recurse: bool,
     #[arg(long, help = "List configured skills_dir SKILL.md files")]
@@ -188,46 +181,49 @@ pub fn run() -> Result<()> {
     match args.command {
         Command::Lint(args) => execute_lint(args, Mode::Check),
         Command::Fix(args) => execute_lint(args, Mode::Fix),
-        Command::Match(args) => matching::execute_match(matching::MatchOptions {
-            raw_query: args.query,
-            config_path: args.config,
-            no_gitignore: args.no_gitignore,
-            color: args.color,
-            limit: args.limit,
-            path_only: args.path_only,
-            explain: args.explain,
-            scope: match_scope(args.skills, args.plans)?,
-        }),
+        Command::Match(args) => {
+            let scope = args.scope();
+            matching::execute_match(matching::MatchOptions {
+                raw_query: args.query,
+                config_path: args.config,
+                no_gitignore: args.no_gitignore,
+                color: args.color,
+                limit: args.limit,
+                path_only: args.path_only,
+                explain: args.explain,
+                scope,
+            })
+        }
         Command::List(args) => execute_list(args),
     }
 }
 
-fn match_scope(skills: bool, plans: bool) -> Result<Option<crate::scopes::Scope>> {
-    if skills && plans {
-        bail!("match scope switches are mutually exclusive");
+impl MatchArgs {
+    fn scope(&self) -> Option<Scope> {
+        if self.skills {
+            Some(Scope::Skills)
+        } else if self.plans {
+            Some(Scope::Plans)
+        } else {
+            None
+        }
     }
-    Ok(scope_from_switches(skills, plans))
 }
 
-fn list_scope(args: &ListArgs) -> Result<Option<crate::scopes::Scope>> {
-    let selected = [
-        args.skills,
-        args.plans,
-        args.active_plans,
-        args.completed_plans,
-    ]
-    .into_iter()
-    .filter(|selected| *selected)
-    .count();
-    if selected > 1 {
-        bail!("list scope switches are mutually exclusive");
+impl ListArgs {
+    fn scope(&self) -> Option<Scope> {
+        if self.skills {
+            Some(Scope::Skills)
+        } else if self.plans {
+            Some(Scope::Plans)
+        } else if self.active_plans {
+            Some(Scope::ActivePlans)
+        } else if self.completed_plans {
+            Some(Scope::CompletedPlans)
+        } else {
+            None
+        }
     }
-    Ok(list_scope_from_switches(
-        args.skills,
-        args.plans,
-        args.active_plans,
-        args.completed_plans,
-    ))
 }
 
 fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
@@ -241,7 +237,7 @@ fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
 }
 
 fn execute_list(args: ListArgs) -> Result<()> {
-    let scope = list_scope(&args)?;
+    let scope = args.scope();
     if scope.is_some() && !args.targets.is_empty() {
         bail!("scope switches cannot be combined with targets");
     }
@@ -250,19 +246,11 @@ fn execute_list(args: ListArgs) -> Result<()> {
         .context("failed to determine current working directory")?
         .canonicalize()
         .context("failed to canonicalize current working directory")?;
-    let invocation_targets = if scope.is_none() {
-        if args.targets.is_empty() {
-            vec![PathBuf::from(".")]
-        } else {
-            args.targets
-        }
-    } else {
-        Vec::new()
-    };
-    let resolved_targets = if invocation_targets.is_empty() {
+
+    let resolved_targets = if scope.is_some() || args.targets.is_empty() {
         vec![cwd]
     } else {
-        canonicalize_targets(&invocation_targets)?
+        canonicalize_targets(&args.targets)?
     };
 
     let repository_root = infer_repository_root(
@@ -286,22 +274,20 @@ fn execute_list(args: ListArgs) -> Result<()> {
         } else {
             DirectoryDepth::Shallow
         };
-        discover_markdown_files_for_targets_with_depth(&config, &resolved_targets, depth)?
+        discover_markdown_files_for_targets(&config, &resolved_targets, depth)?
     };
 
-    let mut render_options = ListRenderOptions::default();
-    if scope.is_none() {
-        for target in &resolved_targets {
-            if target.is_file() {
-                render_options
-                    .allow_undescribed_paths
-                    .insert(target.to_path_buf());
-            }
-        }
-    }
+    let explicit_file_targets: Vec<PathBuf> = if scope.is_none() {
+        resolved_targets
+            .iter()
+            .filter(|target| target.is_file())
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
 
-    let _color = args.color;
-    listing::print_list_rows(&config, files, &render_options)
+    listing::print_list_rows(&config, files, &explicit_file_targets)
 }
 
 fn execute(
@@ -329,7 +315,8 @@ fn execute(
     if no_gitignore {
         config.respect_gitignore = false;
     }
-    let files = discover_markdown_files_for_targets(&config, &resolved_targets)?;
+    let files =
+        discover_markdown_files_for_targets(&config, &resolved_targets, DirectoryDepth::Recursive)?;
     let mut diagnostics = Vec::new();
 
     for path in files {

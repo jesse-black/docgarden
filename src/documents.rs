@@ -10,9 +10,9 @@ use crate::paths::repository_relative_path;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct DocumentMetadata {
     pub repo_relative_path: String,
+    pub path_prefix: String,
     pub name: String,
     pub description: Option<String>,
-    pub absolute_path: PathBuf,
 }
 
 pub(crate) fn load_document_metadata(config: &Config, path: &Path) -> Result<DocumentMetadata> {
@@ -27,12 +27,13 @@ pub(crate) fn load_document_metadata(config: &Config, path: &Path) -> Result<Doc
         _ => (None, None),
     };
     let name = frontmatter_name.unwrap_or_else(|| fallback_name_from_path(&repo_relative_path));
+    let path_prefix = path_prefix(&repo_relative_path);
 
     Ok(DocumentMetadata {
         repo_relative_path,
+        path_prefix,
         name,
         description,
-        absolute_path: path.to_path_buf(),
     })
 }
 
