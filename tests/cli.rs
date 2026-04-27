@@ -438,6 +438,29 @@ fn list_scope_reports_configured_root_that_is_not_a_directory() {
 }
 
 #[test]
+fn list_status_plan_scopes_report_configured_plans_root_that_is_not_a_directory() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("custom")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "plans_dir = \"custom/plans\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("custom/plans"), "# Not a directory\n").unwrap();
+
+    for scope in ["--active-plans", "--completed-plans"] {
+        Command::new(env!("CARGO_BIN_EXE_docgarden"))
+            .current_dir(root)
+            .args(["list", scope])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("configured plans_dir path"))
+            .stderr(predicate::str::contains("is not a directory"));
+    }
+}
+
+#[test]
 fn match_scope_switches_restrict_ranked_corpus() {
     let (_temp, root) = fixture_repo("discovery-repo");
 

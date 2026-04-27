@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 
@@ -14,17 +14,15 @@ pub(crate) enum Scope {
 }
 
 pub(crate) fn discover_scope_files(config: &Config, scope: Scope) -> Result<Vec<PathBuf>> {
+    if matches!(scope, Scope::ActivePlans | Scope::CompletedPlans) {
+        ensure_directory_if_exists("plans_dir", &config.plans_root())?;
+    }
+
     let root = scope_root(config, scope);
     if !root.exists() {
         return Ok(Vec::new());
     }
-    if !root.is_dir() {
-        bail!(
-            "configured {} path {} is not a directory",
-            scope_field_name(scope),
-            root.display()
-        );
-    }
+    ensure_directory_if_exists(scope_field_name(scope), &root)?;
 
     let mut files = discover_markdown_files_for_targets(config, &[root])?;
     if scope == Scope::Skills {
@@ -76,4 +74,15 @@ fn scope_field_name(scope: Scope) -> &'static str {
         Scope::Skills => "skills_dir",
         Scope::Plans | Scope::ActivePlans | Scope::CompletedPlans => "plans_dir",
     }
+}
+
+fn ensure_directory_if_exists(field: &str, path: &Path) -> Result<()> {
+    if path.exists() && !path.is_dir() {
+        bail!(
+            "configured {} path {} is not a directory",
+            field,
+            path.display()
+        );
+    }
+    Ok(())
 }

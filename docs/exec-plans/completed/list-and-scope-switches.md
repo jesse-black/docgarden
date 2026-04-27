@@ -77,6 +77,7 @@ description: "ExecPlan for adding `docgarden list` plus configured scope switche
 - `cargo test list_directory_targets_are_shallow_without_recurse --test cli`
 - `cargo test list_recurse_descends_into_nested_directories --test cli`
 - `cargo test list_scope_switches_select_configured_sets --test cli`
+- `cargo test list_status_plan_scopes_report_configured_plans_root_that_is_not_a_directory --test cli`
 - `cargo test match_scope_switches_restrict_ranked_corpus --test cli`
 - `cargo test --test cli match_`
 - `cargo test --lib`
@@ -97,4 +98,5 @@ description: "ExecPlan for adding `docgarden list` plus configured scope switche
 
 ## Review
 
-- [ ] None yet
+- [x] `list --active-plans` and `list --completed-plans` silently succeed with no output when `plans_dir` is configured to an existing file. `discover_scope_files` derives `plans_dir/active` or `plans_dir/completed`, sees that derived path is missing, and returns an empty set before checking that the configured `plans_dir` is actually a directory. Reproduced with `plans_dir = "custom/plans"` plus a file at `custom/plans`; `target/debug/docgarden list --active-plans --config <config>` exited 0. This hides a bad configuration that `list --plans` reports correctly.
+- [x] Follow-up clean-code and architecture review found no open issues. The current implementation keeps scope-root resolution in `src/scopes.rs`, shared metadata extraction and row rendering in `src/documents.rs`, shallow-vs-recursive traversal in `src/discover.rs`, and thin command orchestration in `src/cli.rs`. Validation passed with focused `list` and scoped `match` integration tests, `cargo test --lib`, Markdown lint, and `cargo xtask validate`.
