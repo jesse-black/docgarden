@@ -1,3 +1,6 @@
+skills_dir = ".agents/skills"
+plans_dir = "docs/exec-plans"
+
 [[rules]]
 path = "*.md"
 

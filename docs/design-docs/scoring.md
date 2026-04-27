@@ -28,6 +28,7 @@ Today it:
 - lowercases and tokenizes query and candidate fields symmetrically
 - filters English stopwords inside the shared normalization path used for both corpus statistics and query parsing
 - sorts by raw score, then matched query-term count, then best matched field, then path
+- limits default `docgarden match` output to the top 5 ranked results unless `--limit` / `-n` is supplied
 
 ### BM25F Field Model
 
@@ -166,7 +167,23 @@ Implementation shape if accepted:
 - expose enough normalized-token information for `src/matching.rs` highlighting to follow the same analyzed terms
 - add tests showing that ranking and highlighting stay aligned for stemmed forms such as `plan` / `plans`
 
-### 3. Partial Phrase And Proximity Bonuses (Deferred)
+### 3. Relevancy Cutoff After Ranking Tuning
+
+The next result-shaping step after document-union statistics and stemming should be a relevancy cutoff, so `docgarden match` can hide weak tail results even when they are inside the default top 5.
+
+This should wait until document-union statistics and stemming have both been evaluated because those changes may alter score distribution, term coverage, and the apparent quality gap between useful and weak matches. A cutoff tuned against today's scores could become too strict or too permissive once ranking changes.
+
+Potential cutoff calculations to evaluate:
+
+- relative score floor, such as keeping results above `top_score * 0.20` or `top_score * 0.30`
+- query coverage floor, such as requiring at least one informative matched term and requiring a higher fraction for multi-term queries
+- hybrid floor, such as keeping results that satisfy either a strong relative score or strong matched-term coverage
+- rank-gap cutoff, such as stopping when the score drop from one result to the next crosses a calibrated ratio
+- normalized confidence band, using explain-mode's `relative` percentage as the user-facing version of the internal cutoff
+
+The cutoff should remain deterministic and explainable. If a result is hidden by relevance rather than by `--limit`, explain mode should make that behavior inspectable, either by exposing the cutoff value or by offering a later flag that shows filtered tail results for debugging.
+
+### 4. Partial Phrase And Proximity Bonuses (Deferred)
 
 BM25F is a bag-of-words model and does not capture phrase evidence. Bigram bonuses or limited proximity evidence could still add signal on top of BM25F for routing queries where term co-occurrence matters.
 
@@ -177,13 +194,6 @@ If implemented:
 - build query bigrams from filtered informative terms
 - keep bonuses small relative to the BM25F baseline
 - validate against routing queries such as `review against the active plan`
-
-## Recommended Order
-
-1. Recalibrate explain-mode color thresholds
-2. Evaluate whether document-union pseudo statistics outperform the current Lucene-shaped max-based approximation on real routing queries
-3. Evaluate stemming with a single shared normalization path if recall and highlighting consistency still need improvement
-4. Optionally add bigram or proximity bonuses if dogfooding still shows a remaining gap after stemming
 
 ## What Implementation Would Look Like
 
@@ -252,6 +262,7 @@ Candidate library to evaluate:
 The default `docgarden match` output should prioritize routing clarity over score inspection:
 
 - default output shows `path | name | description`
+- default output is capped at the top 5 ranked results unless `--limit` / `-n` is supplied
 - matched informative query terms may be highlighted when styled output is enabled
 - raw BM25F score should be hidden from the default view
 

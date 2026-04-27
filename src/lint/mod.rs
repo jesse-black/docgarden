@@ -243,6 +243,8 @@ mod tests {
     fn test_config() -> Config {
         Config {
             repository_root: PathBuf::from("/tmp/repo"),
+            skills_dir: PathBuf::from(".agents/skills"),
+            plans_dir: PathBuf::from("docs/exec-plans"),
             include: Vec::new(),
             exclude: Vec::new(),
             rule_applications: Vec::new(),

@@ -11,6 +11,7 @@ use crate::paths::repository_relative_path;
 pub fn discover_markdown_files_for_targets(
     config: &Config,
     targets: &[PathBuf],
+    depth: DirectoryDepth,
 ) -> Result<Vec<PathBuf>> {
     let include = PatternMatcher::new(&config.include)?;
     let exclude = PatternMatcher::new(&config.exclude)?;
@@ -21,7 +22,7 @@ pub fn discover_markdown_files_for_targets(
             .metadata()
             .with_context(|| format!("failed to read {}", target.display()))?;
         if metadata.is_dir() {
-            for path in discover_markdown_files_under(config, target, &include, &exclude)? {
+            for path in discover_markdown_files_under(config, target, &include, &exclude, depth)? {
                 files.insert(path);
             }
         } else {
@@ -38,11 +39,18 @@ pub fn discover_markdown_files_for_targets(
     Ok(files.into_iter().collect())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DirectoryDepth {
+    Shallow,
+    Recursive,
+}
+
 fn discover_markdown_files_under(
     config: &Config,
     root: &Path,
     include: &PatternMatcher,
     exclude: &PatternMatcher,
+    depth: DirectoryDepth,
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
@@ -55,6 +63,9 @@ fn discover_markdown_files_under(
         .ignore(config.respect_gitignore)
         .require_git(false);
     walker.follow_links(false);
+    if depth == DirectoryDepth::Shallow {
+        walker.max_depth(Some(1));
+    }
 
     for entry in walker.build() {
         let entry = entry?;
@@ -107,7 +118,9 @@ mod tests {
 
         let config = Config::load(root, None).unwrap();
         let targets = vec![root.join("docs").canonicalize().unwrap()];
-        let discovered = discover_markdown_files_for_targets(&config, &targets).unwrap();
+        let discovered =
+            discover_markdown_files_for_targets(&config, &targets, DirectoryDepth::Recursive)
+                .unwrap();
 
         let names: Vec<_> = discovered
             .iter()

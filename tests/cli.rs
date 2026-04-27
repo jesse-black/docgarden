@@ -113,6 +113,410 @@ fn root_help_lists_match_subcommand() {
 }
 
 #[test]
+fn list_help_documents_output_columns_and_flags() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Usage: docgarden list [OPTIONS] [TARGETS]...",
+        ))
+        .stdout(predicate::str::contains("path | name | description"))
+        .stdout(predicate::str::contains("--recurse"))
+        .stdout(predicate::str::contains("--skills"))
+        .stdout(predicate::str::contains("--plans"))
+        .stdout(predicate::str::contains("--active-plans"))
+        .stdout(predicate::str::contains("--completed-plans"))
+        .stdout(predicate::str::contains("--color <COLOR>").not());
+}
+
+#[test]
+fn root_help_lists_list_subcommand() {
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("list"));
+}
+
+#[test]
+fn list_alias_ls_works_identically_to_list() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let full = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "docs"])
+        .output()
+        .unwrap();
+
+    let alias = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["ls", "docs"])
+        .output()
+        .unwrap();
+
+    assert_eq!(full.stdout, alias.stdout);
+    assert!(full.status.success());
+}
+
+#[test]
+fn list_default_output_has_three_pipe_separated_columns() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "docs/scoring-guide.md"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].path, "docs/scoring-guide.md");
+    assert_eq!(rows[0].name, "Scoring Guide");
+    assert!(rows[0].description.contains("scoring"));
+}
+
+#[test]
+fn list_directory_targets_are_shallow_without_recurse() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs/nested")).unwrap();
+    fs::write(
+        root.join("docs/top.md"),
+        "---\nname: Top\ndescription: Top-level doc.\n---\n# Top\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/nested/deep.md"),
+        "---\nname: Deep\ndescription: Nested doc.\n---\n# Deep\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "docs"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("docs/top.md"));
+    assert!(!stdout.contains("docs/nested/deep.md"));
+}
+
+#[test]
+fn list_recurse_descends_into_nested_directories() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs/nested")).unwrap();
+    fs::write(
+        root.join("docs/top.md"),
+        "---\nname: Top\ndescription: Top-level doc.\n---\n# Top\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/nested/deep.md"),
+        "---\nname: Deep\ndescription: Nested doc.\n---\n# Deep\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--recurse", "docs"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("docs/top.md"));
+    assert!(stdout.contains("docs/nested/deep.md"));
+}
+
+#[test]
+fn list_directory_targets_omit_docs_without_descriptions() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/cataloged.md"),
+        "---\ndescription: Cataloged doc.\n---\n# Cataloged\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/readme.md"), "# Readme\n").unwrap();
+    fs::write(root.join("README.md"), "# Root Readme\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--recurse", "."])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("docs/cataloged.md"));
+    assert!(!stdout.contains("docs/readme.md"));
+    assert!(!stdout.contains("README.md"));
+}
+
+#[test]
+fn list_explicit_file_target_renders_without_description() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(root.join("README.md"), "# Root Readme\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "README.md"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].path, "README.md");
+    assert_eq!(rows[0].name, "README");
+    assert_eq!(rows[0].description, "");
+}
+
+#[test]
+fn list_scope_targets_omit_docs_without_descriptions() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs/exec-plans/active")).unwrap();
+    fs::write(
+        root.join("docs/exec-plans/active/cataloged.md"),
+        "---\ndescription: Cataloged plan.\n---\n# Cataloged\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/exec-plans/active/undescribed.md"),
+        "# Undescribed\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--active-plans"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("docs/exec-plans/active/cataloged.md"));
+    assert!(!stdout.contains("docs/exec-plans/active/undescribed.md"));
+}
+
+#[test]
+fn list_scope_switches_select_configured_sets() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let skills = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--skills"])
+        .output()
+        .unwrap();
+    assert!(skills.status.success());
+    let skills_stdout = String::from_utf8(skills.stdout).unwrap();
+    assert!(skills_stdout.contains(".agents/skills/skillbeacon/SKILL.md"));
+    assert!(!skills_stdout.contains("docs/exec-plans/active"));
+
+    let plans = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--plans"])
+        .output()
+        .unwrap();
+    assert!(plans.status.success());
+    let plans_stdout = String::from_utf8(plans.stdout).unwrap();
+    assert!(plans_stdout.contains("docs/exec-plans/active/current.md"));
+    assert!(plans_stdout.contains("docs/exec-plans/completed/done.md"));
+
+    let active = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--active-plans"])
+        .output()
+        .unwrap();
+    assert!(active.status.success());
+    let active_stdout = String::from_utf8(active.stdout).unwrap();
+    assert!(active_stdout.contains("docs/exec-plans/active/current.md"));
+    assert!(!active_stdout.contains("docs/exec-plans/completed/done.md"));
+
+    let completed = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--completed-plans"])
+        .output()
+        .unwrap();
+    assert!(completed.status.success());
+    let completed_stdout = String::from_utf8(completed.stdout).unwrap();
+    assert!(completed_stdout.contains("docs/exec-plans/completed/done.md"));
+    assert!(!completed_stdout.contains("docs/exec-plans/active/current.md"));
+}
+
+#[test]
+fn list_scope_switches_use_configured_directories() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        "skills_dir = \"custom/skills\"\nplans_dir = \"custom/plans\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("custom/skills/beacon")).unwrap();
+    fs::create_dir_all(root.join("custom/plans/active")).unwrap();
+    fs::write(
+        root.join("custom/skills/beacon/SKILL.md"),
+        "---\nname: Custom Skill\ndescription: Custom skillbeacon metadata.\n---\n# Custom\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("custom/plans/active/current.md"),
+        "---\ndescription: Custom planbeacon metadata.\n---\n# Current\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--skills"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("custom/skills/beacon/SKILL.md"))
+        .stdout(predicate::str::contains(".agents/skills").not());
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--active-plans"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("custom/plans/active/current.md"))
+        .stdout(predicate::str::contains("docs/exec-plans").not());
+}
+
+#[test]
+fn list_scope_switches_are_mutually_exclusive_and_reject_targets() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--skills", "--plans"])
+        .assert()
+        .failure();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["list", "--skills", "docs"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "scope switches cannot be combined with targets",
+        ));
+}
+
+#[test]
+fn list_scope_reports_configured_root_that_is_not_a_directory() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("custom")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "skills_dir = \"custom/skills.md\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("custom/skills.md"), "# Not a directory\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "--skills"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("configured skills_dir path"))
+        .stderr(predicate::str::contains("is not a directory"));
+}
+
+#[test]
+fn list_status_plan_scopes_report_configured_plans_root_that_is_not_a_directory() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("custom")).unwrap();
+    fs::write(
+        root.join("docgarden.toml"),
+        "plans_dir = \"custom/plans\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("custom/plans"), "# Not a directory\n").unwrap();
+
+    for scope in ["--active-plans", "--completed-plans"] {
+        Command::new(env!("CARGO_BIN_EXE_docgarden"))
+            .current_dir(root)
+            .args(["list", scope])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("configured plans_dir path"))
+            .stderr(predicate::str::contains("is not a directory"));
+    }
+}
+
+#[test]
+fn match_scope_switches_restrict_ranked_corpus() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let skills = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--skills", "skillbeacon"])
+        .output()
+        .unwrap();
+    assert!(skills.status.success());
+    let skill_rows = parse_match_rows(&String::from_utf8(skills.stdout).unwrap());
+    assert_eq!(skill_rows.len(), 1);
+    assert!(
+        skill_rows[0]
+            .path
+            .contains(".agents/skills/skillbeacon/SKILL.md")
+    );
+
+    let plans = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args([
+            "match",
+            "--plans",
+            "--path-only",
+            "--limit",
+            "1",
+            "planbeacon",
+        ])
+        .output()
+        .unwrap();
+    assert!(plans.status.success());
+    let plans_stdout = String::from_utf8(plans.stdout).unwrap();
+    assert_eq!(plans_stdout.lines().count(), 1);
+    assert!(plans_stdout.contains("docs/exec-plans/active/current.md"));
+
+    let explain = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--plans", "--explain", "planbeacon"])
+        .output()
+        .unwrap();
+    assert!(explain.status.success());
+    let explain_stdout = String::from_utf8(explain.stdout).unwrap();
+    assert!(explain_stdout.starts_with("score | relative | coverage | path | name | description"));
+}
+
+#[test]
+fn match_scope_switches_are_mutually_exclusive() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--skills", "--plans", "review"])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn match_alias_m_works_identically_to_match() {
     let (_temp, root) = fixture_repo("discovery-repo");
 
@@ -211,6 +615,36 @@ fn match_limit_truncates_to_n_results() {
     assert_eq!(
         line_count, 2,
         "expected 2 results with --limit 2, got {line_count}"
+    );
+}
+
+#[test]
+fn match_default_limit_returns_top_five_results() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+
+    for n in 1..=6 {
+        fs::write(
+            root.join(format!("docs/alpha-{n}.md")),
+            format!("---\nname: Alpha {n}\ndescription: Alpha result {n}.\n---\n# Alpha {n}\n"),
+        )
+        .unwrap();
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "alpha"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line_count = stdout.lines().count();
+    assert_eq!(
+        line_count, 5,
+        "expected default limit of 5 results, got {line_count}: {stdout}"
     );
 }
 
