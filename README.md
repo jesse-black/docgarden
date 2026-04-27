@@ -38,17 +38,29 @@ docgarden match -p -n 3 implement from the active plan
 docgarden match --explain docgarden match scoring
 ```
 
-Options: `-n <LIMIT>` to cap results, `-p` / `--path-only` for plain paths, `--explain` for BM25F score breakdown.
+Options: `-n <LIMIT>` to cap results, `-p` / `--path-only` for plain paths, `--explain` for BM25F score breakdown, `--skills` to match only configured skills, and `--plans` to match only configured ExecPlans.
 
-Example `AGENTS.md` instruction for non-code context discovery:
+### `list`: list markdown documents
 
-```md
-## Step 0 (required before keyword-searching for documentation)
-Run `docgarden match <query>` before using `rg`, `grep`, `find`, or agents to locate Markdown documentation, plans, repository guidance, or repository-local skills.
-Use this when your first instinct is to search docs or guidance by keyword.
-Do not repeat this step when the relevant file is already named by the user, listed in this file, or still in active context.
-Do not use this step for code-first work, code symbol searches, test names, compiler errors, or known file paths; inspect and search code directly.
 ```
+docgarden list [TARGETS]
+docgarden ls [TARGETS]
+```
+
+Lists repository Markdown documents that have frontmatter descriptions. Returns `path | name | description` by default. List recursively when `-R` / `--recurse` is passed.
+
+```
+# list active ExecPlans directly
+docgarden ls --active-plans
+
+# list described docs directly under docs/
+docgarden list docs/
+
+# recurse through a subtree
+docgarden list -R docs/
+```
+
+Options: `--skills` for configured skills, `--plans` for all configured ExecPlans, `--active-plans` for active ExecPlans, and `--completed-plans` for completed ExecPlans.
 
 ### `lint`: enforce repository knowledge hygiene
 
@@ -68,11 +80,27 @@ docgarden lint docs/
 
 Checks include: unresolved local references, missing `description` frontmatter, `AGENTS.md` line/token budget violations, and path style policy (backtick vs Markdown link).
 
+### `AGENTS.md` instructions
+
+Example instructions for document discovery:
+
+```md
+## Step 0 (required before keyword-searching for documentation)
+Run `docgarden match <query>` before using `rg`, `grep`, `find`, or agents to locate Markdown documentation, plans, repository guidance, or repository-local skills.
+Use this when your first instinct is to search docs or guidance by keyword.
+Run `docgarden ls --active-plans` to list active ExecPlans when continuing or checking current plan-driven work.
+Do not repeat this step when the relevant file is already named by the user, listed in this file, or still in active context.
+Do not use this step for code-first work, code symbol searches, test names, compiler errors, or known file paths; inspect and search code directly.
+```
+
 ## Configuration
 
 `docgarden` looks for `docgarden.toml` at the repository root. If you do not create one, it uses this built-in default configuration:
 
 ```toml
+skills_dir = ".agents/skills"
+plans_dir = "docs/exec-plans"
+
 [[rules]]
 path = "*.md"
 

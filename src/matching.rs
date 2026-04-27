@@ -1,15 +1,14 @@
 use std::collections::HashSet;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
 use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
 use crate::discover::discover_markdown_files_for_targets;
-use crate::frontmatter::{FrontmatterParseResult, YamlValue, parse_from_str};
-use crate::paths::repository_relative_path;
+use crate::documents::{escape_pipe, load_document_metadata_for_paths, path_prefix};
 use crate::root::{RootMarker, infer_repository_root};
+use crate::scopes::{Scope, discover_scope_files};
 use crate::score::{Candidate, CombinedFieldStats, Field, normalize_text};
 
 struct MatchResult {
@@ -21,16 +20,19 @@ struct MatchResult {
     first_field_hit: Option<Field>,
 }
 
-pub(crate) fn execute_match(
-    raw_query: Vec<String>,
-    config_path: Option<PathBuf>,
-    no_gitignore: bool,
-    color: ColorChoice,
-    limit: usize,
-    path_only: bool,
-    explain: bool,
-) -> Result<()> {
-    let query_str = raw_query.join(" ");
+pub(crate) struct MatchOptions {
+    pub(crate) raw_query: Vec<String>,
+    pub(crate) config_path: Option<PathBuf>,
+    pub(crate) no_gitignore: bool,
+    pub(crate) color: ColorChoice,
+    pub(crate) limit: usize,
+    pub(crate) path_only: bool,
+    pub(crate) explain: bool,
+    pub(crate) scope: Option<Scope>,
+}
+
+pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
+    let query_str = options.raw_query.join(" ");
     if query_str.trim().is_empty() {
         bail!("query must contain at least one non-empty word");
     }
@@ -47,58 +49,52 @@ pub(crate) fn execute_match(
 
     let repository_root = infer_repository_root(
         &[cwd],
-        config_path.as_deref(),
+        options.config_path.as_deref(),
         &[
             RootMarker::File("docgarden.toml"),
             RootMarker::Directory(".git"),
         ],
     )?;
 
-    let mut config = Config::load(&repository_root, config_path.as_deref())?;
-    if no_gitignore {
+    let mut config = Config::load(&repository_root, options.config_path.as_deref())?;
+    if options.no_gitignore {
         config.respect_gitignore = false;
     }
 
-    let files = discover_markdown_files_for_targets(&config, &[repository_root])?;
-
-    let mut raw: Vec<(String, String, String, Option<String>)> = Vec::new();
-    for path in &files {
-        let rel = repository_relative_path(&config.repository_root, path)?;
-        let source = fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        let (frontmatter_name, description) = match parse_from_str(&source) {
-            FrontmatterParseResult::Valid(fm) => (
-                extract_scalar(&fm, "name"),
-                extract_scalar(&fm, "description"),
-            ),
-            _ => (None, None),
-        };
-        let name = normalized_match_name(&rel, frontmatter_name);
-        raw.push((rel.clone(), path_prefix(&rel), name, description));
-    }
-
-    let candidates: Vec<Candidate<'_>> = raw
+    let files = if let Some(scope) = options.scope {
+        discover_scope_files(&config, scope)?
+    } else {
+        discover_markdown_files_for_targets(&config, &[repository_root])?
+    };
+    let documents = load_document_metadata_for_paths(&config, &files)?;
+    let path_prefixes: Vec<String> = documents
         .iter()
-        .map(|(_path, path_prefix, name, desc)| Candidate {
-            name: Some(name.as_str()),
+        .map(|document| path_prefix(&document.repo_relative_path))
+        .collect();
+
+    let candidates: Vec<Candidate<'_>> = documents
+        .iter()
+        .zip(path_prefixes.iter())
+        .map(|(document, path_prefix)| Candidate {
+            name: Some(document.name.as_str()),
             path_prefix,
-            description: desc.as_deref(),
+            description: document.description.as_deref(),
         })
         .collect();
     let stats = CombinedFieldStats::build(&candidates);
 
-    let mut results: Vec<MatchResult> = raw
+    let mut results: Vec<MatchResult> = documents
         .iter()
         .zip(candidates.iter())
-        .filter_map(|((path, _path_prefix, name, desc), candidate)| {
+        .filter_map(|(document, candidate)| {
             let hit = crate::score::score(&query_terms, candidate, &stats);
             if hit.score <= 0.0 {
                 return None;
             }
             Some(MatchResult {
-                repo_relative_path: path.clone(),
-                name: name.clone(),
-                description: desc.clone(),
+                repo_relative_path: document.repo_relative_path.clone(),
+                name: document.name.clone(),
+                description: document.description.clone(),
                 score: hit.score,
                 matched_terms: hit.matched_terms,
                 first_field_hit: hit.first_field_hit,
@@ -114,12 +110,12 @@ pub(crate) fn execute_match(
             .then(a.repo_relative_path.cmp(&b.repo_relative_path))
     });
 
-    results.truncate(limit);
+    results.truncate(options.limit);
 
-    let style_output = colorize_stdout(color) && !path_only;
+    let style_output = colorize_stdout(options.color) && !options.path_only;
     let query_term_set: HashSet<&str> = query_terms.iter().map(String::as_str).collect();
 
-    if explain && !path_only {
+    if options.explain && !options.path_only {
         println!("score | relative | coverage | path | name | description");
     }
 
@@ -127,9 +123,9 @@ pub(crate) fn execute_match(
     let query_term_count = query_terms.len() as u32;
 
     for r in &results {
-        if path_only {
+        if options.path_only {
             println!("{}", r.repo_relative_path);
-        } else if explain {
+        } else if options.explain {
             println!(
                 "{}",
                 render_explain_row(
@@ -146,37 +142,6 @@ pub(crate) fn execute_match(
     }
 
     Ok(())
-}
-
-fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Option<String> {
-    match fm.get(key)? {
-        YamlValue::Scalar(s) => Some(s.clone()),
-        _ => None,
-    }
-}
-
-fn normalized_match_name(repo_relative_path: &str, frontmatter_name: Option<String>) -> String {
-    frontmatter_name.unwrap_or_else(|| fallback_name_from_path(repo_relative_path))
-}
-
-fn fallback_name_from_path(repo_relative_path: &str) -> String {
-    Path::new(repo_relative_path)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| repo_relative_path.to_owned())
-}
-
-fn path_prefix(repo_relative_path: &str) -> String {
-    Path::new(repo_relative_path)
-        .parent()
-        .and_then(|parent| parent.to_str())
-        .unwrap_or("")
-        .to_owned()
-}
-
-fn escape_pipe(s: &str) -> String {
-    s.replace('|', r"\|")
 }
 
 fn render_default_row(
@@ -391,42 +356,9 @@ fn field_priority(field: Option<Field>) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        FieldRenderMode, field_priority, normalized_match_name, path_prefix, render_match_field,
-    };
+    use super::{FieldRenderMode, field_priority, render_match_field};
     use crate::score::Field;
     use std::collections::HashSet;
-
-    #[test]
-    fn normalized_match_name_prefers_frontmatter_value() {
-        assert_eq!(
-            normalized_match_name("docs/scoring-guide.md", Some("Scoring Guide".to_string())),
-            "Scoring Guide"
-        );
-    }
-
-    #[test]
-    fn normalized_match_name_falls_back_to_file_stem() {
-        assert_eq!(
-            normalized_match_name("docs/no-frontmatter.md", None),
-            "no-frontmatter"
-        );
-    }
-
-    #[test]
-    fn normalized_match_name_handles_path_without_file_stem() {
-        assert_eq!(normalized_match_name("", None), "");
-    }
-
-    #[test]
-    fn path_prefix_is_empty_for_repo_root_documents() {
-        assert_eq!(path_prefix("root-guide.md"), "");
-    }
-
-    #[test]
-    fn path_prefix_uses_directory_only() {
-        assert_eq!(path_prefix("docs/skills/SKILL.md"), "docs/skills");
-    }
 
     #[test]
     fn field_priority_orders_path_and_none_after_named_fields() {

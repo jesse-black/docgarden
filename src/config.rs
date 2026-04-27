@@ -27,6 +27,10 @@ pub struct FrontmatterRuleConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileConfig {
+    #[serde(default = "default_skills_dir")]
+    pub skills_dir: String,
+    #[serde(default = "default_plans_dir")]
+    pub plans_dir: String,
     #[serde(default)]
     pub include: Vec<String>,
     #[serde(default)]
@@ -178,6 +182,8 @@ pub struct EffectiveRulePolicy {
 #[derive(Clone)]
 pub struct Config {
     pub repository_root: PathBuf,
+    pub skills_dir: PathBuf,
+    pub plans_dir: PathBuf,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub rule_applications: Vec<RuleApplication>,
@@ -193,6 +199,8 @@ impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Config")
             .field("repository_root", &self.repository_root)
+            .field("skills_dir", &self.skills_dir)
+            .field("plans_dir", &self.plans_dir)
             .field("include", &self.include)
             .field("exclude", &self.exclude)
             .field("rule_application_count", &self.rule_applications.len())
@@ -233,6 +241,9 @@ impl Config {
                 .context("failed to parse embedded default config")?
         };
 
+        let skills_dir = validate_repository_relative_dir("skills_dir", &parsed.skills_dir)?;
+        let plans_dir = validate_repository_relative_dir("plans_dir", &parsed.plans_dir)?;
+
         let mut known_extensions = default_extensions();
         for extension in parsed.extend_extensions {
             known_extensions.insert(normalize_extension(&extension));
@@ -266,6 +277,8 @@ impl Config {
 
         Ok(Self {
             repository_root,
+            skills_dir,
+            plans_dir,
             include,
             exclude: parsed.exclude,
             rule_applications,
@@ -359,6 +372,14 @@ impl Config {
             }
         }
         Ok(policy)
+    }
+
+    pub fn skills_root(&self) -> PathBuf {
+        self.repository_root.join(&self.skills_dir)
+    }
+
+    pub fn plans_root(&self) -> PathBuf {
+        self.repository_root.join(&self.plans_dir)
     }
 }
 
@@ -509,6 +530,39 @@ fn default_respect_gitignore() -> bool {
     true
 }
 
+fn default_skills_dir() -> String {
+    ".agents/skills".to_string()
+}
+
+fn default_plans_dir() -> String {
+    "docs/exec-plans".to_string()
+}
+
+fn validate_repository_relative_dir(field: &str, value: &str) -> Result<PathBuf> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        bail!("{field} must not be empty");
+    }
+
+    let path = Path::new(trimmed);
+    if path.is_absolute() {
+        bail!("{field} must be a relative path under the repository root");
+    }
+
+    for component in path.components() {
+        if matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        ) {
+            bail!("{field} must stay under the repository root");
+        }
+    }
+
+    Ok(path.to_path_buf())
+}
+
 fn normalize_extension(value: &str) -> String {
     if value.starts_with('.') {
         value.to_string()
@@ -536,6 +590,8 @@ mod tests {
         assert!(config.config_path.is_none());
         assert!(!config.rule_applications.is_empty());
         assert!(!config.frontmatter_rules.is_empty());
+        assert_eq!(config.skills_dir, Path::new(".agents/skills"));
+        assert_eq!(config.plans_dir, Path::new("docs/exec-plans"));
     }
 
     #[test]
@@ -572,6 +628,8 @@ mod tests {
             &config_path,
             r#"
 respect_gitignore = false
+skills_dir = ".codex/skills"
+plans_dir = "plans"
 extend_extensions = ["proto", ".rego"]
 remove_extensions = ["md"]
 extend_special_filenames = ["Tiltfile"]
@@ -589,6 +647,8 @@ disable = ["unresolved-link-path"]
         assert_eq!(config.config_path, Some(config_path));
         assert!(!config.config_was_explicit);
         assert!(!config.respect_gitignore);
+        assert_eq!(config.skills_dir, Path::new(".codex/skills"));
+        assert_eq!(config.plans_dir, Path::new("plans"));
         assert!(config.known_extensions.contains(".proto"));
         assert!(config.known_extensions.contains(".rego"));
         assert!(!config.known_extensions.contains(".md"));
@@ -606,6 +666,25 @@ disable = ["unresolved-link-path"]
 
         let other_policy = config.effective_rule_policy_for_path("README.md").unwrap();
         assert!(!other_policy.ignored_rules.contains("unresolved-link-path"));
+    }
+
+    #[test]
+    fn load_rejects_scope_dirs_outside_repository_root() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            "skills_dir = \"../skills\"\n",
+        )
+        .unwrap();
+        let err = Config::load(&repository_root, None).unwrap_err();
+        assert!(err.to_string().contains("skills_dir must stay under"));
+
+        fs::write(repository_root.join("docgarden.toml"), "plans_dir = \"\"\n").unwrap();
+        let err = Config::load(&repository_root, None).unwrap_err();
+        assert!(err.to_string().contains("plans_dir must not be empty"));
     }
 
     #[test]

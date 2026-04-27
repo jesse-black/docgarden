@@ -12,6 +12,14 @@ pub fn discover_markdown_files_for_targets(
     config: &Config,
     targets: &[PathBuf],
 ) -> Result<Vec<PathBuf>> {
+    discover_markdown_files_for_targets_with_depth(config, targets, DirectoryDepth::Recursive)
+}
+
+pub fn discover_markdown_files_for_targets_with_depth(
+    config: &Config,
+    targets: &[PathBuf],
+    depth: DirectoryDepth,
+) -> Result<Vec<PathBuf>> {
     let include = PatternMatcher::new(&config.include)?;
     let exclude = PatternMatcher::new(&config.exclude)?;
     let mut files = BTreeSet::new();
@@ -21,7 +29,7 @@ pub fn discover_markdown_files_for_targets(
             .metadata()
             .with_context(|| format!("failed to read {}", target.display()))?;
         if metadata.is_dir() {
-            for path in discover_markdown_files_under(config, target, &include, &exclude)? {
+            for path in discover_markdown_files_under(config, target, &include, &exclude, depth)? {
                 files.insert(path);
             }
         } else {
@@ -38,11 +46,18 @@ pub fn discover_markdown_files_for_targets(
     Ok(files.into_iter().collect())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DirectoryDepth {
+    Shallow,
+    Recursive,
+}
+
 fn discover_markdown_files_under(
     config: &Config,
     root: &Path,
     include: &PatternMatcher,
     exclude: &PatternMatcher,
+    depth: DirectoryDepth,
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
@@ -55,6 +70,9 @@ fn discover_markdown_files_under(
         .ignore(config.respect_gitignore)
         .require_git(false);
     walker.follow_links(false);
+    if depth == DirectoryDepth::Shallow {
+        walker.max_depth(Some(1));
+    }
 
     for entry in walker.build() {
         let entry = entry?;

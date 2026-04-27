@@ -128,6 +128,10 @@ Default text output should stay compact and token-conscious.
 docs/design-docs/example.md | Example Guide | Short description for discovery output.
 ```
 
+`list` should keep this fixed row shape instead of omitting trailing columns when fields are missing. Variable columns make the output harder for humans to scan and harder for agents or scripts to parse.
+
+For normal directory and scope listings, `list` should behave like a metadata catalog and omit documents that do not have a frontmatter `description`. Those files are usually structural or automatically loaded documents such as README-style files, `AGENTS.md`, or other root guidance. They can still be inspected when named explicitly as file targets, so `docgarden list README.md` remains useful for debugging metadata coverage.
+
 `docgarden match <QUERY>` should emit:
 
 ```text
@@ -237,6 +241,8 @@ The output shape should remain the common discovery row:
 - name frontmatter if present
 - description frontmatter if present
 - optional scope label if known
+
+Scope and directory listings should omit documents without a frontmatter `description`; explicit file targets should still render them with an empty description column.
 
 For skills, the path is the skill's `SKILL.md` path, `name` is the skill frontmatter `name`, and `description` is the skill frontmatter `description`.
 
