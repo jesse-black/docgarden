@@ -39,13 +39,13 @@ Skill discovery is still part of the product, but it no longer needs a separate 
 
 The public TOML shape is:
 
-    skills_dir = ".agents/skills"
+    skills-dir = ".agents/skills"
 
-This is similar to `path_style = "backticks"`: it is a foundational repository convention that should be easy to read without requiring an explicit catch-all scope entry.
+This is similar to a foundational style setting: it should be easy to read without requiring an explicit catch-all scope entry.
 
-The main reason is ergonomics. Skill-scoped discovery and validation need a default place to look, and `skills_dir` gives that concept a direct home in configuration.
+The main reason is ergonomics. Skill-scoped discovery and validation need a default place to look, and `skills-dir` gives that concept a direct home in configuration.
 
-The key is `skills_dir` because the configured value is a directory path, not a repository root. The spelling follows the rest of the new `docgarden` configuration by using snake_case in TOML.
+The key is `skills-dir` because the configured value is a directory path, not a repository root. The spelling follows the rest of the new `docgarden` configuration by using kebab-case in TOML.
 
 ## Inferred Skills Scope
 
@@ -53,13 +53,13 @@ Once the skills directory exists, `docgarden` can infer a built-in skills scope 
 
 The practical direction is:
 
-- `skills_dir` is enough to make skill-scoped discovery and `docgarden skills validate ...` work
+- `skills-dir` is enough to make skill-scoped discovery and `docgarden skills validate ...` work
 - skills validation rules can apply automatically under that directory when a repository opts into linting those files
 - rule configuration may later target the built-in `skills` scope explicitly when users need overrides
 
 That keeps the common case ergonomic without requiring a public generic grouping layer first.
 
-`skills_dir` remains a top-level setting rather than a member of a generic `[directories]` table. It is a first-class product convention, not just an arbitrary filesystem path.
+`skills-dir` remains a top-level setting rather than a member of a generic `[directories]` table. It is a first-class product convention, not just an arbitrary filesystem path.
 
 ## `skills validate`
 
@@ -163,7 +163,7 @@ The safer direction is:
 The current design direction is:
 
 - add a repo-wide skills directory config
-- use the public TOML spelling `skills_dir`
+- use the public TOML spelling `skills-dir`
 - let that config power skill-scoped discovery and validation directly
 - keep skill discovery under `docgarden list` and `docgarden match` via scope switches documented in `docs/design-docs/match-and-list.md`
 - add `docgarden skills validate <TARGET>` as the built-in skill-schema validation path

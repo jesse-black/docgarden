@@ -26,14 +26,14 @@ In `docgarden`, that suggests the following default checks for skill main files:
 
 | Limit | Default | Status |
 | --- | --- | --- |
-| `max_lines` | `500` | Accepted default for skill main files |
-| `max_tokens` | `5000` | Accepted default for skill main files |
+| `max-lines` | `500` | Accepted default for skill main files |
+| `max-tokens` | `5000` | Accepted default for skill main files |
 
 These defaults should be treated as defaults, not hard-coded universal policy. Repositories may need to override them, but `docgarden` can ship them as a strong built-in starting point for skill files.
 
 ## Current Direction
 
-The first implementation is explicit-config only. It supports path-targeted `max_lines` and `max_tokens` rules, counts the complete Markdown file, defaults configured budget diagnostics to errors, and lets entries use `severity = "warn"` for warning-only adoption.
+The first implementation is explicit-config only. It supports path-targeted `max-lines` and `max-tokens` rules, counts the complete Markdown file, defaults configured budget diagnostics to errors, and lets entries use `severity = "warn"` for warning-only adoption.
 
 ### Tokenizer Decision
 
@@ -65,7 +65,7 @@ The first measurable checks are:
 
 Other possible measures such as file size or section count are lower priority and should not be assumed yet.
 
-Informational reporting for these measures belongs in `docs/design-docs/stats.md`. This document focuses on enforcement behavior, defaults, and configuration for `max_lines` and `max_tokens`.
+Informational reporting for these measures belongs in `docs/design-docs/stats.md`. This document focuses on enforcement behavior, defaults, and configuration for `max-lines` and `max-tokens`.
 
 ### Why Limits Instead Of Structure Rules
 
@@ -109,28 +109,28 @@ A small example:
 
     [[rules]]
     path = ".agents/skills/**/SKILL.md"
-    max_lines = 500
-    max_tokens = 5000
+    max-lines = 500
+    max-tokens = 5000
 
     [[rules]]
     path = "AGENTS.md"
-    max_tokens = 1200
+    max-tokens = 1200
 
-The important point is that limit fields are rule options targeted by the same path layer as other rule behavior. Setting `max_tokens` or `max_lines` is enough to enable the corresponding budget check for that path pattern. A separate `rule = "context-budget"` field would add ceremony without selecting any behavior that the limit fields do not already identify.
+The important point is that limit fields are rule options targeted by the same path layer as other rule behavior. Setting `max-tokens` or `max-lines` is enough to enable the corresponding budget check for that path pattern. A separate `rule = "context-budget"` field would add ceremony without selecting any behavior that the limit fields do not already identify.
 
 If built-in defaults later apply a token or line budget automatically, repositories can opt out through the existing disable list:
 
     [[rules]]
     path = "docs/references/**"
-    disable = ["max_tokens", "max_lines"]
+    disable = ["max-tokens", "max-lines"]
     reason = "Imported source-derived docs preserve source fidelity over compactness."
 
 ### Skill-Aware Configuration Questions
 
 Open questions for the configuration model:
 
-- Should context-budget implementation wait for `skills_dir`, or should the first version require explicit path patterns for skill main files?
-- Should skill main-file detection use the configured `skills_dir` plus the Agent Skills main-file filename convention once `skills_dir` exists?
+- Should context-budget implementation wait for `skills-dir`, or should the first version require explicit path patterns for skill main files?
+- Should skill main-file detection use the configured `skills-dir` plus the Agent Skills main-file filename convention once `skills-dir` exists?
 - How should repositories override defaults for one skill collection without affecting another?
 
 ### Severity And Enforcement
@@ -141,11 +141,11 @@ The configured entry's `severity` applies to every budget field in that `[[rules
 
     [[rules]]
     path = "AGENTS.md"
-    max_tokens = 1200
+    max-tokens = 1200
 
     [[rules]]
     path = "AGENTS.md"
-    max_lines = 150
+    max-lines = 150
     severity = "warn"
 
 ### Agent Entry-Point Defaults

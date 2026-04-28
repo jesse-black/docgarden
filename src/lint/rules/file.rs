@@ -26,7 +26,7 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
                     position: None,
                     rule: Rule::MaxTokens,
                     message: format!(
-                        "File has {observed} tokens, which exceeds configured max_tokens = {}.",
+                        "File has {observed} tokens, which exceeds configured max-tokens = {}.",
                         limit.limit
                     ),
                     fixable: false,
@@ -46,7 +46,7 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
                     position: None,
                     rule: Rule::MaxLines,
                     message: format!(
-                        "File has {observed} lines, which exceeds configured max_lines = {}.",
+                        "File has {observed} lines, which exceeds configured max-lines = {}.",
                         limit.limit
                     ),
                     fixable: false,

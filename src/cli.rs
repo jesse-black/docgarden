@@ -130,12 +130,12 @@ struct MatchArgs {
     explain: bool,
     #[arg(
         long,
-        help = "Restrict matching to configured skills_dir SKILL.md files"
+        help = "Restrict matching to configured skills-dir SKILL.md files"
     )]
     skills: bool,
     #[arg(
         long,
-        help = "Restrict matching to configured plans_dir Markdown files"
+        help = "Restrict matching to configured plans-dir Markdown files"
     )]
     plans: bool,
 }
@@ -159,13 +159,13 @@ struct ListArgs {
     no_gitignore: bool,
     #[arg(short = 'R', long, help = "Recurse into nested directory targets")]
     recurse: bool,
-    #[arg(long, help = "List configured skills_dir SKILL.md files")]
+    #[arg(long, help = "List configured skills-dir SKILL.md files")]
     skills: bool,
-    #[arg(long, help = "List configured plans_dir Markdown files")]
+    #[arg(long, help = "List configured plans-dir Markdown files")]
     plans: bool,
-    #[arg(long, help = "List Markdown files under plans_dir/active")]
+    #[arg(long, help = "List Markdown files under plans-dir/active")]
     active_plans: bool,
-    #[arg(long, help = "List Markdown files under plans_dir/completed")]
+    #[arg(long, help = "List Markdown files under plans-dir/completed")]
     completed_plans: bool,
 }
 

@@ -19,7 +19,7 @@ It should report the same two measures used by context-budget rules:
 - line count
 - token count
 
-It should reuse the same Markdown file discovery path as `docgarden lint` so a target such as `docs/` means the same thing in both commands. It should also use the same tokenizer decision as budget enforcement, currently `o200k_base` through `tiktoken-rs`, so the reported token counts match `max_tokens` diagnostics.
+It should reuse the same Markdown file discovery path as `docgarden lint` so a target such as `docs/` means the same thing in both commands. It should also use the same tokenizer decision as budget enforcement, currently `o200k_base` through `tiktoken-rs`, so the reported token counts match `max-tokens` diagnostics.
 
 ## Command Shape
 
@@ -45,9 +45,9 @@ The default human output should be a compact table:
     AGENTS.md                                    25     921
     docs/design-docs/line-and-token-limits.md  184    2360
 
-If the loaded configuration supplies `max_lines` or `max_tokens` for a reported file, the command may include those effective limits as additional columns:
+If the loaded configuration supplies `max-lines` or `max-tokens` for a reported file, the command may include those effective limits as additional columns:
 
-    path              lines  max_lines  tokens  max_tokens
+    path              lines  max-lines  tokens  max-tokens
     AGENTS.md            25        150     921        1200
 
 The command should stay text-first in v1 and should not add a `--json` output mode just for speculative automation. Repository-gardening workflows are likely to be agent-mediated, and compact human-readable output is a better default fit for that use case. If a concrete non-agent automation case appears later, structured output can be reconsidered then.

@@ -97,14 +97,14 @@ Do not use this step for code-first work, code symbol searches, test names, comp
 `docgarden` looks for `docgarden.toml` at the repository root. If you do not create one, it uses this built-in default configuration:
 
 ```toml
-skills_dir = ".agents/skills"
-plans_dir = "docs/exec-plans"
+skills-dir = ".agents/skills"
+plans-dir = "docs/exec-plans"
 
 [[rules]]
 path = "*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 1024
+max-chars = 1024
 
 [[rules]]
 path = "*.md"
@@ -115,13 +115,13 @@ required = ["description"]
 
 [[rules]]
 path = "AGENTS.md"
-max_lines = 100
-max_tokens = 1000
+max-lines = 100
+max-tokens = 1000
 
 [[rules]]
 path = "SKILL.md"
-max_lines = 500
-max_tokens = 5000
+max-lines = 500
+max-tokens = 5000
 
 [rules.frontmatter]
 required = ["name", "description"]

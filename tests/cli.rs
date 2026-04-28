@@ -363,7 +363,7 @@ fn list_scope_switches_use_configured_directories() {
     let root = temp.path();
     fs::write(
         root.join("docgarden.toml"),
-        "skills_dir = \"custom/skills\"\nplans_dir = \"custom/plans\"\n",
+        "skills-dir = \"custom/skills\"\nplans-dir = \"custom/plans\"\n",
     )
     .unwrap();
     fs::create_dir_all(root.join("custom/skills/beacon")).unwrap();
@@ -423,7 +423,7 @@ fn list_scope_reports_configured_root_that_is_not_a_directory() {
     fs::create_dir_all(root.join("custom")).unwrap();
     fs::write(
         root.join("docgarden.toml"),
-        "skills_dir = \"custom/skills.md\"\n",
+        "skills-dir = \"custom/skills.md\"\n",
     )
     .unwrap();
     fs::write(root.join("custom/skills.md"), "# Not a directory\n").unwrap();
@@ -433,7 +433,7 @@ fn list_scope_reports_configured_root_that_is_not_a_directory() {
         .args(["list", "--skills"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("configured skills_dir path"))
+        .stderr(predicate::str::contains("configured skills-dir path"))
         .stderr(predicate::str::contains("is not a directory"));
 }
 
@@ -444,7 +444,7 @@ fn list_status_plan_scopes_report_configured_plans_root_that_is_not_a_directory(
     fs::create_dir_all(root.join("custom")).unwrap();
     fs::write(
         root.join("docgarden.toml"),
-        "plans_dir = \"custom/plans\"\n",
+        "plans-dir = \"custom/plans\"\n",
     )
     .unwrap();
     fs::write(root.join("custom/plans"), "# Not a directory\n").unwrap();
@@ -455,7 +455,7 @@ fn list_status_plan_scopes_report_configured_plans_root_that_is_not_a_directory(
             .args(["list", scope])
             .assert()
             .failure()
-            .stderr(predicate::str::contains("configured plans_dir path"))
+            .stderr(predicate::str::contains("configured plans-dir path"))
             .stderr(predicate::str::contains("is not a directory"));
     }
 }
@@ -1275,7 +1275,7 @@ fn config_can_opt_out_of_gitignore_support() {
     let root = temp.path();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::create_dir_all(root.join(PACKAGED_DOCS_DIR)).unwrap();
-    fs::write(root.join("docgarden.toml"), "respect_gitignore = false\n").unwrap();
+    fs::write(root.join("docgarden.toml"), "respect-gitignore = false\n").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
     fs::write(root.join("docs/guide.md"), "Guide text.\n").unwrap();
     fs::write(root.join(PACKAGED_STALE_DOC), "[Missing](missing.md)\n").unwrap();
@@ -1477,7 +1477,7 @@ fn context_budget_reports_max_tokens_as_error_by_default() {
         r#"
 [[rules]]
 path = "README.md"
-max_tokens = 1
+max-tokens = 1
 "#,
     )
     .unwrap();
@@ -1491,7 +1491,7 @@ max_tokens = 1
         .stdout(predicate::str::contains("error  max-tokens"))
         .stdout(predicate::str::contains("File has"))
         .stdout(predicate::str::contains(
-            "which exceeds configured max_tokens = 1.",
+            "which exceeds configured max-tokens = 1.",
         ))
         .stdout(predicate::str::contains("fixable").not());
 }
@@ -1505,7 +1505,7 @@ fn context_budget_warn_severity_does_not_fail_lint() {
         r#"
 [[rules]]
 path = "README.md"
-max_lines = 1
+max-lines = 1
 severity = "warn"
 "#,
     )
@@ -1519,7 +1519,7 @@ severity = "warn"
         .success()
         .stdout(predicate::str::contains("warning  max-lines"))
         .stdout(predicate::str::contains(
-            "File has 2 lines, which exceeds configured max_lines = 1.",
+            "File has 2 lines, which exceeds configured max-lines = 1.",
         ));
 }
 
@@ -1532,12 +1532,12 @@ fn context_budget_disable_suppresses_one_budget_rule() {
         r#"
 [[rules]]
 path = "README.md"
-max_tokens = 1
-max_lines = 1
+max-tokens = 1
+max-lines = 1
 
 [[rules]]
 path = "README.md"
-disable = ["max_tokens"]
+disable = ["max-tokens"]
 reason = "Only line length is enforced here."
 "#,
     )
@@ -1562,11 +1562,11 @@ fn context_budget_duplicate_path_entries_can_split_severity() {
         r#"
 [[rules]]
 path = "README.md"
-max_tokens = 1
+max-tokens = 1
 
 [[rules]]
 path = "README.md"
-max_lines = 1
+max-lines = 1
 severity = "warn"
 "#,
     )
@@ -1591,11 +1591,11 @@ fn context_budget_later_matching_limit_wins() {
         r#"
 [[rules]]
 path = "README.md"
-max_tokens = 1
+max-tokens = 1
 
 [[rules]]
 path = "README.md"
-max_tokens = 1000
+max-tokens = 1000
 "#,
     )
     .unwrap();
@@ -1618,16 +1618,16 @@ fn context_budget_later_matching_limit_can_reenable_after_disable() {
         r#"
 [[rules]]
 path = "README.md"
-max_tokens = 1
+max-tokens = 1
 
 [[rules]]
 path = "README.md"
-disable = ["max_tokens"]
+disable = ["max-tokens"]
 reason = "Temporarily disable token budget."
 
 [[rules]]
 path = "README.md"
-max_tokens = 1
+max-tokens = 1
 "#,
     )
     .unwrap();
@@ -1650,7 +1650,7 @@ fn context_budget_fix_does_not_rewrite_over_budget_files() {
         r#"
 [[rules]]
 path = "README.md"
-max_lines = 1
+max-lines = 1
 "#,
     )
     .unwrap();
@@ -1815,7 +1815,7 @@ fn frontmatter_max_chars_enforced_for_present_field() {
 path = "**/*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 20
+max-chars = 20
 "#,
     )
     .unwrap();
@@ -1831,7 +1831,7 @@ max_chars = 20
         .assert()
         .failure()
         .stdout(predicate::str::contains("frontmatter-field-max-chars"))
-        .stdout(predicate::str::contains("max_chars = 20"));
+        .stdout(predicate::str::contains("max-chars = 20"));
 }
 
 #[test]
@@ -1845,7 +1845,7 @@ fn frontmatter_max_chars_not_triggered_when_field_absent() {
 path = "**/*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 20
+max-chars = 20
 "#,
     )
     .unwrap();
