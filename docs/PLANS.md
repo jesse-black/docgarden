@@ -1,5 +1,5 @@
 ---
-description: "Canonical authoring contract for `docgarden` ExecPlans, including required sections, formatting rules, and self-contained planning expectations; read when writing, revising, reviewing, or validating an execution plan for repository work."
+description: "ExecPlan authoring contract to create, write, revise, review, and validate repository execution plans; read when shaping plan requirements, required sections, formatting rules, or self-contained planning expectations."
 ---
 
 # Agent Execution Plans
