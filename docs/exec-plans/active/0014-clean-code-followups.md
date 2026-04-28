@@ -30,25 +30,25 @@ description: "Active plan for addressing clean-code follow-ups across config rul
 - None yet
 
 ## Steps
-- [ ] Read `docs/CODESTYLE.md` before implementation and keep discoveries here if it changes any design choice.
-- [ ] Pin current behavior for rule parsing and rule policy reduction with focused tests covering unknown rule rejection, supported `enable` rules, `disable` always-on rules, opt-in rule toggles, and budget rule disable/override behavior.
-- [ ] Introduce a `Rule` enum for rule identifiers with `as_str`, `FromStr`, and serde deserialization from existing kebab-case and snake-case config spellings.
-- [ ] Replace string rule storage and comparisons in `RuleConfig`, `RuleApplication`, `EffectiveRulePolicy.ignored_rules`, config validation, and `DiagnosticPayload` emit sites with `Rule`.
-- [ ] Keep external diagnostic output unchanged by converting `Rule` to the existing string spelling at reporting boundaries.
-- [ ] Collapse `lint::FilePolicy` into `config::EffectiveRulePolicy` or pass the required leaf fields directly, choosing the smaller change after `Rule` lands.
-- [ ] Refactor `Config::effective_rule_policy_for_path` to initialize and mutate `EffectiveRulePolicy` directly instead of maintaining parallel locals.
-- [ ] Flatten `RuleConfig.disable` and `RuleConfig.enable` from `Option<Vec<_>>` to serde-defaulted `Vec<_>`.
-- [ ] Add or adjust focused tests for inline and link reference classification before refactoring `src/lint/references.rs`.
-- [ ] Unify `classify_inline_reference` and `classify_link_reference` behind `ReferenceKind`, with a small `CandidateReference` constructor or helper for repeated field assembly.
-- [ ] Extract private `Config::load` orchestration helpers such as config path resolution, parse/default loading, extension merging, and special-filename merging without changing error context.
-- [ ] Remove `#[cfg(test)]` fields from `CombinedFieldStats`; either delete formula-only assertions or expose stable `pub(crate)` accessors for derived values without changing the struct shape under tests.
-- [ ] Add a YAML parser skip/indent helper and use it in `parse_yaml_block`, `parse_block_value`, `parse_sequence`, and `parse_nested_mapping`.
-- [ ] Replace repeated YAML unsupported-character and unsupported-prefix checks with single-pass `matches!` helpers.
-- [ ] Change `lint_file` to return `Result<Vec<Diagnostic>>` directly and update `src/cli.rs` plus tests that mention `LintResult`.
-- [ ] Change `emit_finding` to take `&mut WalkState` and `Finding`, leaving `emit_findings` as a simple iterator.
-- [ ] Replace duplicate node variant re-checks in `src/lint/rules/local_paths.rs` with idiomatic pattern binding or typed helper functions.
-- [ ] Replace eager `unwrap_or(std::env::current_dir()?)` in `infer_repository_root` with a lazy fallback path and keep existing root tests passing.
-- [ ] Run `cargo fmt`.
+- [x] Read `docs/CODESTYLE.md` before implementation and keep discoveries here if it changes any design choice.
+- [x] Pin current behavior for rule parsing and rule policy reduction with focused tests covering unknown rule rejection, supported `enable` rules, `disable` always-on rules, opt-in rule toggles, and budget rule disable/override behavior.
+- [x] Introduce a `Rule` enum for rule identifiers with `as_str`, `FromStr`, and serde deserialization from existing kebab-case and snake-case config spellings.
+- [x] Replace string rule storage and comparisons in `RuleConfig`, `RuleApplication`, `EffectiveRulePolicy.ignored_rules`, config validation, and `DiagnosticPayload` emit sites with `Rule`.
+- [x] Keep external diagnostic output unchanged by converting `Rule` to the existing string spelling at reporting boundaries.
+- [x] Collapse `lint::FilePolicy` into `config::EffectiveRulePolicy` or pass the required leaf fields directly, choosing the smaller change after `Rule` lands.
+- [x] Refactor `Config::effective_rule_policy_for_path` to initialize and mutate `EffectiveRulePolicy` directly instead of maintaining parallel locals.
+- [x] Flatten `RuleConfig.disable` and `RuleConfig.enable` from `Option<Vec<_>>` to serde-defaulted `Vec<_>`.
+- [x] Add or adjust focused tests for inline and link reference classification before refactoring `src/lint/references.rs`.
+- [x] Unify `classify_inline_reference` and `classify_link_reference` behind `ReferenceKind`, with a small `CandidateReference` constructor or helper for repeated field assembly.
+- [x] Extract private `Config::load` orchestration helpers such as config path resolution, parse/default loading, extension merging, and special-filename merging without changing error context.
+- [x] Remove `#[cfg(test)]` fields from `CombinedFieldStats`; either delete formula-only assertions or expose stable `pub(crate)` accessors for derived values without changing the struct shape under tests.
+- [x] Add a YAML parser skip/indent helper and use it in `parse_yaml_block`, `parse_block_value`, `parse_sequence`, and `parse_nested_mapping`.
+- [x] Replace repeated YAML unsupported-character and unsupported-prefix checks with single-pass `matches!` helpers.
+- [x] Change `lint_file` to return `Result<Vec<Diagnostic>>` directly and update `src/cli.rs` plus tests that mention `LintResult`.
+- [x] Change `emit_finding` to take `&mut WalkState` and `Finding`, leaving `emit_findings` as a simple iterator.
+- [x] Replace duplicate node variant re-checks in `src/lint/rules/local_paths.rs` with idiomatic pattern binding or typed helper functions.
+- [x] Replace eager `unwrap_or(std::env::current_dir()?)` in `infer_repository_root` with a lazy fallback path and keep existing root tests passing.
+- [x] Run `cargo fmt`.
 
 ## Validation
 - `cargo test --lib config::tests`
@@ -62,7 +62,7 @@ description: "Active plan for addressing clean-code follow-ups across config rul
 - `cargo xtask validate`
 
 ## Discoveries
-- None yet
+- `Rule` serde deserialization now rejects unknown rule names during TOML parsing, so the unknown-rule test pins parse rejection rather than the old post-parse validator wording.
 
 ## Review
 - [ ] None yet

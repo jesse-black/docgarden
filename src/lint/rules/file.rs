@@ -3,12 +3,13 @@ use std::sync::OnceLock;
 use anyhow::{Result, anyhow};
 use tiktoken_rs::{CoreBPE, o200k_base};
 
+use crate::config::{EffectiveRulePolicy, Rule};
 use crate::lint::reporting::DiagnosticPayload;
 
-use super::super::{FilePolicy, Finding};
+use super::super::Finding;
 
 pub(crate) struct FileRuleContext<'a> {
-    pub(crate) policy: FilePolicy,
+    pub(crate) policy: &'a EffectiveRulePolicy,
     pub(crate) file: &'a str,
     pub(crate) source: &'a str,
 }
@@ -23,7 +24,7 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
                 payload: DiagnosticPayload {
                     file: context.file,
                     position: None,
-                    rule: "max_tokens",
+                    rule: Rule::MaxTokens,
                     message: format!(
                         "File has {observed} tokens, which exceeds configured max_tokens = {}.",
                         limit.limit
@@ -43,7 +44,7 @@ pub(crate) fn evaluate_file_rules<'a>(context: &FileRuleContext<'a>) -> Result<V
                 payload: DiagnosticPayload {
                     file: context.file,
                     position: None,
-                    rule: "max_lines",
+                    rule: Rule::MaxLines,
                     message: format!(
                         "File has {observed} lines, which exceeds configured max_lines = {}.",
                         limit.limit

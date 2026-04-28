@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::config::Config;
+use crate::config::{Config, Rule};
 use crate::diagnostics::Severity;
 use crate::frontmatter::{FrontmatterParseResult, parse_from_str};
 use crate::lint::Finding;
@@ -11,7 +11,7 @@ fn missing_field_finding<'a>(file: &'a str, field: &str) -> Finding<'a> {
         payload: DiagnosticPayload {
             file,
             position: None,
-            rule: "frontmatter-field-missing",
+            rule: Rule::FrontmatterFieldMissing,
             message: format!("Required frontmatter field `{field}` is missing."),
             fixable: false,
             severity: Severity::Error,
@@ -51,7 +51,7 @@ pub(crate) fn evaluate_frontmatter_rules<'a>(
                 payload: DiagnosticPayload {
                     file: context.file,
                     position: None,
-                    rule: "frontmatter-malformed",
+                    rule: Rule::FrontmatterMalformed,
                     message: format!(
                         "Frontmatter block is malformed or uses unsupported YAML constructs (line {line})."
                     ),
@@ -77,7 +77,7 @@ pub(crate) fn evaluate_frontmatter_rules<'a>(
                         payload: DiagnosticPayload {
                             file: context.file,
                             position: None,
-                            rule: "frontmatter-field-max-chars",
+                            rule: Rule::FrontmatterFieldMaxChars,
                             message: format!(
                                 "Frontmatter field `{field}` has {char_count} characters, \
                                  which exceeds configured max_chars = {max_chars}."

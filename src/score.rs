@@ -8,15 +8,7 @@ pub(crate) struct Candidate<'a> {
 }
 
 pub(crate) struct CombinedFieldStats {
-    #[cfg(test)]
-    name: FieldStats,
-    #[cfg(test)]
-    path_prefix: FieldStats,
-    #[cfg(test)]
-    description: FieldStats,
     pseudo_doc_count: f32,
-    #[cfg(test)]
-    pseudo_sum_total_term_freq: f32,
     avgdl: f32,
     pseudo_df: HashMap<String, u32>,
 }
@@ -69,15 +61,7 @@ impl CombinedFieldStats {
         }
 
         Self {
-            #[cfg(test)]
-            name,
-            #[cfg(test)]
-            path_prefix,
-            #[cfg(test)]
-            description,
             pseudo_doc_count,
-            #[cfg(test)]
-            pseudo_sum_total_term_freq,
             avgdl,
             pseudo_df,
         }
@@ -101,11 +85,6 @@ impl CombinedFieldStats {
     #[cfg(test)]
     fn pseudo_doc_count(&self) -> f32 {
         self.pseudo_doc_count
-    }
-
-    #[cfg(test)]
-    fn pseudo_sum_total_term_freq(&self) -> f32 {
-        self.pseudo_sum_total_term_freq
     }
 }
 
@@ -391,16 +370,7 @@ mod tests {
         ];
         let stats = CombinedFieldStats::build(&docs);
 
-        assert_eq!(stats.name.doc_count, 2);
-        assert_eq!(stats.path_prefix.doc_count, 1);
-        assert_eq!(stats.description.doc_count, 1);
         assert_eq!(stats.pseudo_doc_count(), 2.0);
-        assert!(
-            (stats.pseudo_sum_total_term_freq()
-                - (NAME_BOOST * 2.0 + PATH_PREFIX_BOOST * 1.0 + DESCRIPTION_BOOST * 1.0))
-                .abs()
-                < 1e-6
-        );
         assert!(stats.avgdl() > 0.0);
     }
 

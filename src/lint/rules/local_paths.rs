@@ -1,6 +1,7 @@
 use anyhow::Result;
 use markdown::mdast::Node;
 
+use crate::config::Rule;
 use crate::diagnostics::Severity;
 use crate::lint::references::{
     ReferenceKind, classify_inline_reference, classify_link_reference, is_external,
@@ -16,22 +17,16 @@ pub(crate) fn evaluate_node<'a>(
     node: &'a Node,
 ) -> Result<Vec<Finding<'a>>> {
     match node {
-        Node::InlineCode(_) => lint_inline_code_node(context, node),
-        Node::Link(_) => lint_link_node(context, node),
+        Node::InlineCode(inline) => lint_inline_code_node(context, inline),
+        Node::Link(link) => lint_link_node(context, link),
         _ => Ok(Vec::new()),
     }
 }
 
 fn lint_inline_code_node<'a>(
     context: &NodeRuleContext<'a>,
-    node: &'a Node,
+    inline: &'a markdown::mdast::InlineCode,
 ) -> Result<Vec<Finding<'a>>> {
-    let Some(inline) = (match node {
-        Node::InlineCode(inline) => Some(inline),
-        _ => None,
-    }) else {
-        return Ok(Vec::new());
-    };
     let value = inline.value.trim();
     if let Some(candidate) = classify_inline_reference(context.config, value)
         && let Some(resolved) = resolve_candidate(context.file, &candidate, ReferenceKind::Backtick)
@@ -45,12 +40,12 @@ fn lint_inline_code_node<'a>(
             return Ok(Vec::new());
         }
         if !exists {
-            if let Some(severity) = context.policy.unresolved_backtick_path_severity {
+            if let Some(severity) = context.policy.backtick_path_severity {
                 return Ok(vec![Finding {
                     payload: DiagnosticPayload {
                         file: context.file,
                         position: inline.position.as_ref(),
-                        rule: "unresolved-backtick-path",
+                        rule: Rule::UnresolvedBacktickPath,
                         message: format!(
                             "Local repository path `{}` does not resolve within the repository.",
                             candidate.display_text
@@ -70,7 +65,7 @@ fn lint_inline_code_node<'a>(
                 payload: DiagnosticPayload {
                     file: context.file,
                     position: inline.position.as_ref(),
-                    rule: "prefer-links-for-local-paths",
+                    rule: Rule::PreferLinksForLocalPaths,
                     message: format!(
                         "Local repository path `{}` should use Markdown link syntax.",
                         candidate.display_text
@@ -88,13 +83,10 @@ fn lint_inline_code_node<'a>(
     Ok(Vec::new())
 }
 
-fn lint_link_node<'a>(context: &NodeRuleContext<'a>, node: &'a Node) -> Result<Vec<Finding<'a>>> {
-    let Some(link) = (match node {
-        Node::Link(link) => Some(link),
-        _ => None,
-    }) else {
-        return Ok(Vec::new());
-    };
+fn lint_link_node<'a>(
+    context: &NodeRuleContext<'a>,
+    link: &'a markdown::mdast::Link,
+) -> Result<Vec<Finding<'a>>> {
     let destination = link.url.trim();
     if is_external(destination) {
         return Ok(Vec::new());
@@ -116,7 +108,7 @@ fn lint_link_node<'a>(context: &NodeRuleContext<'a>, node: &'a Node) -> Result<V
                 payload: DiagnosticPayload {
                     file: context.file,
                     position: link.position.as_ref(),
-                    rule: "unresolved-link-path",
+                    rule: Rule::UnresolvedLinkPath,
                     message: format!(
                         "Local repository link `[{}]({})` does not resolve within the repository.",
                         label_text(&link.children),

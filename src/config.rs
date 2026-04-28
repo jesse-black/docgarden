@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special_filenames};
 use crate::diagnostics::Severity;
@@ -56,9 +57,9 @@ pub struct RuleConfig {
     #[serde(default)]
     pub exclude: Vec<String>,
     #[serde(default)]
-    pub disable: Option<Vec<String>>,
+    pub disable: Vec<Rule>,
     #[serde(default)]
-    pub enable: Option<Vec<String>>,
+    pub enable: Vec<Rule>,
     #[serde(default)]
     pub max_tokens: Option<usize>,
     #[serde(default)]
@@ -84,6 +85,69 @@ impl From<RuleSeverity> for Severity {
             RuleSeverity::Error => Severity::Error,
             RuleSeverity::Warn => Severity::Warning,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Rule {
+    UnresolvedLinkPath,
+    UnresolvedBacktickPath,
+    PreferLinksForLocalPaths,
+    MaxTokens,
+    MaxLines,
+    FrontmatterFieldMissing,
+    FrontmatterMalformed,
+    FrontmatterFieldMaxChars,
+}
+
+impl Rule {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UnresolvedLinkPath => "unresolved-link-path",
+            Self::UnresolvedBacktickPath => "unresolved-backtick-path",
+            Self::PreferLinksForLocalPaths => "prefer-links-for-local-paths",
+            Self::MaxTokens => "max_tokens",
+            Self::MaxLines => "max_lines",
+            Self::FrontmatterFieldMissing => "frontmatter-field-missing",
+            Self::FrontmatterMalformed => "frontmatter-malformed",
+            Self::FrontmatterFieldMaxChars => "frontmatter-field-max-chars",
+        }
+    }
+}
+
+impl FromStr for Rule {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value {
+            "unresolved-link-path" | "unresolved_link_path" => Ok(Self::UnresolvedLinkPath),
+            "unresolved-backtick-path" | "unresolved_backtick_path" => {
+                Ok(Self::UnresolvedBacktickPath)
+            }
+            "prefer-links-for-local-paths" | "prefer_links_for_local_paths" => {
+                Ok(Self::PreferLinksForLocalPaths)
+            }
+            "max_tokens" | "max-tokens" => Ok(Self::MaxTokens),
+            "max_lines" | "max-lines" => Ok(Self::MaxLines),
+            "frontmatter-field-missing" | "frontmatter_field_missing" => {
+                Ok(Self::FrontmatterFieldMissing)
+            }
+            "frontmatter-malformed" | "frontmatter_malformed" => Ok(Self::FrontmatterMalformed),
+            "frontmatter-field-max-chars" | "frontmatter_field_max_chars" => {
+                Ok(Self::FrontmatterFieldMaxChars)
+            }
+            _ => Err(format!("unsupported rule `{value}`")),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Rule {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Rule::from_str(&value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -153,9 +217,9 @@ pub struct BudgetLimit {
 #[derive(Clone)]
 pub struct RuleApplication {
     target: CompiledRuleTarget,
-    pub disable: Vec<String>,
-    pub enable: Vec<String>,
-    /// Severity used when `enable` contains `"unresolved-backtick-path"`.
+    pub disable: Vec<Rule>,
+    pub enable: Vec<Rule>,
+    /// Severity used when `enable` contains `Rule::UnresolvedBacktickPath`.
     pub severity: RuleSeverity,
     pub max_tokens: Option<BudgetLimit>,
     pub max_lines: Option<BudgetLimit>,
@@ -172,7 +236,7 @@ impl RuleApplication {
 /// All non-frontmatter rule behavior flows through this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct EffectiveRulePolicy {
-    pub ignored_rules: BTreeSet<String>,
+    pub ignored_rules: BTreeSet<Rule>,
     pub backtick_path_severity: Option<Severity>,
     pub prefer_links_for_local_paths: bool,
     pub max_tokens: Option<BudgetLimit>,
@@ -220,54 +284,18 @@ impl Config {
             .canonicalize()
             .with_context(|| format!("failed to canonicalize {}", repository_root.display()))?;
         let config_was_explicit = explicit_config.is_some();
-        let config_path = if let Some(path) = explicit_config {
-            Some(path.to_path_buf())
-        } else {
-            let candidate = repository_root.join("docgarden.toml");
-            if candidate.exists() {
-                Some(candidate)
-            } else {
-                None
-            }
-        };
-
-        let parsed = if let Some(path) = &config_path {
-            let content = fs::read_to_string(path)
-                .with_context(|| format!("failed to read {}", path.display()))?;
-            toml::from_str::<FileConfig>(&content)
-                .with_context(|| format!("failed to parse {}", path.display()))?
-        } else {
-            toml::from_str::<FileConfig>(include_str!("data/default-config.toml"))
-                .context("failed to parse embedded default config")?
-        };
+        let config_path = resolve_config_path(&repository_root, explicit_config);
+        let parsed = load_file_config(config_path.as_deref())?;
 
         let skills_dir = validate_repository_relative_dir("skills_dir", &parsed.skills_dir)?;
         let plans_dir = validate_repository_relative_dir("plans_dir", &parsed.plans_dir)?;
 
-        let mut known_extensions = default_extensions();
-        for extension in parsed.extend_extensions {
-            known_extensions.insert(normalize_extension(&extension));
-        }
-        for extension in parsed.remove_extensions {
-            known_extensions.remove(&normalize_extension(&extension));
-        }
-
-        let mut special_filenames = default_special_filenames();
-        for filename in parsed.extend_special_filenames {
-            special_filenames.insert(filename);
-        }
-        for filename in parsed.remove_special_filenames {
-            special_filenames.remove(&filename);
-        }
-
-        let include = if parsed.include.is_empty() {
-            DEFAULT_SCAN_PATTERNS
-                .iter()
-                .map(|value| value.to_string())
-                .collect()
-        } else {
-            parsed.include
-        };
+        let known_extensions = merge_extensions(parsed.extend_extensions, parsed.remove_extensions);
+        let special_filenames = merge_special_filenames(
+            parsed.extend_special_filenames,
+            parsed.remove_special_filenames,
+        );
+        let include = include_patterns_or_default(parsed.include);
 
         if include.is_empty() {
             bail!("include patterns must not be empty");
@@ -304,11 +332,7 @@ impl Config {
         relative_path: &str,
     ) -> Result<EffectiveRulePolicy> {
         let relative_path = Path::new(relative_path);
-        let mut ignored_rules: BTreeSet<String> = BTreeSet::new();
-        let mut backtick_severity: Option<Severity> = None;
-        let mut prefer_links = false;
-        let mut max_tokens: Option<BudgetLimit> = None;
-        let mut max_lines: Option<BudgetLimit> = None;
+        let mut policy = EffectiveRulePolicy::default();
 
         for app in &self.rule_applications {
             if !app.matches(relative_path) {
@@ -316,42 +340,36 @@ impl Config {
             }
 
             for rule in &app.disable {
-                match rule.as_str() {
-                    "unresolved-backtick-path" => backtick_severity = None,
-                    "prefer-links-for-local-paths" => prefer_links = false,
-                    "max_tokens" => max_tokens = None,
-                    "max_lines" => max_lines = None,
-                    r => {
-                        ignored_rules.insert(r.to_string());
+                match rule {
+                    Rule::UnresolvedBacktickPath => policy.backtick_path_severity = None,
+                    Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = false,
+                    Rule::MaxTokens => policy.max_tokens = None,
+                    Rule::MaxLines => policy.max_lines = None,
+                    rule => {
+                        policy.ignored_rules.insert(*rule);
                     }
                 }
             }
 
             for rule in &app.enable {
-                match rule.as_str() {
-                    "unresolved-backtick-path" => {
-                        backtick_severity = Some(app.severity.into());
+                match rule {
+                    Rule::UnresolvedBacktickPath => {
+                        policy.backtick_path_severity = Some(app.severity.into());
                     }
-                    "prefer-links-for-local-paths" => prefer_links = true,
+                    Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = true,
                     _ => {}
                 }
             }
 
             if let Some(limit) = app.max_tokens {
-                max_tokens = Some(limit);
+                policy.max_tokens = Some(limit);
             }
             if let Some(limit) = app.max_lines {
-                max_lines = Some(limit);
+                policy.max_lines = Some(limit);
             }
         }
 
-        Ok(EffectiveRulePolicy {
-            ignored_rules,
-            backtick_path_severity: backtick_severity,
-            prefer_links_for_local_paths: prefer_links,
-            max_tokens,
-            max_lines,
-        })
+        Ok(policy)
     }
 
     pub fn frontmatter_policy_for_path(
@@ -383,6 +401,60 @@ impl Config {
     }
 }
 
+fn resolve_config_path(repository_root: &Path, explicit_config: Option<&Path>) -> Option<PathBuf> {
+    if let Some(path) = explicit_config {
+        return Some(path.to_path_buf());
+    }
+
+    let candidate = repository_root.join("docgarden.toml");
+    candidate.exists().then_some(candidate)
+}
+
+fn load_file_config(config_path: Option<&Path>) -> Result<FileConfig> {
+    if let Some(path) = config_path {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        toml::from_str::<FileConfig>(&content)
+            .with_context(|| format!("failed to parse {}", path.display()))
+    } else {
+        toml::from_str::<FileConfig>(include_str!("data/default-config.toml"))
+            .context("failed to parse embedded default config")
+    }
+}
+
+fn merge_extensions(extend: Vec<String>, remove: Vec<String>) -> BTreeSet<String> {
+    let mut known_extensions = default_extensions();
+    for extension in extend {
+        known_extensions.insert(normalize_extension(&extension));
+    }
+    for extension in remove {
+        known_extensions.remove(&normalize_extension(&extension));
+    }
+    known_extensions
+}
+
+fn merge_special_filenames(extend: Vec<String>, remove: Vec<String>) -> BTreeSet<String> {
+    let mut special_filenames = default_special_filenames();
+    for filename in extend {
+        special_filenames.insert(filename);
+    }
+    for filename in remove {
+        special_filenames.remove(&filename);
+    }
+    special_filenames
+}
+
+fn include_patterns_or_default(include: Vec<String>) -> Vec<String> {
+    if include.is_empty() {
+        DEFAULT_SCAN_PATTERNS
+            .iter()
+            .map(|value| value.to_string())
+            .collect()
+    } else {
+        include
+    }
+}
+
 fn lower_rules(
     root: &Path,
     rules: Vec<RuleConfig>,
@@ -401,15 +473,20 @@ fn lower_rules(
         }
         let pattern = rule.path;
         let exclude = rule.exclude;
-        let disabled_rules = rule.disable.unwrap_or_default();
-        let enabled_rules = rule.enable.unwrap_or_default();
+        let disabled_rules = rule.disable;
+        let enabled_rules = rule.enable;
         let severity = rule.severity.unwrap_or(RuleSeverity::Error);
 
         if !disabled_rules.is_empty() {
-            validate_rule_list("disable", &disabled_rules, is_known_rule)?;
+            validate_rule_list("disable", &disabled_rules)?;
         }
         if !enabled_rules.is_empty() {
-            validate_rule_list("enable", &enabled_rules, is_supported_enabled_rule)?;
+            validate_rule_list("enable", &enabled_rules)?;
+            for enabled_rule in &enabled_rules {
+                if !is_supported_enabled_rule(*enabled_rule) {
+                    bail!("unsupported rule `{}` in `enable`", enabled_rule.as_str());
+                }
+            }
         }
 
         let max_tokens = rule
@@ -473,40 +550,17 @@ fn budget_limit(rule: &str, limit: usize, severity: RuleSeverity) -> Result<Budg
     Ok(BudgetLimit { limit, severity })
 }
 
-fn validate_rule_list(
-    field: &str,
-    rules: &[String],
-    is_supported: impl Fn(&str) -> bool,
-) -> Result<()> {
+fn validate_rule_list(field: &str, rules: &[Rule]) -> Result<()> {
     if rules.is_empty() {
         bail!("rules `{field}` entries must not be empty");
-    }
-    for rule in rules {
-        if rule.trim().is_empty() {
-            bail!("rules `{field}` entries must not contain empty rule names");
-        }
-        if !is_supported(rule) {
-            bail!("unsupported rule `{rule}` in `{field}`");
-        }
     }
     Ok(())
 }
 
-fn is_known_rule(rule: &str) -> bool {
+fn is_supported_enabled_rule(rule: Rule) -> bool {
     matches!(
         rule,
-        "unresolved-link-path"
-            | "unresolved-backtick-path"
-            | "prefer-links-for-local-paths"
-            | "max_tokens"
-            | "max_lines"
-    )
-}
-
-fn is_supported_enabled_rule(rule: &str) -> bool {
-    matches!(
-        rule,
-        "unresolved-backtick-path" | "prefer-links-for-local-paths"
+        Rule::UnresolvedBacktickPath | Rule::PreferLinksForLocalPaths
     )
 }
 
@@ -573,9 +627,9 @@ fn normalize_extension(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, str::FromStr};
 
-    use super::{BudgetLimit, Config, RuleSeverity};
+    use super::{BudgetLimit, Config, Rule, RuleSeverity};
     use crate::diagnostics::Severity;
     use tempfile::TempDir;
 
@@ -661,11 +715,59 @@ disable = ["unresolved-link-path"]
         assert!(
             generated_policy
                 .ignored_rules
-                .contains("unresolved-link-path")
+                .contains(&Rule::UnresolvedLinkPath)
         );
 
         let other_policy = config.effective_rule_policy_for_path("README.md").unwrap();
-        assert!(!other_policy.ignored_rules.contains("unresolved-link-path"));
+        assert!(
+            !other_policy
+                .ignored_rules
+                .contains(&Rule::UnresolvedLinkPath)
+        );
+    }
+
+    #[test]
+    fn load_uses_explicit_config_and_non_default_include_patterns() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        let config_dir = temp.path().join("config");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("docgarden.toml");
+        fs::write(
+            &config_path,
+            r#"
+include = ["docs/**/*.md"]
+
+[[rules]]
+path = "**/*.md"
+disable = ["max_lines"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, Some(&config_path)).unwrap();
+
+        assert_eq!(config.config_path, Some(config_path));
+        assert!(config.config_was_explicit);
+        assert_eq!(config.include, vec!["docs/**/*.md".to_string()]);
+        let policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        assert_eq!(policy.max_lines, None);
+    }
+
+    #[test]
+    fn load_reports_explicit_config_read_errors_with_path() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        let missing_config = temp.path().join("missing.toml");
+
+        let error = Config::load(&repository_root, Some(&missing_config))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("failed to read"));
+        assert!(error.contains("missing.toml"));
     }
 
     #[test]
@@ -758,7 +860,11 @@ enable = ["prefer-links-for-local-paths"]
         let refs_policy = config
             .effective_rule_policy_for_path("docs/references/source.md")
             .unwrap();
-        assert!(refs_policy.ignored_rules.contains("unresolved-link-path"));
+        assert!(
+            refs_policy
+                .ignored_rules
+                .contains(&Rule::UnresolvedLinkPath)
+        );
         assert!(refs_policy.backtick_path_severity.is_some());
 
         let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
@@ -800,7 +906,7 @@ enable = ["prefer-links-for-local-paths"]
         let policy = config
             .effective_rule_policy_for_path("docs/references/source.md")
             .unwrap();
-        assert!(policy.ignored_rules.contains("unresolved-link-path"));
+        assert!(policy.ignored_rules.contains(&Rule::UnresolvedLinkPath));
         assert!(policy.backtick_path_severity.is_some());
         assert!(policy.prefer_links_for_local_paths);
     }
@@ -958,7 +1064,7 @@ disable = ["context-budget"]
         let error = Config::load(&repository_root, None)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("unsupported rule `context-budget` in `disable`"));
+        assert!(error.contains("failed to parse"));
 
         fs::write(
             &config_path,
@@ -1035,6 +1141,81 @@ path_style = "links"
             .unwrap_err()
             .to_string();
         assert!(error.contains("failed to parse"));
+    }
+
+    #[test]
+    fn rule_names_accept_existing_kebab_and_snake_spellings() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "**/*.md"
+disable = ["unresolved_link_path", "max-tokens"]
+
+[[rules]]
+path = "docs/**"
+enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        let docs_policy = config
+            .effective_rule_policy_for_path("docs/guide.md")
+            .unwrap();
+        assert!(
+            docs_policy
+                .ignored_rules
+                .contains(&Rule::UnresolvedLinkPath)
+        );
+        assert!(docs_policy.backtick_path_severity.is_some());
+        assert!(docs_policy.prefer_links_for_local_paths);
+        assert_eq!(docs_policy.max_tokens, None);
+    }
+
+    #[test]
+    fn rule_names_cover_diagnostic_only_identifiers() {
+        assert_eq!(
+            Rule::from_str("frontmatter-field-missing").unwrap(),
+            Rule::FrontmatterFieldMissing
+        );
+        assert_eq!(
+            Rule::from_str("frontmatter_malformed").unwrap(),
+            Rule::FrontmatterMalformed
+        );
+        assert_eq!(
+            Rule::from_str("frontmatter_field_max_chars").unwrap(),
+            Rule::FrontmatterFieldMaxChars
+        );
+        assert_eq!(
+            Rule::FrontmatterFieldMaxChars.as_str(),
+            "frontmatter-field-max-chars"
+        );
+    }
+
+    #[test]
+    fn enable_rejects_always_on_rules() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[[rules]]
+path = "**/*.md"
+enable = ["unresolved-link-path"]
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unsupported rule `unresolved-link-path` in `enable`"));
     }
 
     #[test]

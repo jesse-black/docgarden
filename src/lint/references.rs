@@ -27,85 +27,80 @@ pub(crate) fn classify_inline_reference(
     config: &Config,
     value: &str,
 ) -> Option<CandidateReference> {
-    if value.is_empty() || is_external(value) || contains_disallowed_backtick_syntax(value) {
+    classify_reference(config, value, ReferenceKind::Backtick)
+}
+
+pub(crate) fn classify_link_reference(config: &Config, value: &str) -> Option<CandidateReference> {
+    classify_reference(config, value, ReferenceKind::Link)
+}
+
+fn classify_reference(
+    config: &Config,
+    value: &str,
+    kind: ReferenceKind,
+) -> Option<CandidateReference> {
+    if value.is_empty() || is_external(value) {
+        return None;
+    }
+    if kind == ReferenceKind::Backtick && contains_disallowed_backtick_syntax(value) {
         return None;
     }
     let uses_relative_syntax = has_relative_prefix(value);
     let uses_workspace_root_syntax = has_workspace_root_prefix(value);
-    if uses_workspace_root_syntax
-        || uses_relative_syntax
-        || value.ends_with('/')
-        || value.ends_with('\\')
-    {
-        return Some(CandidateReference {
-            display_text: value.to_string(),
+
+    if is_path_like_reference(
+        value,
+        kind,
+        uses_relative_syntax,
+        uses_workspace_root_syntax,
+    ) {
+        return Some(CandidateReference::new(
+            value,
             uses_relative_syntax,
             uses_workspace_root_syntax,
-            is_directory_like: value.ends_with('/') || value.ends_with('\\'),
-        });
+        ));
     }
+
     let path = Path::new(value);
     if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
         let extension = format!(".{extension}");
         if config.known_extensions.contains(&extension) {
-            return Some(CandidateReference {
-                display_text: value.to_string(),
-                uses_relative_syntax: false,
-                uses_workspace_root_syntax: false,
-                is_directory_like: false,
-            });
+            return Some(CandidateReference::new(value, false, false));
         }
     }
     if config.special_filenames.contains(value) {
-        return Some(CandidateReference {
-            display_text: value.to_string(),
-            uses_relative_syntax: false,
-            uses_workspace_root_syntax: false,
-            is_directory_like: false,
-        });
+        return Some(CandidateReference::new(value, false, false));
     }
     None
 }
 
-pub(crate) fn classify_link_reference(config: &Config, value: &str) -> Option<CandidateReference> {
-    if value.is_empty() || is_external(value) {
-        return None;
-    }
-    let uses_relative_syntax = has_relative_prefix(value);
-    let uses_workspace_root_syntax = has_workspace_root_prefix(value);
-    if uses_workspace_root_syntax
-        || value.contains('/')
-        || value.contains('\\')
-        || uses_relative_syntax
-    {
-        return Some(CandidateReference {
+impl CandidateReference {
+    fn new(
+        value: &str,
+        uses_relative_syntax: bool,
+        uses_workspace_root_syntax: bool,
+    ) -> CandidateReference {
+        CandidateReference {
             display_text: value.to_string(),
             uses_relative_syntax,
             uses_workspace_root_syntax,
             is_directory_like: value.ends_with('/') || value.ends_with('\\'),
-        });
-    }
-    let path = Path::new(value);
-    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
-        let extension = format!(".{extension}");
-        if config.known_extensions.contains(&extension) {
-            return Some(CandidateReference {
-                display_text: value.to_string(),
-                uses_relative_syntax: false,
-                uses_workspace_root_syntax: false,
-                is_directory_like: false,
-            });
         }
     }
-    if config.special_filenames.contains(value) {
-        return Some(CandidateReference {
-            display_text: value.to_string(),
-            uses_relative_syntax: false,
-            uses_workspace_root_syntax: false,
-            is_directory_like: false,
-        });
-    }
-    None
+}
+
+fn is_path_like_reference(
+    value: &str,
+    kind: ReferenceKind,
+    uses_relative_syntax: bool,
+    uses_workspace_root_syntax: bool,
+) -> bool {
+    uses_workspace_root_syntax
+        || uses_relative_syntax
+        || match kind {
+            ReferenceKind::Backtick => value.ends_with('/') || value.ends_with('\\'),
+            ReferenceKind::Link => value.contains('/') || value.contains('\\'),
+        }
 }
 
 pub(crate) fn resolve_candidate(
