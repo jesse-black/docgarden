@@ -30,13 +30,13 @@ This change matters because the product is no longer just a narrow linter. The r
   Evidence: `src/cli.rs` now exposes `Init` and `Skill` as root subcommands with explicit placeholder help text, and the runtime returns an honest “not implemented yet” error when either command is invoked.
 
 - Observation: The repository already recorded and implemented the opposite command-shape decision once before: an older `lint`/`fix` subcommand model was replaced with the current default-lint plus `--fix` flow.
-  Evidence: `docs/exec-plans/completed/doc-gardening-linter.md` contains the revision note stating that the earlier `lint` and `fix` subcommands were replaced by the more standard `dglint` and `dglint --fix` contract.
+  Evidence: `docs/exec-plans/completed/0001-doc-gardening-linter.md` contains the revision note stating that the earlier `lint` and `fix` subcommands were replaced by the more standard `dglint` and `dglint --fix` contract.
 
 - Observation: The rename cut across more surfaces than the parser. Cargo metadata, config discovery, fixture filenames, `env!("CARGO_BIN_EXE_*")` references, README-embedded test strings, and active plan examples all needed to move together.
   Evidence: The implementation changed `Cargo.toml`, `src/config.rs`, `src/cli.rs`, `src/root.rs`, `src/main.rs`, `tests/cli.rs`, `tests/config.rs`, `tests/path_behavior.rs`, `tests/test-repos/*/docgarden.toml`, `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `docs/PRODUCT.md` in one coordinated pass.
 
 - Observation: Repository-wide dogfooding surfaced one intentional historical edge case: completed ExecPlans still mention legacy `dglint.toml` paths as part of the project record.
-  Evidence: `cargo run -- lint .` initially failed only in `docs/exec-plans/completed/doc-gardening-linter.md`. Adding a targeted `unresolved-local-path` ignore for `docs/exec-plans/completed/**` in `docgarden.toml` preserved the archive while allowing the live repository to lint cleanly.
+  Evidence: `cargo run -- lint .` initially failed only in `docs/exec-plans/completed/0001-doc-gardening-linter.md`. Adding a targeted `unresolved-local-path` ignore for `docs/exec-plans/completed/**` in `docgarden.toml` preserved the archive while allowing the live repository to lint cleanly.
 
 - Observation: The original `xtask validate` workflow depended on an external `covgate` binary that is not available in this environment, even though `cargo llvm-cov`, `cargo-machete`, and `cargo-deny` are present.
   Evidence: `cargo xtask validate` originally failed at `failed to execute \`covgate\``. Updating `xtask/src/main.rs` to use `cargo llvm-cov --fail-under-regions=90` directly preserved the coverage gate and made the repository validation command runnable.

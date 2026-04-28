@@ -4,7 +4,7 @@ description: "Completed ExecPlan for explicit `max_tokens` and `max_lines` conte
 
 # Implement Explicit Context Budget Limits
 
-Save this completed ExecPlan at `docs/exec-plans/completed/context-budget-limits.md`. The active version lived in repository history while the work was in progress and while the recorded finding was reopened.
+Save this completed ExecPlan at `docs/exec-plans/completed/0005-context-budget-limits.md`. The active version lived in repository history while the work was in progress and while the recorded finding was reopened.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds. Maintain this document in accordance with `docs/PLANS.md`.
 
@@ -68,7 +68,7 @@ The visible proof is a small repository with a config entry such as the example 
   Date/Author: 2026-04-07 / Planner
 
 - Decision: Implement context budgets after lint-rule modularization.
-  Rationale: `docs/exec-plans/completed/modularize-lint-rules.md` established the rule-module structure so context budgets can use a file-level rule hook rather than deepen the lint orchestration module.
+  Rationale: `docs/exec-plans/completed/0003-modularize-lint-rules.md` established the rule-module structure so context budgets can use a file-level rule hook rather than deepen the lint orchestration module.
   Date/Author: 2026-04-07 / Planner
 
 ## Outcomes & Retrospective
@@ -89,7 +89,7 @@ Today `src/config.rs` accepts top-level keys such as `include`, `exclude`, `resp
 
 In this plan, a token means one piece returned by the `o200k_base` tokenizer from the `tiktoken-rs` crate. This is an approximation for agent context cost, not an exact count for every model vendor. A line means one logical text line in the complete Markdown file. The line-count implementation should count the exact file content, including front matter if present.
 
-The plan depends on the lint modularization plan at `docs/exec-plans/completed/modularize-lint-rules.md`. That plan left a rule-module structure where file-level rules can evaluate a whole source file without adding a large new branch directly into `src/lint/mod.rs`.
+The plan depends on the lint modularization plan at `docs/exec-plans/completed/0003-modularize-lint-rules.md`. That plan left a rule-module structure where file-level rules can evaluate a whole source file without adding a large new branch directly into `src/lint/mod.rs`.
 
 ## Plan of Work
 
@@ -156,7 +156,7 @@ Expected result: the Rust test suite and repository validation pass. If `cargo x
 
 6. Dogfood lint changed docs.
 
-    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/exec-plans/completed/context-budget-limits.md --color never
+    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/exec-plans/completed/0005-context-budget-limits.md --color never
 
 Expected result: the command reports no documentation-path or style-policy errors.
 
@@ -218,7 +218,7 @@ Validation evidence collected during implementation:
     cargo test config
     cargo test --test cli context_budget -- --nocapture
     cargo test
-    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/PRODUCT.md ARCHITECTURE.md docs/exec-plans/completed/context-budget-limits.md docs/exec-plans/completed/modularize-lint-rules.md --color never
+    cargo run -- lint docs/design-docs/configuration.md docs/design-docs/line-and-token-limits.md docs/PRODUCT.md ARCHITECTURE.md docs/exec-plans/completed/0005-context-budget-limits.md docs/exec-plans/completed/0003-modularize-lint-rules.md --color never
     cargo xtask validate
 
 The first unprivileged `cargo check` after adding `tiktoken-rs` failed because the sandbox could not resolve `index.crates.io`; rerunning `cargo check` with approved network access downloaded `tiktoken-rs v0.7.0` and its transitive dependencies. The final `cargo xtask validate` passed with diff region coverage of 96.02 percent.
@@ -227,7 +227,7 @@ Reopened validation evidence collected on 2026-04-07:
 
     cargo test config
     cargo test --test cli context_budget -- --nocapture
-    cargo run -- lint docs/exec-plans/completed/context-budget-limits.md docs/exec-plans/completed/modularize-lint-rules.md --color never
+    cargo run -- lint docs/exec-plans/completed/0005-context-budget-limits.md docs/exec-plans/completed/0003-modularize-lint-rules.md --color never
     cargo test
     cargo xtask validate
 

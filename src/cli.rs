@@ -320,8 +320,7 @@ fn execute(
     let mut diagnostics = Vec::new();
 
     for path in files {
-        let result = lint_file(&config, &path, mode)?;
-        diagnostics.extend(result.diagnostics);
+        diagnostics.extend(lint_file(&config, &path, mode)?);
     }
 
     print_diagnostics(&diagnostics, color);

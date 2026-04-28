@@ -1,5 +1,5 @@
 ---
-description: "Canonical authoring contract for `docgarden` ExecPlans, including required sections, formatting rules, and self-contained planning expectations; read when writing, revising, reviewing, or validating an execution plan for repository work."
+description: "ExecPlan authoring contract to create, write, revise, review, and validate repository execution plans; read when shaping plan requirements, required sections, formatting rules, or self-contained planning expectations."
 ---
 
 # Agent Execution Plans
@@ -18,6 +18,14 @@ Do not assume memory of prior work.
 Store ExecPlans in:
 - Active: `docs/exec-plans/active/`
 - Completed: `docs/exec-plans/completed/`
+
+Name ExecPlan files `NNNN-<plan-title>.md`, where `NNNN` is the next zero-padded sequence number and `<plan-title>` is a concise kebab-case slug. Keep the same filename when moving a plan from `active/` to `completed/`.
+
+To print the next sequence number:
+
+```sh
+./scripts/next-plan-number.sh
+```
 
 ## Rules
 

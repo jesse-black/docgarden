@@ -24,19 +24,20 @@ pub fn infer_repository_root(
             .unwrap_or_else(|| PathBuf::from("/")));
     }
 
-    let start = common_ancestor(
-        &targets
-            .iter()
-            .map(|target| {
-                if target.is_dir() {
-                    target.clone()
-                } else {
-                    target.parent().unwrap_or(target.as_path()).to_path_buf()
-                }
-            })
-            .collect::<Vec<_>>(),
-    )
-    .unwrap_or(std::env::current_dir()?);
+    let target_dirs: Vec<_> = targets
+        .iter()
+        .map(|target| {
+            if target.is_dir() {
+                target.clone()
+            } else {
+                target.parent().unwrap_or(target.as_path()).to_path_buf()
+            }
+        })
+        .collect();
+    let start = match common_ancestor(&target_dirs) {
+        Some(path) => path,
+        None => std::env::current_dir().context("failed to read current working directory")?,
+    };
 
     if let Some(root) = find_root_by_markers(&start, markers) {
         return Ok(root);
@@ -155,6 +156,16 @@ mod tests {
         let root = infer_repository_root(&[nested], Some(&config_path), markers())?;
 
         assert_eq!(root, config_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn empty_targets_fall_back_to_current_directory() -> Result<()> {
+        let current_dir = std::env::current_dir()?;
+
+        let root = infer_repository_root(&[], None, &[])?;
+
+        assert_eq!(root, current_dir);
         Ok(())
     }
 

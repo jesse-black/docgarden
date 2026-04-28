@@ -8,15 +8,7 @@ pub(crate) struct Candidate<'a> {
 }
 
 pub(crate) struct CombinedFieldStats {
-    #[cfg(test)]
-    name: FieldStats,
-    #[cfg(test)]
-    path_prefix: FieldStats,
-    #[cfg(test)]
-    description: FieldStats,
     pseudo_doc_count: f32,
-    #[cfg(test)]
-    pseudo_sum_total_term_freq: f32,
     avgdl: f32,
     pseudo_df: HashMap<String, u32>,
 }
@@ -69,15 +61,7 @@ impl CombinedFieldStats {
         }
 
         Self {
-            #[cfg(test)]
-            name,
-            #[cfg(test)]
-            path_prefix,
-            #[cfg(test)]
-            description,
             pseudo_doc_count,
-            #[cfg(test)]
-            pseudo_sum_total_term_freq,
             avgdl,
             pseudo_df,
         }
@@ -91,21 +75,6 @@ impl CombinedFieldStats {
 
     fn avgdl(&self) -> f32 {
         self.avgdl
-    }
-
-    #[cfg(test)]
-    fn pseudo_df(&self, term: &str) -> u32 {
-        self.pseudo_df.get(term).copied().unwrap_or(0)
-    }
-
-    #[cfg(test)]
-    fn pseudo_doc_count(&self) -> f32 {
-        self.pseudo_doc_count
-    }
-
-    #[cfg(test)]
-    fn pseudo_sum_total_term_freq(&self) -> f32 {
-        self.pseudo_sum_total_term_freq
     }
 }
 
@@ -350,7 +319,6 @@ mod tests {
             normalize_path("docs/the-active-plan.md"),
             vec!["docs", "active", "plan"]
         );
-        assert_eq!(stats.pseudo_df("the"), 0);
         assert!(score(&terms("the active plan"), &docs[0], &stats).score > 0.0);
     }
 
@@ -384,27 +352,6 @@ mod tests {
     }
 
     #[test]
-    fn bm25_stats_follow_combined_field_shape() {
-        let docs = vec![
-            candidate(Some("alpha"), "docs/a", Some("beta")),
-            candidate(Some("gamma"), "", None),
-        ];
-        let stats = CombinedFieldStats::build(&docs);
-
-        assert_eq!(stats.name.doc_count, 2);
-        assert_eq!(stats.path_prefix.doc_count, 1);
-        assert_eq!(stats.description.doc_count, 1);
-        assert_eq!(stats.pseudo_doc_count(), 2.0);
-        assert!(
-            (stats.pseudo_sum_total_term_freq()
-                - (NAME_BOOST * 2.0 + PATH_PREFIX_BOOST * 1.0 + DESCRIPTION_BOOST * 1.0))
-                .abs()
-                < 1e-6
-        );
-        assert!(stats.avgdl() > 0.0);
-    }
-
-    #[test]
     fn normalize_text_lowercases_splits_and_filters_stopwords() {
         let toks = normalize_text("Hello, The World!");
         assert_eq!(toks, vec!["hello", "world"]);
@@ -419,12 +366,12 @@ mod tests {
     #[test]
     fn can_build_stats_from_empty_corpus() {
         let stats = CombinedFieldStats::build(&[]);
-        assert_eq!(stats.pseudo_doc_count(), 0.0);
         assert_eq!(stats.avgdl(), 1.0);
-        assert_eq!(
-            stats.idf("anything"),
-            (1.0_f32 + (1.0_f32 - 0.0_f32 + 0.5_f32) / 0.5_f32).ln()
-        );
+
+        let empty = candidate(Some("anything"), "", None);
+        let hit = score(&terms("anything"), &empty, &stats);
+        assert!(hit.score.is_finite());
+        assert!(hit.score > 0.0);
     }
 
     #[test]

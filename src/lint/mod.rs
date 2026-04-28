@@ -5,8 +5,8 @@ use anyhow::{Context, Result, anyhow};
 use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
-use crate::config::{BudgetLimit, Config};
-use crate::diagnostics::{Diagnostic, FixSummary, Severity};
+use crate::config::{Config, EffectiveRulePolicy, Rule};
+use crate::diagnostics::{Diagnostic, FixSummary};
 use crate::paths::repository_relative_path;
 
 mod references;
@@ -21,10 +21,6 @@ pub enum Mode {
     Fix,
 }
 
-pub struct LintResult {
-    pub diagnostics: Vec<Diagnostic>,
-}
-
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct Edit {
     pub(crate) start_offset: usize,
@@ -37,47 +33,31 @@ pub(crate) struct Finding<'a> {
     pub(crate) edit: Option<Edit>,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct FilePolicy {
-    pub(crate) unresolved_backtick_path_severity: Option<Severity>,
-    pub(crate) prefer_links_for_local_paths: bool,
-    pub(crate) max_tokens: Option<BudgetLimit>,
-    pub(crate) max_lines: Option<BudgetLimit>,
-}
-
 struct WalkState<'a> {
     diagnostics: &'a mut Vec<Diagnostic>,
-    ignored_rules: &'a std::collections::BTreeSet<String>,
+    ignored_rules: &'a std::collections::BTreeSet<Rule>,
     mode: Mode,
     edits: &'a mut Vec<Edit>,
 }
 
-pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult> {
+pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<Vec<Diagnostic>> {
     let relative_path = repository_relative_path(&config.repository_root, path)?;
-    let rule_policy = config.effective_rule_policy_for_path(&relative_path)?;
-    let ignored_rules = rule_policy.ignored_rules;
-    let policy = FilePolicy {
-        unresolved_backtick_path_severity: rule_policy.backtick_path_severity,
-        prefer_links_for_local_paths: rule_policy.prefer_links_for_local_paths,
-        max_tokens: rule_policy.max_tokens,
-        max_lines: rule_policy.max_lines,
-    };
+    let rule_policy = config.effective_rule_policy_for_path(&relative_path);
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let tree = to_mdast(&source, &ParseOptions::gfm())
         .map_err(|error| anyhow!("failed to parse {}: {}", path.display(), error))?;
     let mut diagnostics = Vec::new();
     let mut edits = Vec::new();
-    let ignored_rules = &ignored_rules;
 
     let mut state = WalkState {
         diagnostics: &mut diagnostics,
-        ignored_rules,
+        ignored_rules: &rule_policy.ignored_rules,
         mode,
         edits: &mut edits,
     };
     let file_context = rules::file::FileRuleContext {
-        policy,
+        policy: &rule_policy,
         file: &relative_path,
         source: &source,
     };
@@ -91,7 +71,7 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         &mut state,
         rules::frontmatter::evaluate_frontmatter_rules(&fm_context)?,
     );
-    walk_node(config, policy, &relative_path, &tree, &mut state)?;
+    walk_node(config, &rule_policy, &relative_path, &tree, &mut state)?;
 
     if mode == Mode::Fix && !edits.is_empty() {
         let rewritten = apply_edits(&source, &edits)?;
@@ -101,12 +81,12 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<LintResult>
         }
     }
 
-    Ok(LintResult { diagnostics })
+    Ok(diagnostics)
 }
 
 fn walk_node(
     config: &Config,
-    policy: FilePolicy,
+    policy: &EffectiveRulePolicy,
     file: &str,
     node: &Node,
     state: &mut WalkState<'_>,
@@ -131,34 +111,22 @@ fn walk_node(
     Ok(())
 }
 
-fn emit_finding(
-    diagnostics: &mut Vec<Diagnostic>,
-    ignored_rules: &std::collections::BTreeSet<String>,
-    mode: Mode,
-    edits: &mut Vec<Edit>,
-    finding: Finding<'_>,
-) {
-    if ignored_rules.contains(finding.payload.rule) {
+fn emit_finding(state: &mut WalkState<'_>, finding: Finding<'_>) {
+    if state.ignored_rules.contains(&finding.payload.rule) {
         return;
     }
     let edit = finding.edit;
-    push_diagnostic(diagnostics, finding.payload);
-    if mode == Mode::Fix
+    push_diagnostic(state.diagnostics, finding.payload);
+    if state.mode == Mode::Fix
         && let Some(edit) = edit
     {
-        edits.push(edit);
+        state.edits.push(edit);
     }
 }
 
 fn emit_findings(state: &mut WalkState<'_>, findings: Vec<Finding<'_>>) {
     for finding in findings {
-        emit_finding(
-            state.diagnostics,
-            state.ignored_rules,
-            state.mode,
-            state.edits,
-            finding,
-        );
+        emit_finding(state, finding);
     }
 }
 
@@ -238,7 +206,7 @@ mod tests {
     use crate::config::Config;
     use crate::defaults::{default_extensions, default_special_filenames};
 
-    use super::references::{classify_inline_reference, contains_disallowed_backtick_syntax};
+    use super::references::{classify_inline_reference, classify_link_reference};
 
     fn test_config() -> Config {
         Config {
@@ -304,11 +272,37 @@ mod tests {
                 classify_inline_reference(&config, value).is_none(),
                 "{value}"
             );
-            assert!(
-                contains_disallowed_backtick_syntax(value)
-                    || value.is_empty()
-                    || value.starts_with("https://")
-            );
+        }
+    }
+
+    #[test]
+    fn link_reference_accepts_relative_and_known_repo_paths() {
+        let config = test_config();
+
+        let relative = classify_link_reference(&config, "../README.md").unwrap();
+        assert_eq!(relative.display_text, "../README.md");
+        assert!(relative.uses_relative_syntax);
+        assert!(!relative.uses_workspace_root_syntax);
+
+        let nested = classify_link_reference(&config, "docs/guide").unwrap();
+        assert_eq!(nested.display_text, "docs/guide");
+        assert!(!nested.uses_relative_syntax);
+
+        let readme = classify_link_reference(&config, "README.md").unwrap();
+        assert_eq!(readme.display_text, "README.md");
+    }
+
+    #[test]
+    fn link_reference_rejects_empty_and_external_destinations() {
+        let config = test_config();
+
+        for value in [
+            "",
+            "https://example.com/docs",
+            "mailto:hi@example.com",
+            "#section",
+        ] {
+            assert!(classify_link_reference(&config, value).is_none(), "{value}");
         }
     }
 }

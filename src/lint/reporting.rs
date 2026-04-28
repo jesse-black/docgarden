@@ -1,9 +1,10 @@
+use crate::config::Rule;
 use crate::diagnostics::{Diagnostic, Severity};
 
 pub(crate) struct DiagnosticPayload<'a> {
     pub(crate) file: &'a str,
     pub(crate) position: Option<&'a markdown::unist::Position>,
-    pub(crate) rule: &'a str,
+    pub(crate) rule: Rule,
     pub(crate) message: String,
     pub(crate) fixable: bool,
     pub(crate) severity: Severity,
@@ -19,7 +20,7 @@ pub(crate) fn push_diagnostic(diagnostics: &mut Vec<Diagnostic>, payload: Diagno
         line,
         column,
         severity: payload.severity,
-        rule: payload.rule.to_string(),
+        rule: payload.rule.as_str().to_string(),
         message: payload.message,
         fixable: payload.fixable,
     });

@@ -114,23 +114,18 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
         i += 1;
 
         // Skip empty lines and comment lines.
-        let trimmed = line.trim_end();
-        let stripped = trimmed.trim();
-        if stripped.is_empty() || stripped.starts_with('#') {
+        let stripped = line.trim();
+        if is_blank_or_comment(stripped) {
             continue;
         }
 
         // Top-level lines must have no leading whitespace.
-        let leading = line.len() - line.trim_start().len();
-        if leading > 0 {
+        if line_indent(line) > 0 {
             return Err(line_num);
         }
 
         // Reject unsupported top-level constructs: sequences, multi-doc markers.
-        if stripped.starts_with("- ") || stripped == "-" {
-            return Err(line_num);
-        }
-        if stripped == "..." {
+        if has_unsupported_top_level_prefix(stripped) {
             return Err(line_num);
         }
 
@@ -166,11 +161,10 @@ fn parse_block_value(
     let child_indent = {
         let mut ci = None;
         for &(_, cl) in lines.iter().skip(start) {
-            let ct = cl.trim();
-            if ct.is_empty() || ct.starts_with('#') {
+            if is_blank_or_comment(cl.trim()) {
                 continue;
             }
-            let indent = cl.len() - cl.trim_start().len();
+            let indent = line_indent(cl);
             if indent == 0 {
                 // Next top-level line reached before any indented children: blank value.
                 return Ok((YamlValue::Scalar(String::new()), 0));
@@ -191,12 +185,11 @@ fn parse_block_value(
     let mut consumed = 0;
 
     for &(cln, cl) in lines.iter().skip(start) {
-        let ct = cl.trim();
-        if ct.is_empty() || ct.starts_with('#') {
+        if is_blank_or_comment(cl.trim()) {
             consumed += 1;
             continue;
         }
-        let this_indent = cl.len() - cl.trim_start().len();
+        let this_indent = line_indent(cl);
         if this_indent < child_indent {
             break; // back to parent scope
         }
@@ -228,7 +221,7 @@ fn parse_sequence(lines: &[(usize, &str)]) -> Result<YamlValue, usize> {
     let mut items = Vec::new();
     for (line_num, line) in lines {
         let stripped = line.trim_start();
-        if stripped.is_empty() || stripped.starts_with('#') {
+        if is_blank_or_comment(stripped) {
             continue;
         }
         if !stripped.starts_with("- ") {
@@ -252,10 +245,10 @@ fn parse_nested_mapping(
     let mut fields: Vec<(String, YamlValue)> = Vec::new();
     for (line_num, line) in lines {
         let ct = line.trim();
-        if ct.is_empty() || ct.starts_with('#') {
+        if is_blank_or_comment(ct) {
             continue;
         }
-        let actual_indent = line.len() - line.trim_start().len();
+        let actual_indent = line_indent(line);
         if actual_indent != indent {
             return Err(*line_num);
         }
@@ -287,13 +280,8 @@ fn split_key_value(line: &str) -> Option<(&str, &str)> {
 /// Return `true` if the key contains characters that indicate unsupported
 /// YAML constructs (anchors, aliases, tags, flow collections).
 fn has_unsupported_key_chars(key: &str) -> bool {
-    key.contains('{')
-        || key.contains('}')
-        || key.contains('[')
-        || key.contains(']')
-        || key.contains('&')
-        || key.contains('*')
-        || key.contains('!')
+    key.chars()
+        .any(|ch| matches!(ch, '{' | '}' | '[' | ']' | '&' | '*' | '!'))
 }
 
 /// Validate a mapping key against the accumulated fields for duplicates.
@@ -320,14 +308,7 @@ fn check_mapping_key(
 /// Parse an inline scalar value.  Returns `None` for unsupported constructs.
 fn parse_inline_scalar(value: &str) -> Option<YamlValue> {
     // Reject flow-style collections, anchors, aliases, tags, block scalars.
-    if value.starts_with('{')
-        || value.starts_with('[')
-        || value.starts_with('&')
-        || value.starts_with('*')
-        || value.starts_with('!')
-        || value.starts_with('|')
-        || value.starts_with('>')
-    {
+    if has_unsupported_scalar_prefix(value) {
         return None;
     }
 
@@ -341,6 +322,25 @@ fn parse_inline_scalar(value: &str) -> Option<YamlValue> {
     }
 
     Some(YamlValue::Scalar(value.to_string()))
+}
+
+fn is_blank_or_comment(value: &str) -> bool {
+    value.is_empty() || value.starts_with('#')
+}
+
+fn line_indent(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+fn has_unsupported_top_level_prefix(value: &str) -> bool {
+    matches!(value, "-" | "...") || value.starts_with("- ")
+}
+
+fn has_unsupported_scalar_prefix(value: &str) -> bool {
+    value
+        .chars()
+        .next()
+        .is_some_and(|ch| matches!(ch, '{' | '[' | '&' | '*' | '!' | '|' | '>'))
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +466,16 @@ mod tests {
             parse_from_str(src),
             FrontmatterParseResult::Malformed { .. }
         ));
+    }
+
+    #[test]
+    fn parse_malformed_top_level_markers() {
+        for src in ["---\n-\n---\n", "---\n...\n---\n"] {
+            assert!(matches!(
+                parse_from_str(src),
+                FrontmatterParseResult::Malformed { .. }
+            ));
+        }
     }
 
     #[test]

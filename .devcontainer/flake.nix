@@ -46,6 +46,8 @@
               cargo-deny
               cargo-machete
               cargo-binstall
+              shellcheck
+              shfmt
               python3
             ];
           })
