@@ -11,7 +11,7 @@ use crate::defaults::{DEFAULT_SCAN_PATTERNS, default_extensions, default_special
 use crate::diagnostics::Severity;
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FrontmatterFieldConfig {
     pub max_chars: Option<usize>,
 }
@@ -26,7 +26,7 @@ pub struct FrontmatterRuleConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FileConfig {
     #[serde(default = "default_skills_dir")]
     pub skills_dir: String,
@@ -51,7 +51,7 @@ pub struct FileConfig {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RuleConfig {
     pub path: String,
     #[serde(default)]
@@ -127,22 +127,14 @@ impl FromStr for Rule {
 
     fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
         match value {
-            "unresolved-link-path" | "unresolved_link_path" => Ok(Self::UnresolvedLinkPath),
-            "unresolved-backtick-path" | "unresolved_backtick_path" => {
-                Ok(Self::UnresolvedBacktickPath)
-            }
-            "prefer-links-for-local-paths" | "prefer_links_for_local_paths" => {
-                Ok(Self::PreferLinksForLocalPaths)
-            }
-            "max_tokens" | "max-tokens" => Ok(Self::MaxTokens),
-            "max_lines" | "max-lines" => Ok(Self::MaxLines),
-            "frontmatter-field-missing" | "frontmatter_field_missing" => {
-                Ok(Self::FrontmatterFieldMissing)
-            }
-            "frontmatter-malformed" | "frontmatter_malformed" => Ok(Self::FrontmatterMalformed),
-            "frontmatter-field-max-chars" | "frontmatter_field_max_chars" => {
-                Ok(Self::FrontmatterFieldMaxChars)
-            }
+            "unresolved-link-path" => Ok(Self::UnresolvedLinkPath),
+            "unresolved-backtick-path" => Ok(Self::UnresolvedBacktickPath),
+            "prefer-links-for-local-paths" => Ok(Self::PreferLinksForLocalPaths),
+            "max-tokens" => Ok(Self::MaxTokens),
+            "max-lines" => Ok(Self::MaxLines),
+            "frontmatter-field-missing" => Ok(Self::FrontmatterFieldMissing),
+            "frontmatter-malformed" => Ok(Self::FrontmatterMalformed),
+            "frontmatter-field-max-chars" => Ok(Self::FrontmatterFieldMaxChars),
             _ => Err(format!("unsupported rule `{value}`")),
         }
     }
@@ -294,8 +286,8 @@ impl Config {
         let config_path = resolve_config_path(&repository_root, explicit_config);
         let parsed = load_file_config(config_path.as_deref())?;
 
-        let skills_dir = validate_repository_relative_dir("skills_dir", &parsed.skills_dir)?;
-        let plans_dir = validate_repository_relative_dir("plans_dir", &parsed.plans_dir)?;
+        let skills_dir = validate_repository_relative_dir("skills-dir", &parsed.skills_dir)?;
+        let plans_dir = validate_repository_relative_dir("plans-dir", &parsed.plans_dir)?;
 
         let known_extensions = merge_extensions(parsed.extend_extensions, parsed.remove_extensions);
         let special_filenames = merge_special_filenames(
@@ -497,11 +489,11 @@ fn lower_rule_application(root: &Path, rule: &RuleConfig) -> Result<Option<RuleA
     let severity = rule.severity.unwrap_or(RuleSeverity::Error);
     let max_tokens = rule
         .max_tokens
-        .map(|limit| budget_limit("max_tokens", limit, severity))
+        .map(|limit| budget_limit("max-tokens", limit, severity))
         .transpose()?;
     let max_lines = rule
         .max_lines
-        .map(|limit| budget_limit("max_lines", limit, severity))
+        .map(|limit| budget_limit("max-lines", limit, severity))
         .transpose()?;
 
     let has_rule_content = !rule.disable.is_empty()
@@ -540,7 +532,7 @@ fn lower_frontmatter_rule(
         }
         if let Some(max_chars) = field_cfg.max_chars {
             if max_chars == 0 {
-                bail!("frontmatter field `{field_name}` max_chars must be greater than zero");
+                bail!("frontmatter field `{field_name}` max-chars must be greater than zero");
             }
             field_max_chars.insert(field_name, max_chars);
         }
@@ -683,13 +675,13 @@ mod tests {
         fs::write(
             &config_path,
             r#"
-respect_gitignore = false
-skills_dir = ".codex/skills"
-plans_dir = "plans"
-extend_extensions = ["proto", ".rego"]
-remove_extensions = ["md"]
-extend_special_filenames = ["Tiltfile"]
-remove_special_filenames = ["LICENSE"]
+respect-gitignore = false
+skills-dir = ".codex/skills"
+plans-dir = "plans"
+extend-extensions = ["proto", ".rego"]
+remove-extensions = ["md"]
+extend-special-filenames = ["Tiltfile"]
+remove-special-filenames = ["LICENSE"]
 
 [[rules]]
 path = "docs/generated/**"
@@ -741,7 +733,7 @@ include = ["docs/**/*.md"]
 
 [[rules]]
 path = "**/*.md"
-disable = ["max_lines"]
+disable = ["max-lines"]
 "#,
         )
         .unwrap();
@@ -778,15 +770,15 @@ disable = ["max_lines"]
 
         fs::write(
             repository_root.join("docgarden.toml"),
-            "skills_dir = \"../skills\"\n",
+            "skills-dir = \"../skills\"\n",
         )
         .unwrap();
         let err = Config::load(&repository_root, None).unwrap_err();
-        assert!(err.to_string().contains("skills_dir must stay under"));
+        assert!(err.to_string().contains("skills-dir must stay under"));
 
-        fs::write(repository_root.join("docgarden.toml"), "plans_dir = \"\"\n").unwrap();
+        fs::write(repository_root.join("docgarden.toml"), "plans-dir = \"\"\n").unwrap();
         let err = Config::load(&repository_root, None).unwrap_err();
-        assert!(err.to_string().contains("plans_dir must not be empty"));
+        assert!(err.to_string().contains("plans-dir must not be empty"));
     }
 
     #[test]
@@ -915,17 +907,17 @@ enable = ["prefer-links-for-local-paths"]
             r#"
 [[rules]]
 path = "README.md"
-max_tokens = 10
-max_lines = 5
+max-tokens = 10
+max-lines = 5
 
 [[rules]]
 path = "README.md"
-max_lines = 20
+max-lines = 20
 severity = "warn"
 
 [[rules]]
 path = "docs/references/**"
-disable = ["max_tokens"]
+disable = ["max-tokens"]
 reason = "References preserve source fidelity."
 "#,
         )
@@ -965,7 +957,7 @@ reason = "References preserve source fidelity."
             r#"
 [[rules]]
 path = "README.md"
-max_tokens = 0
+max-tokens = 0
 "#,
         )
         .unwrap();
@@ -973,7 +965,7 @@ max_tokens = 0
         let error = Config::load(&repository_root, None)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("max_tokens must be greater than zero"));
+        assert!(error.contains("max-tokens must be greater than zero"));
     }
 
     #[test]
@@ -1079,7 +1071,7 @@ max-lines = 500
             r#"
 [[rules]]
 path = "docs/**"
-max-tokens = 500
+token-budget = 500
 "#,
         )
         .unwrap();
@@ -1094,7 +1086,7 @@ max-tokens = 500
             r#"
 [[rules]]
 scope = "skills"
-max_tokens = 500
+max-tokens = 500
 "#,
         )
         .unwrap();
@@ -1136,20 +1128,22 @@ path_style = "links"
     }
 
     #[test]
-    fn rule_names_accept_existing_kebab_and_snake_spellings() {
+    fn rule_names_accept_only_canonical_kebab_spellings() {
         let temp = TempDir::new().unwrap();
         let repository_root = temp.path().join("repo");
         fs::create_dir_all(&repository_root).unwrap();
+        let config_path = repository_root.join("docgarden.toml");
+
         fs::write(
-            repository_root.join("docgarden.toml"),
+            &config_path,
             r#"
 [[rules]]
 path = "**/*.md"
-disable = ["unresolved_link_path", "max-tokens"]
+disable = ["unresolved-link-path", "max-tokens"]
 
 [[rules]]
 path = "docs/**"
-enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
+enable = ["unresolved-backtick-path", "prefer-links-for-local-paths"]
 "#,
         )
         .unwrap();
@@ -1165,6 +1159,21 @@ enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
         assert!(docs_policy.backtick_path_severity.is_some());
         assert!(docs_policy.prefer_links_for_local_paths);
         assert_eq!(docs_policy.max_tokens, None);
+
+        fs::write(
+            &config_path,
+            r#"
+[[rules]]
+path = "**/*.md"
+disable = ["unresolved_link_path"]
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
     }
 
     #[test]
@@ -1174,13 +1183,15 @@ enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
             Rule::FrontmatterFieldMissing
         );
         assert_eq!(
-            Rule::from_str("frontmatter_malformed").unwrap(),
+            Rule::from_str("frontmatter-malformed").unwrap(),
             Rule::FrontmatterMalformed
         );
         assert_eq!(
-            Rule::from_str("frontmatter_field_max_chars").unwrap(),
+            Rule::from_str("frontmatter-field-max-chars").unwrap(),
             Rule::FrontmatterFieldMaxChars
         );
+        assert!(Rule::from_str("frontmatter_malformed").is_err());
+        assert!(Rule::from_str("frontmatter_field_max_chars").is_err());
         assert_eq!(
             Rule::FrontmatterFieldMaxChars.as_str(),
             "frontmatter-field-max-chars"
@@ -1222,7 +1233,7 @@ enable = ["unresolved-link-path"]
 path = "**/*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 1024
+max-chars = 1024
 
 [[rules]]
 path = "**/*.md"
@@ -1260,7 +1271,7 @@ required = ["description"]
 path = "**/*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 1024
+max-chars = 1024
 
 [[rules]]
 path = "**/*.md"
@@ -1342,7 +1353,7 @@ min_chars = 10
 path = "**/*.md"
 
 [rules.frontmatter.fields.description]
-max_chars = 0
+max-chars = 0
 "#,
         )
         .unwrap();
@@ -1350,7 +1361,7 @@ max_chars = 0
             .unwrap_err()
             .to_string();
         assert!(
-            error.contains("max_chars must be greater than zero"),
+            error.contains("max-chars must be greater than zero"),
             "got: {error}"
         );
     }
@@ -1364,7 +1375,7 @@ max_chars = 0
 
         fs::write(
             &config_path,
-            "[[rules]]\npath = \"**/*.md\"\n\n[rules.frontmatter.fields.description]\nmax_chars = 512\n\n[rules.frontmatter.fields.description]\nmax_chars = 1024\n",
+            "[[rules]]\npath = \"**/*.md\"\n\n[rules.frontmatter.fields.description]\nmax-chars = 512\n\n[rules.frontmatter.fields.description]\nmax-chars = 1024\n",
         )
         .unwrap();
         let error = Config::load(&repository_root, None)
@@ -1512,15 +1523,15 @@ enable = ["prefer-links-for-local-paths"]
             r#"
 [[rules]]
 path = "**/*.md"
-max_tokens = 500
+max-tokens = 500
 
 [[rules]]
 path = "**/*.md"
-disable = ["max_tokens"]
+disable = ["max-tokens"]
 
 [[rules]]
 path = "docs/**"
-max_tokens = 200
+max-tokens = 200
 severity = "warn"
 "#,
         )

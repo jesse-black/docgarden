@@ -80,7 +80,7 @@ pub(crate) fn evaluate_frontmatter_rules<'a>(
                             rule: Rule::FrontmatterFieldMaxChars,
                             message: format!(
                                 "Frontmatter field `{field}` has {char_count} characters, \
-                                 which exceeds configured max_chars = {max_chars}."
+                                 which exceeds configured max-chars = {max_chars}."
                             ),
                             fixable: false,
                             severity: Severity::Error,

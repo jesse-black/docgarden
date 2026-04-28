@@ -15,7 +15,7 @@ pub(crate) enum Scope {
 
 pub(crate) fn discover_scope_files(config: &Config, scope: Scope) -> Result<Vec<PathBuf>> {
     if matches!(scope, Scope::ActivePlans | Scope::CompletedPlans) {
-        ensure_directory_if_exists("plans_dir", &config.plans_root())?;
+        ensure_directory_if_exists("plans-dir", &config.plans_root())?;
     }
 
     let root = scope_root(config, scope);
@@ -43,8 +43,8 @@ fn scope_root(config: &Config, scope: Scope) -> PathBuf {
 
 fn scope_field_name(scope: Scope) -> &'static str {
     match scope {
-        Scope::Skills => "skills_dir",
-        Scope::Plans | Scope::ActivePlans | Scope::CompletedPlans => "plans_dir",
+        Scope::Skills => "skills-dir",
+        Scope::Plans | Scope::ActivePlans | Scope::CompletedPlans => "plans-dir",
     }
 }
 

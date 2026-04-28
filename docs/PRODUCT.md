@@ -69,7 +69,7 @@ Capabilities that are clearly part of the product today:
 - deterministic validation of repository-local path references in Markdown prose
 - configurable style-policy enforcement for repository-local references
 - frontmatter validation for required fields and field-length constraints
-- explicit `max_lines` and `max_tokens` budget rules
+- explicit `max-lines` and `max-tokens` budget rules
 - human-readable CLI output for routing and diagnostics
 
 ## Repository Conventions The Product Assumes

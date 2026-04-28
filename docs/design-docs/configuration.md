@@ -28,17 +28,17 @@ Prefer first-class configuration for first-class product concepts.
 
 For skills and ExecPlans, that means top-level directory settings rather than a generic `[directories]` bucket or a broad document-family entry.
 
-    skills_dir = ".agents/skills"
-    plans_dir = "docs/exec-plans"
+    skills-dir = ".agents/skills"
+    plans-dir = "docs/exec-plans"
 
-`skills_dir` is enough for skill-scoped discovery and default skills validation. Internally, `docgarden` derives skill-file paths from that directory, so users do not define the same directory twice.
+`skills-dir` is enough for skill-scoped discovery and default skills validation. Internally, `docgarden` derives skill-file paths from that directory, so users do not define the same directory twice.
 
-`plans_dir` is enough for plan-scoped discovery. The active and completed plan directories are status partitions under that directory:
+`plans-dir` is enough for plan-scoped discovery. The active and completed plan directories are status partitions under that directory:
 
-- active plans: `{plans_dir}/active/`
-- completed plans: `{plans_dir}/completed/`
+- active plans: `{plans-dir}/active/`
+- completed plans: `{plans-dir}/completed/`
 
-Those derived paths are not public v1 config keys. Keeping only `plans_dir` public avoids duplicate configuration and keeps active/completed plans tied to the ExecPlan concept.
+Those derived paths are not public v1 config keys. Keeping only `plans-dir` public avoids duplicate configuration and keeps active/completed plans tied to the ExecPlan concept.
 
 ## Scan Selection
 
@@ -69,7 +69,7 @@ The near-term design should avoid both extremes:
 - do not hard-code this repository's paths into product behavior
 - do not introduce broad named groups before they earn their keep
 
-Top-level `skills_dir` and `plans_dir` are first-class product conventions. They should not live under a generic `[directories]` table, because that would group settings by value type rather than product meaning.
+Top-level `skills-dir` and `plans-dir` are first-class product conventions. They should not live under a generic `[directories]` table, because that would group settings by value type rather than product meaning.
 
 `[[documents]]` may become useful later for user-defined groups such as imported references, generated docs, or curated indexes. It should stay deferred until at least two concrete features need the same named group.
 
@@ -107,39 +107,39 @@ A conceptual example:
     [[rules]]
     path = "**/*.md"
     exclude = ["AGENTS.md"]
-    max_tokens = 5000
+    max-tokens = 5000
 
 That entry applies the token budget to Markdown files except `AGENTS.md`, while `AGENTS.md` can still be checked for local paths, front matter constraints, or any other matching rule entries.
 
 Rule-specific options should also live in this layer instead of growing separate top-level tables for each feature.
 
-For example, context-budget limits should be expressed as rule-specific fields in `[[rules]]`, not as a separate `[[limits]]` table with its own targeting model. Setting `max_tokens` or `max_lines` is enough to enable the corresponding budget check for that path pattern:
+For example, context-budget limits should be expressed as rule-specific fields in `[[rules]]`, not as a separate `[[limits]]` table with its own targeting model. Setting `max-tokens` or `max-lines` is enough to enable the corresponding budget check for that path pattern:
 
     [[rules]]
     path = ".agents/skills/**/SKILL.md"
-    max_lines = 500
-    max_tokens = 5000
+    max-lines = 500
+    max-tokens = 5000
     severity = "warn"
 
     [[rules]]
     path = "AGENTS.md"
-    max_tokens = 1200
+    max-tokens = 1200
     severity = "error"
 
     [[rules]]
     path = "docs/**"
     exclude = ["docs/references/**"]
-    max_lines = 300
+    max-lines = 300
     severity = "warn"
 
     [[rules]]
     path = "docs/references/**"
-    disable = ["max_tokens", "max_lines"]
+    disable = ["max-tokens", "max-lines"]
     reason = "Imported source-derived docs preserve source fidelity over compactness."
 
-The direction is that rule behavior and rule options share the same targeting layer. Use explicit `path` targets rather than one overloaded `match` field, and keep public TOML keys in snake_case.
+The direction is that rule behavior and rule options share the same targeting layer. Use explicit `path` targets rather than one overloaded `match` field, and keep public TOML keys in kebab-case.
 
-For context-budget limits, `severity` is entry-level. If an entry includes both `max_tokens` and `max_lines`, the same severity applies to both diagnostics. Repositories that want different severities for the same path can use separate `[[rules]]` entries with the same `path`.
+For context-budget limits, `severity` is entry-level. If an entry includes both `max-tokens` and `max-lines`, the same severity applies to both diagnostics. Repositories that want different severities for the same path can use separate `[[rules]]` entries with the same `path`.
 
 ## `reason` For Exceptions
 
@@ -168,10 +168,10 @@ Discovery commands should depend on explicit repository conventions rather than 
 
 That means:
 
-- `docgarden list --skills` and `docgarden match --skills` should operate over `skills_dir`.
-- `docgarden list --plans` and `docgarden match --plans` should operate over `plans_dir`.
-- `docgarden list --active-plans` should operate over the `active/` directory under `plans_dir`.
-- `docgarden list --completed-plans` should operate over the `completed/` directory under `plans_dir`.
+- `docgarden list --skills` and `docgarden match --skills` should operate over `skills-dir`.
+- `docgarden list --plans` and `docgarden match --plans` should operate over `plans-dir`.
+- `docgarden list --active-plans` should operate over the `active/` directory under `plans-dir`.
+- `docgarden list --completed-plans` should operate over the `completed/` directory under `plans-dir`.
 - Optional curated indexes should avoid assuming this repository's path names.
 
 This keeps command behavior portable across repositories with different structures.
@@ -201,7 +201,7 @@ A conceptual example:
     required = ["description"]
 
     [rules.frontmatter.fields.description]
-    max_chars = 1024
+    max-chars = 1024
 
 For a repository-wide description policy with an `AGENTS.md` exception, split "validate this field when present" from "require this field." That keeps the exception narrow:
 
@@ -209,7 +209,7 @@ For a repository-wide description policy with an `AGENTS.md` exception, split "v
     path = "**/*.md"
 
     [rules.frontmatter.fields.description]
-    max_chars = 1024
+    max-chars = 1024
 
     [[rules]]
     path = "**/*.md"
@@ -218,7 +218,7 @@ For a repository-wide description policy with an `AGENTS.md` exception, split "v
     [rules.frontmatter]
     required = ["description"]
 
-This means `AGENTS.md` may omit `description`, but if it has one, the same `max_chars` constraint still applies. Other Markdown files both require `description` and enforce the character limit.
+This means `AGENTS.md` may omit `description`, but if it has one, the same `max-chars` constraint still applies. Other Markdown files both require `description` and enforce the character limit.
 
 ## Relationship To Imported References
 
