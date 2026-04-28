@@ -62,6 +62,14 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 - ALWAYS let serde reject unknown variants at parse time when the identifier appears in user-facing config. A runtime predicate that scans for unknown rule names duplicates work the deserializer can do for free.
 - ALWAYS attach `as_str` (or `Display`) to the enum so emit-sites read `Rule::PreferLinksForLocalPaths.as_str()` rather than reintroducing string literals.
 
+### Use kebab-case for user-facing identifiers
+
+*Principles 1, 2.*
+
+- ALWAYS spell user-facing identifiers in kebab-case: diagnostic rule names emitted in lint output, TOML config keys, and CLI flag long names. This matches `cargo`, `clippy`, `ruff`, `eslint`, and PEP 621 `pyproject.toml`, and gives every user-typed identifier in the project one canonical shape.
+- ALWAYS keep Rust struct field names snake_case (idiomatic Rust); bridge to kebab TOML keys with `#[serde(rename = "...")]` or `#[serde(rename_all = "kebab-case")]`. The Rust type system stays in its convention; the user-facing schema stays in its convention; serde resolves the gap.
+- ALWAYS spell rule identifiers consistently across `Rule::as_str`, `Rule::FromStr`, diagnostic output, and `disable`/`enable` config arrays. A second accepted spelling is two facts in two places — drop the snake-case fallback once kebab is canonical.
+
 ### Keep control flow flat
 
 *Principle 5.*

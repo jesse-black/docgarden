@@ -4,7 +4,7 @@ use markdown::mdast::Node;
 use crate::config::Rule;
 use crate::diagnostics::Severity;
 use crate::lint::references::{
-    ReferenceKind, classify_inline_reference, classify_link_reference, is_external,
+    ReferenceKind, classify_inline_reference, classify_link_reference, is_external, label_text,
     render_link_destination, resolve_candidate,
 };
 use crate::lint::reporting::DiagnosticPayload;
@@ -103,7 +103,6 @@ fn lint_link_node<'a>(
             return Ok(Vec::new());
         }
         if !exists {
-            use crate::lint::references::label_text;
             return Ok(vec![Finding {
                 payload: DiagnosticPayload {
                     file: context.file,

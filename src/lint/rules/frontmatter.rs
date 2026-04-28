@@ -29,7 +29,7 @@ pub(crate) struct FrontmatterRuleContext<'a> {
 pub(crate) fn evaluate_frontmatter_rules<'a>(
     context: &FrontmatterRuleContext<'a>,
 ) -> Result<Vec<Finding<'a>>> {
-    let policy = context.config.frontmatter_policy_for_path(context.file)?;
+    let policy = context.config.frontmatter_policy_for_path(context.file);
 
     // Nothing to check if no frontmatter policy applies.
     if policy.required.is_empty() && policy.field_max_chars.is_empty() {

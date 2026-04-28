@@ -106,12 +106,19 @@ impl Rule {
             Self::UnresolvedLinkPath => "unresolved-link-path",
             Self::UnresolvedBacktickPath => "unresolved-backtick-path",
             Self::PreferLinksForLocalPaths => "prefer-links-for-local-paths",
-            Self::MaxTokens => "max_tokens",
-            Self::MaxLines => "max_lines",
+            Self::MaxTokens => "max-tokens",
+            Self::MaxLines => "max-lines",
             Self::FrontmatterFieldMissing => "frontmatter-field-missing",
             Self::FrontmatterMalformed => "frontmatter-malformed",
             Self::FrontmatterFieldMaxChars => "frontmatter-field-max-chars",
         }
+    }
+
+    fn supported_in_enable(self) -> bool {
+        matches!(
+            self,
+            Self::UnresolvedBacktickPath | Self::PreferLinksForLocalPaths
+        )
     }
 }
 
@@ -323,14 +330,11 @@ impl Config {
     /// all matching `[[rules]]` entries in source order (last-writer-wins).
     ///
     /// - `disable` for opt-in rules (`unresolved-backtick-path`,
-    ///   `prefer-links-for-local-paths`, `max_tokens`, `max_lines`) clears
+    ///   `prefer-links-for-local-paths`, `max-tokens`, `max-lines`) clears
     ///   their state directly so a later `enable` can restore them.
     /// - `disable` for always-on rules (e.g. `unresolved-link-path`) adds to
     ///   `ignored_rules`; always-on rules cannot be re-enabled via `enable`.
-    pub fn effective_rule_policy_for_path(
-        &self,
-        relative_path: &str,
-    ) -> Result<EffectiveRulePolicy> {
+    pub fn effective_rule_policy_for_path(&self, relative_path: &str) -> EffectiveRulePolicy {
         let relative_path = Path::new(relative_path);
         let mut policy = EffectiveRulePolicy::default();
 
@@ -369,13 +373,10 @@ impl Config {
             }
         }
 
-        Ok(policy)
+        policy
     }
 
-    pub fn frontmatter_policy_for_path(
-        &self,
-        relative_path: &str,
-    ) -> Result<EffectiveFrontmatterPolicy> {
+    pub fn frontmatter_policy_for_path(&self, relative_path: &str) -> EffectiveFrontmatterPolicy {
         let relative_path = Path::new(relative_path);
         let mut policy = EffectiveFrontmatterPolicy::default();
         for rule in &self.frontmatter_rules {
@@ -389,7 +390,7 @@ impl Config {
                 policy.field_max_chars.insert(field.clone(), *max_chars);
             }
         }
-        Ok(policy)
+        policy
     }
 
     pub fn skills_root(&self) -> PathBuf {
@@ -477,13 +478,9 @@ fn lower_rules(
         let enabled_rules = rule.enable;
         let severity = rule.severity.unwrap_or(RuleSeverity::Error);
 
-        if !disabled_rules.is_empty() {
-            validate_rule_list("disable", &disabled_rules)?;
-        }
         if !enabled_rules.is_empty() {
-            validate_rule_list("enable", &enabled_rules)?;
             for enabled_rule in &enabled_rules {
-                if !is_supported_enabled_rule(*enabled_rule) {
+                if !enabled_rule.supported_in_enable() {
                     bail!("unsupported rule `{}` in `enable`", enabled_rule.as_str());
                 }
             }
@@ -548,20 +545,6 @@ fn budget_limit(rule: &str, limit: usize, severity: RuleSeverity) -> Result<Budg
         bail!("{rule} must be greater than zero");
     }
     Ok(BudgetLimit { limit, severity })
-}
-
-fn validate_rule_list(field: &str, rules: &[Rule]) -> Result<()> {
-    if rules.is_empty() {
-        bail!("rules `{field}` entries must not be empty");
-    }
-    Ok(())
-}
-
-fn is_supported_enabled_rule(rule: Rule) -> bool {
-    matches!(
-        rule,
-        Rule::UnresolvedBacktickPath | Rule::PreferLinksForLocalPaths
-    )
 }
 
 fn compile_rule_matcher(root: &Path, patterns: &[String]) -> Result<Gitignore> {
@@ -709,16 +692,14 @@ disable = ["unresolved-link-path"]
         assert!(config.special_filenames.contains("Tiltfile"));
         assert!(!config.special_filenames.contains("LICENSE"));
 
-        let generated_policy = config
-            .effective_rule_policy_for_path("docs/generated/output.md")
-            .unwrap();
+        let generated_policy = config.effective_rule_policy_for_path("docs/generated/output.md");
         assert!(
             generated_policy
                 .ignored_rules
                 .contains(&Rule::UnresolvedLinkPath)
         );
 
-        let other_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let other_policy = config.effective_rule_policy_for_path("README.md");
         assert!(
             !other_policy
                 .ignored_rules
@@ -751,7 +732,7 @@ disable = ["max_lines"]
         assert_eq!(config.config_path, Some(config_path));
         assert!(config.config_was_explicit);
         assert_eq!(config.include, vec!["docs/**/*.md".to_string()]);
-        let policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let policy = config.effective_rule_policy_for_path("README.md");
         assert_eq!(policy.max_lines, None);
     }
 
@@ -857,9 +838,7 @@ enable = ["prefer-links-for-local-paths"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let refs_policy = config
-            .effective_rule_policy_for_path("docs/references/source.md")
-            .unwrap();
+        let refs_policy = config.effective_rule_policy_for_path("docs/references/source.md");
         assert!(
             refs_policy
                 .ignored_rules
@@ -867,13 +846,11 @@ enable = ["prefer-links-for-local-paths"]
         );
         assert!(refs_policy.backtick_path_severity.is_some());
 
-        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md");
         assert!(readme_policy.prefer_links_for_local_paths);
         assert!(readme_policy.backtick_path_severity.is_none());
 
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert!(docs_policy.backtick_path_severity.is_some());
         assert!(!docs_policy.prefer_links_for_local_paths);
     }
@@ -903,9 +880,7 @@ enable = ["prefer-links-for-local-paths"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let policy = config
-            .effective_rule_policy_for_path("docs/references/source.md")
-            .unwrap();
+        let policy = config.effective_rule_policy_for_path("docs/references/source.md");
         assert!(policy.ignored_rules.contains(&Rule::UnresolvedLinkPath));
         assert!(policy.backtick_path_severity.is_some());
         assert!(policy.prefer_links_for_local_paths);
@@ -939,7 +914,7 @@ reason = "References preserve source fidelity."
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let readme = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme = config.effective_rule_policy_for_path("README.md");
         assert_eq!(
             readme.max_tokens,
             Some(BudgetLimit {
@@ -955,9 +930,7 @@ reason = "References preserve source fidelity."
             })
         );
 
-        let reference = config
-            .effective_rule_policy_for_path("docs/references/source.md")
-            .unwrap();
+        let reference = config.effective_rule_policy_for_path("docs/references/source.md");
         assert_eq!(reference.max_tokens, None);
         assert_eq!(reference.max_lines, None);
     }
@@ -1164,9 +1137,7 @@ enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert!(
             docs_policy
                 .ignored_rules
@@ -1195,6 +1166,8 @@ enable = ["unresolved-backtick-path", "prefer_links_for_local_paths"]
             Rule::FrontmatterFieldMaxChars.as_str(),
             "frontmatter-field-max-chars"
         );
+        assert_eq!(Rule::MaxTokens.as_str(), "max-tokens");
+        assert_eq!(Rule::MaxLines.as_str(), "max-lines");
     }
 
     #[test]
@@ -1244,11 +1217,11 @@ required = ["description"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let guide_policy = config.frontmatter_policy_for_path("docs/guide.md").unwrap();
+        let guide_policy = config.frontmatter_policy_for_path("docs/guide.md");
         assert_eq!(guide_policy.required, vec!["description".to_string()]);
         assert_eq!(guide_policy.field_max_chars.get("description"), Some(&1024));
 
-        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md").unwrap();
+        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md");
         assert_eq!(agents_policy.required, Vec::<String>::new());
         assert_eq!(
             agents_policy.field_max_chars.get("description"),
@@ -1283,12 +1256,12 @@ required = ["description"]
         let config = Config::load(&repository_root, None).unwrap();
 
         // Regular .md file: both rules match -> gets both required and max_chars
-        let policy = config.frontmatter_policy_for_path("docs/guide.md").unwrap();
+        let policy = config.frontmatter_policy_for_path("docs/guide.md");
         assert_eq!(policy.required, vec!["description".to_string()]);
         assert_eq!(policy.field_max_chars.get("description"), Some(&1024));
 
         // AGENTS.md: second rule excludes it -> only gets max_chars, not required
-        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md").unwrap();
+        let agents_policy = config.frontmatter_policy_for_path("AGENTS.md");
         assert_eq!(agents_policy.required, Vec::<String>::new());
         assert_eq!(
             agents_policy.field_max_chars.get("description"),
@@ -1423,12 +1396,10 @@ severity = "warn"
         assert_eq!(config.rule_applications.len(), 1);
         assert_eq!(config.rule_applications[0].severity, RuleSeverity::Warn);
 
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert_eq!(docs_policy.backtick_path_severity, Some(Severity::Warning));
 
-        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md");
         assert!(readme_policy.backtick_path_severity.is_none());
     }
 
@@ -1459,9 +1430,7 @@ severity = "warn"
         let config = Config::load(&repository_root, None).unwrap();
 
         // docs/ matches all three entries: enabled, then disabled, then re-enabled
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert_eq!(
             docs_policy.backtick_path_severity,
             Some(Severity::Warning),
@@ -1469,7 +1438,7 @@ severity = "warn"
         );
 
         // README.md matches only the first two: enabled then disabled
-        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md");
         assert!(
             readme_policy.backtick_path_severity.is_none(),
             "disable without later re-enable should leave rule off"
@@ -1501,15 +1470,13 @@ enable = ["prefer-links-for-local-paths"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert!(
             docs_policy.prefer_links_for_local_paths,
             "later enable should override earlier disable"
         );
 
-        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md");
         assert!(
             !readme_policy.prefer_links_for_local_paths,
             "disable without later re-enable should leave rule off"
@@ -1542,9 +1509,7 @@ severity = "warn"
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let docs_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert_eq!(
             docs_policy.max_tokens,
             Some(BudgetLimit {
@@ -1554,7 +1519,7 @@ severity = "warn"
             "later max_tokens entry should override earlier disable"
         );
 
-        let readme_policy = config.effective_rule_policy_for_path("README.md").unwrap();
+        let readme_policy = config.effective_rule_policy_for_path("README.md");
         assert!(
             readme_policy.max_tokens.is_none(),
             "disable without later re-enable should leave max_tokens off"
@@ -1582,17 +1547,13 @@ enable = ["unresolved-backtick-path"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        let internal_policy = config
-            .effective_rule_policy_for_path("docs/internal/spec.md")
-            .unwrap();
+        let internal_policy = config.effective_rule_policy_for_path("docs/internal/spec.md");
         assert!(
             internal_policy.backtick_path_severity.is_some(),
             "narrow enable should override broad disable for matching path"
         );
 
-        let other_policy = config
-            .effective_rule_policy_for_path("docs/guide.md")
-            .unwrap();
+        let other_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert!(
             other_policy.backtick_path_severity.is_none(),
             "broad disable without matching narrow enable should leave rule off"

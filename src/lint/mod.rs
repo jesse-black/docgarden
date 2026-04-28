@@ -42,7 +42,7 @@ struct WalkState<'a> {
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<Vec<Diagnostic>> {
     let relative_path = repository_relative_path(&config.repository_root, path)?;
-    let rule_policy = config.effective_rule_policy_for_path(&relative_path)?;
+    let rule_policy = config.effective_rule_policy_for_path(&relative_path);
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let tree = to_mdast(&source, &ParseOptions::gfm())

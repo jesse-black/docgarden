@@ -1488,7 +1488,7 @@ max_tokens = 1
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("error  max_tokens"))
+        .stdout(predicate::str::contains("error  max-tokens"))
         .stdout(predicate::str::contains("File has"))
         .stdout(predicate::str::contains(
             "which exceeds configured max_tokens = 1.",
@@ -1517,7 +1517,7 @@ severity = "warn"
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("warning  max_lines"))
+        .stdout(predicate::str::contains("warning  max-lines"))
         .stdout(predicate::str::contains(
             "File has 2 lines, which exceeds configured max_lines = 1.",
         ));
@@ -1549,8 +1549,8 @@ reason = "Only line length is enforced here."
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("max_lines"))
-        .stdout(predicate::str::contains("max_tokens").not());
+        .stdout(predicate::str::contains("max-lines"))
+        .stdout(predicate::str::contains("max-tokens").not());
 }
 
 #[test]
@@ -1578,8 +1578,8 @@ severity = "warn"
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("error  max_tokens"))
-        .stdout(predicate::str::contains("warning  max_lines"));
+        .stdout(predicate::str::contains("error  max-tokens"))
+        .stdout(predicate::str::contains("warning  max-lines"));
 }
 
 #[test]
@@ -1606,7 +1606,7 @@ max_tokens = 1000
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("max_tokens").not());
+        .stdout(predicate::str::contains("max-tokens").not());
 }
 
 #[test]
@@ -1638,7 +1638,7 @@ max_tokens = 1
         .args(["lint", "README.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("error  max_tokens"));
+        .stdout(predicate::str::contains("error  max-tokens"));
 }
 
 #[test]
@@ -1663,7 +1663,7 @@ max_lines = 1
         .args(["fix", "README.md", "--color", "never"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("max_lines"))
+        .stdout(predicate::str::contains("max-lines"))
         .stdout(predicate::str::contains("fixable").not());
 
     let rewritten = fs::read_to_string(readme).unwrap();

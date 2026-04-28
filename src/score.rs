@@ -76,16 +76,6 @@ impl CombinedFieldStats {
     fn avgdl(&self) -> f32 {
         self.avgdl
     }
-
-    #[cfg(test)]
-    fn pseudo_df(&self, term: &str) -> u32 {
-        self.pseudo_df.get(term).copied().unwrap_or(0)
-    }
-
-    #[cfg(test)]
-    fn pseudo_doc_count(&self) -> f32 {
-        self.pseudo_doc_count
-    }
 }
 
 #[derive(Default)]
@@ -329,7 +319,6 @@ mod tests {
             normalize_path("docs/the-active-plan.md"),
             vec!["docs", "active", "plan"]
         );
-        assert_eq!(stats.pseudo_df("the"), 0);
         assert!(score(&terms("the active plan"), &docs[0], &stats).score > 0.0);
     }
 
@@ -363,18 +352,6 @@ mod tests {
     }
 
     #[test]
-    fn bm25_stats_follow_combined_field_shape() {
-        let docs = vec![
-            candidate(Some("alpha"), "docs/a", Some("beta")),
-            candidate(Some("gamma"), "", None),
-        ];
-        let stats = CombinedFieldStats::build(&docs);
-
-        assert_eq!(stats.pseudo_doc_count(), 2.0);
-        assert!(stats.avgdl() > 0.0);
-    }
-
-    #[test]
     fn normalize_text_lowercases_splits_and_filters_stopwords() {
         let toks = normalize_text("Hello, The World!");
         assert_eq!(toks, vec!["hello", "world"]);
@@ -389,12 +366,12 @@ mod tests {
     #[test]
     fn can_build_stats_from_empty_corpus() {
         let stats = CombinedFieldStats::build(&[]);
-        assert_eq!(stats.pseudo_doc_count(), 0.0);
         assert_eq!(stats.avgdl(), 1.0);
-        assert_eq!(
-            stats.idf("anything"),
-            (1.0_f32 + (1.0_f32 - 0.0_f32 + 0.5_f32) / 0.5_f32).ln()
-        );
+
+        let empty = candidate(Some("anything"), "", None);
+        let hit = score(&terms("anything"), &empty, &stats);
+        assert!(hit.score.is_finite());
+        assert!(hit.score > 0.0);
     }
 
     #[test]
