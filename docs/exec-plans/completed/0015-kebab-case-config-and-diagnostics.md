@@ -54,4 +54,16 @@ description: "Exec plan for normalizing all user-facing identifiers (TOML config
 - The repository root `docgarden.toml` also used the renamed budget and frontmatter keys; it must move with the embedded default so validation commands can parse the dogfood config.
 
 ## Review
-- [ ] None yet
+- [x] (2026-04-28) Evaluator pass — no blocking findings.
+  - Plan acceptance criteria: each step's user-facing surface is kebab-case in the implementation diff.
+    - `Rule::as_str` returns kebab spellings for every variant including `MaxTokens`/`MaxLines` in `src/config.rs`.
+    - `Rule::FromStr` accepts only kebab spellings; the snake-case fallback arms are gone in `src/config.rs`.
+    - `FileConfig`, `RuleConfig`, and `FrontmatterFieldConfig` carry `#[serde(rename_all = "kebab-case", deny_unknown_fields)]` so Rust fields stay snake while TOML keys are kebab.
+    - Embedded default and dogfood configs use kebab keys throughout (`src/data/default-config.toml`, `docgarden.toml`).
+    - Diagnostic messages now spell `max-tokens`, `max-lines`, and `max-chars` in `src/lint/rules/file.rs`, `src/lint/rules/frontmatter.rs`, and `src/config.rs`.
+    - CLI help text and scope error labels updated in `src/cli.rs` and `src/scopes.rs`.
+    - Inverted unit test asserts that snake-case rule literals now fail to parse in `src/config.rs`; `Rule::from_str` test asserts `frontmatter_malformed` and `frontmatter_field_max_chars` are rejected.
+    - Step 9 sweep clean: every residual `rg` hit for the snake patterns falls under the documented allowlist (Rust struct field names, internal Rust-side comments, or the `load_rejects_removed_config_shapes` negative-test fixture asserting `path_style` is rejected as a stale top-level key — already a removed shape pre-plan).
+    - Design docs and `docs/PRODUCT.md` updated; the `skills.md:48` reversal landed (kebab convention now stated, prior `path_style = "backticks"` analogy generalized).
+  - Validation: `cargo test --lib config::tests` (29 passed), `cargo test --lib lint::tests` (5 passed), `cargo test --test cli` (72 passed), `cargo test --test path_behavior` (24 passed), `cargo run -- lint README.md docs/design-docs --color never` (clean), `cargo run -- lint docs/exec-plans/active/0015-kebab-case-config-and-diagnostics.md --color never` (clean), `cargo run -- lint . --color never` (clean against the dogfood config — embedded default still parses end-to-end).
+  - Note (non-blocking): `docs/CODESTYLE.md` lines 65–71 already carry the "Use kebab-case for user-facing identifiers" rule on `main` (commit `4602e7a`), so step 1 was effectively pre-landed. The plan's `[x]` accurately reflects current state but the actual edit does not appear in this branch's diff. No action needed.
