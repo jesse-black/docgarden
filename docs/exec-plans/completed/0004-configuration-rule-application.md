@@ -4,7 +4,7 @@ description: "Completed ExecPlan for simplifying `docgarden` configuration to a 
 
 # Implement Minimal Rules-Only Configuration
 
-This completed ExecPlan lives at `docs/exec-plans/completed/configuration-rule-application.md`.
+This completed ExecPlan lives at `docs/exec-plans/completed/0004-configuration-rule-application.md`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds. Maintain this document according to `docs/PLANS.md`.
 
