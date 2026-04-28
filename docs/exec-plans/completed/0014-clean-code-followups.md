@@ -1,5 +1,5 @@
 ---
-description: "Active plan for addressing clean-code follow-ups across config rule typing, lint policy shape, reference classification, scoring internals, YAML parsing, and root inference."
+description: "Exec plan for addressing clean-code follow-ups across config rule typing, lint policy shape, reference classification, scoring internals, YAML parsing, and root inference."
 ---
 
 # Clean Code Follow-ups
@@ -71,8 +71,8 @@ description: "Active plan for addressing clean-code follow-ups across config rul
 - [x] Delete `validate_rule_list` in `src/config.rs` and its two call sites in `lower_rules`. The function only checks `rules.is_empty()`, but every call site is already guarded by `if !rules.is_empty()`, so the check is unreachable.
 - [x] Move `is_supported_enabled_rule` in `src/config.rs` onto `Rule` as `Rule::supported_in_enable` so rule semantics live with the enum.
 - [x] Move the in-function `use crate::lint::references::label_text;` in `src/lint/rules/local_paths.rs` to the top-of-file `use` block alongside the other `references` imports.
-- [ ] Delete the dead `if !enabled_rules.is_empty()` guard around the `for enabled_rule in &enabled_rules` loop in `lower_rules` (`src/config.rs`). A `for` loop over an empty `Vec` is already a no-op, so the guard is unreachable for the same reason that motivated deleting `validate_rule_list`.
-- [ ] Split `lower_rules` in `src/config.rs` (~80 lines) into `lower_rule_application` and `lower_frontmatter_rule` helpers. The loop body lowers two unrelated outputs (`RuleApplication` and `FrontmatterRule`) sharing only locals; CODESTYLE asks for sub-step extraction at ~50 lines for sequential bodies.
-- [ ] Delete `once_lock_initializes_once_and_reuses_cached_value` in `src/lint/rules/file.rs`. It exercises `std::sync::OnceLock` itself, not anything in this crate; CODESTYLE principle 6 plus "Trust the toolchain" rejects tests that re-verify the standard library.
-- [ ] Reshape `tokenizer_is_cached_across_calls` in `src/lint/rules/file.rs` to drop the pointer-identity assertion. Pointer identity is implementation; keep only the behavioral `count_tokens("hello world").unwrap() > 0` half (or delete the test entirely if the smoke check is already covered elsewhere).
-- [ ] Drop the second `assert!(contains_disallowed_backtick_syntax(value) || value.is_empty() || value.starts_with("https://"))` line inside `inline_reference_rejects_disallowed_backtick_syntax` in `src/lint/mod.rs`. It re-asserts the implementation detail that explains why the previous behavioral assertion holds; the behavioral assertion already covers the contract.
+- [x] Delete the dead `if !enabled_rules.is_empty()` guard around the `for enabled_rule in &enabled_rules` loop in `lower_rules` (`src/config.rs`). A `for` loop over an empty `Vec` is already a no-op, so the guard is unreachable for the same reason that motivated deleting `validate_rule_list`.
+- [x] Split `lower_rules` in `src/config.rs` (~80 lines) into `lower_rule_application` and `lower_frontmatter_rule` helpers. The loop body lowers two unrelated outputs (`RuleApplication` and `FrontmatterRule`) sharing only locals; CODESTYLE asks for sub-step extraction at ~50 lines for sequential bodies.
+- [x] Delete `once_lock_initializes_once_and_reuses_cached_value` in `src/lint/rules/file.rs`. It exercises `std::sync::OnceLock` itself, not anything in this crate; CODESTYLE principle 6 plus "Trust the toolchain" rejects tests that re-verify the standard library.
+- [x] Reshape `tokenizer_is_cached_across_calls` in `src/lint/rules/file.rs` to drop the pointer-identity assertion. Pointer identity is implementation; keep only the behavioral `count_tokens("hello world").unwrap() > 0` half (or delete the test entirely if the smoke check is already covered elsewhere).
+- [x] Drop the second `assert!(contains_disallowed_backtick_syntax(value) || value.is_empty() || value.starts_with("https://"))` line inside `inline_reference_rejects_disallowed_backtick_syntax` in `src/lint/mod.rs`. It re-asserts the implementation detail that explains why the previous behavioral assertion holds; the behavioral assertion already covers the contract.

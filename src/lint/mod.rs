@@ -206,9 +206,7 @@ mod tests {
     use crate::config::Config;
     use crate::defaults::{default_extensions, default_special_filenames};
 
-    use super::references::{
-        classify_inline_reference, classify_link_reference, contains_disallowed_backtick_syntax,
-    };
+    use super::references::{classify_inline_reference, classify_link_reference};
 
     fn test_config() -> Config {
         Config {
@@ -273,11 +271,6 @@ mod tests {
             assert!(
                 classify_inline_reference(&config, value).is_none(),
                 "{value}"
-            );
-            assert!(
-                contains_disallowed_backtick_syntax(value)
-                    || value.is_empty()
-                    || value.starts_with("https://")
             );
         }
     }

@@ -472,72 +472,91 @@ fn lower_rules(
         {
             bail!("rule reason must not be empty");
         }
+        if let Some(application) = lower_rule_application(root, &rule)? {
+            applications.push(application);
+        }
+
         let pattern = rule.path;
         let exclude = rule.exclude;
-        let disabled_rules = rule.disable;
-        let enabled_rules = rule.enable;
-        let severity = rule.severity.unwrap_or(RuleSeverity::Error);
-
-        if !enabled_rules.is_empty() {
-            for enabled_rule in &enabled_rules {
-                if !enabled_rule.supported_in_enable() {
-                    bail!("unsupported rule `{}` in `enable`", enabled_rule.as_str());
-                }
-            }
-        }
-
-        let max_tokens = rule
-            .max_tokens
-            .map(|limit| budget_limit("max_tokens", limit, severity))
-            .transpose()?;
-        let max_lines = rule
-            .max_lines
-            .map(|limit| budget_limit("max_lines", limit, severity))
-            .transpose()?;
-
-        let has_rule_content = !disabled_rules.is_empty()
-            || !enabled_rules.is_empty()
-            || max_tokens.is_some()
-            || max_lines.is_some();
-
-        if has_rule_content {
-            applications.push(RuleApplication {
-                target: CompiledRuleTarget::new(root, &pattern, &exclude)?,
-                disable: disabled_rules,
-                enable: enabled_rules,
-                severity,
-                max_tokens,
-                max_lines,
-            });
-        }
-
-        if let Some(fm) = rule.frontmatter {
-            let mut field_max_chars = BTreeMap::new();
-            for (field_name, field_cfg) in fm.fields {
-                if field_name.trim().is_empty() {
-                    bail!("frontmatter field name must not be empty");
-                }
-                if let Some(max_chars) = field_cfg.max_chars {
-                    if max_chars == 0 {
-                        bail!(
-                            "frontmatter field `{field_name}` max_chars must be greater than zero"
-                        );
-                    }
-                    field_max_chars.insert(field_name, max_chars);
-                }
-            }
-            if !fm.required.is_empty() || !field_max_chars.is_empty() {
-                frontmatter_rules.push(FrontmatterRule::new(
-                    root,
-                    pattern,
-                    exclude,
-                    fm.required,
-                    field_max_chars,
-                )?);
-            }
+        if let Some(frontmatter_rule) =
+            lower_frontmatter_rule(root, pattern, exclude, rule.frontmatter)?
+        {
+            frontmatter_rules.push(frontmatter_rule);
         }
     }
     Ok((applications, frontmatter_rules))
+}
+
+fn lower_rule_application(root: &Path, rule: &RuleConfig) -> Result<Option<RuleApplication>> {
+    for enabled_rule in &rule.enable {
+        if !enabled_rule.supported_in_enable() {
+            bail!("unsupported rule `{}` in `enable`", enabled_rule.as_str());
+        }
+    }
+
+    let severity = rule.severity.unwrap_or(RuleSeverity::Error);
+    let max_tokens = rule
+        .max_tokens
+        .map(|limit| budget_limit("max_tokens", limit, severity))
+        .transpose()?;
+    let max_lines = rule
+        .max_lines
+        .map(|limit| budget_limit("max_lines", limit, severity))
+        .transpose()?;
+
+    let has_rule_content = !rule.disable.is_empty()
+        || !rule.enable.is_empty()
+        || max_tokens.is_some()
+        || max_lines.is_some();
+
+    if !has_rule_content {
+        return Ok(None);
+    }
+
+    Ok(Some(RuleApplication {
+        target: CompiledRuleTarget::new(root, &rule.path, &rule.exclude)?,
+        disable: rule.disable.clone(),
+        enable: rule.enable.clone(),
+        severity,
+        max_tokens,
+        max_lines,
+    }))
+}
+
+fn lower_frontmatter_rule(
+    root: &Path,
+    pattern: String,
+    exclude: Vec<String>,
+    frontmatter: Option<FrontmatterRuleConfig>,
+) -> Result<Option<FrontmatterRule>> {
+    let Some(frontmatter) = frontmatter else {
+        return Ok(None);
+    };
+
+    let mut field_max_chars = BTreeMap::new();
+    for (field_name, field_cfg) in frontmatter.fields {
+        if field_name.trim().is_empty() {
+            bail!("frontmatter field name must not be empty");
+        }
+        if let Some(max_chars) = field_cfg.max_chars {
+            if max_chars == 0 {
+                bail!("frontmatter field `{field_name}` max_chars must be greater than zero");
+            }
+            field_max_chars.insert(field_name, max_chars);
+        }
+    }
+
+    if frontmatter.required.is_empty() && field_max_chars.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(FrontmatterRule::new(
+        root,
+        pattern,
+        exclude,
+        frontmatter.required,
+        field_max_chars,
+    )?))
 }
 
 fn budget_limit(rule: &str, limit: usize, severity: RuleSeverity) -> Result<BudgetLimit> {
