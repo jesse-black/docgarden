@@ -49,6 +49,7 @@ description: "Active plan for addressing clean-code follow-ups across config rul
 - [x] Replace duplicate node variant re-checks in `src/lint/rules/local_paths.rs` with idiomatic pattern binding or typed helper functions.
 - [x] Replace eager `unwrap_or(std::env::current_dir()?)` in `infer_repository_root` with a lazy fallback path and keep existing root tests passing.
 - [x] Run `cargo fmt`.
+- [ ] Normalize `Rule::as_str` to kebab-case for `MaxTokens`/`MaxLines` so diagnostic output and `disable`/`enable` spellings are consistent across rules. `RuleConfig` TOML field keys (`max_tokens`, `max_lines`) stay snake-case; only the rule identifier changes. `FromStr` already accepts both spellings, so existing user config keeps working — only emitted diagnostics and test fixtures move.
 
 ## Validation
 - `cargo test --lib config::tests`
@@ -65,4 +66,8 @@ description: "Active plan for addressing clean-code follow-ups across config rul
 - `Rule` serde deserialization now rejects unknown rule names during TOML parsing, so the unknown-rule test pins parse rejection rather than the old post-parse validator wording.
 
 ## Review
-- [ ] None yet
+- [ ] Delete `CombinedFieldStats::pseudo_df` and `pseudo_doc_count` accessors in `src/score.rs` and rewrite their three callers to assert behavior. The accessors are pure internal-state introspection: `pseudo_df("the") == 0` in `stopword_filter_is_symmetric_for_index_and_query` is redundant with the existing `score(...) > 0.0` assertion in the same test; `bm25_stats_follow_combined_field_shape` is formula-only and should be deleted; `can_build_stats_from_empty_corpus` should drop the `pseudo_doc_count` and `idf` re-derivation assertions and keep the behavioral `avgdl() == 1.0` and a `score(...)` call against the empty corpus. This satisfies the spirit of CODESTYLE principle 6 (tests assert behavior, not implementation), not just the letter of the `#[cfg(test)]` rule.
+- [ ] Drop the `Result` wrapper from `Config::effective_rule_policy_for_path` and `Config::frontmatter_policy_for_path` in `src/config.rs`. Both bodies are infallible after the in-place mutation refactor; returning the policy directly removes the `?` at the two call sites and `.unwrap()` across ~25 test sites.
+- [ ] Delete `validate_rule_list` in `src/config.rs` and its two call sites in `lower_rules`. The function only checks `rules.is_empty()`, but every call site is already guarded by `if !rules.is_empty()`, so the check is unreachable.
+- [ ] Move `is_supported_enabled_rule` in `src/config.rs` onto `Rule` as `Rule::supported_in_enable` so rule semantics live with the enum.
+- [ ] Move the in-function `use crate::lint::references::label_text;` in `src/lint/rules/local_paths.rs` to the top-of-file `use` block alongside the other `references` imports.
