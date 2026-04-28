@@ -11,10 +11,11 @@ Use this skill when the task is to review the current PR branch or worktree that
 
 Before reviewing, read:
 
+- `docs/REVIEWING.md`
 - the current ExecPlan
 - the implementation diff or current branch/worktree state
 
-Treat the ExecPlan as the source of intent and acceptance criteria. Role-specific review responsibilities stop here; `docs/PLANS.md` remains the source of truth for ExecPlan structure and maintenance rules.
+Use `docs/REVIEWING.md` for repository-specific review routing, documentation-freshness checks, and validation expectations. Treat the ExecPlan as the source of intent and acceptance criteria. Role-specific review responsibilities stop here; `docs/PLANS.md` remains the source of truth for ExecPlan structure and maintenance rules.
 
 ## You own
 
