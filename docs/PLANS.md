@@ -19,6 +19,14 @@ Store ExecPlans in:
 - Active: `docs/exec-plans/active/`
 - Completed: `docs/exec-plans/completed/`
 
+Name ExecPlan files `NNNN-<plan-title>.md`, where `NNNN` is the next zero-padded sequence number and `<plan-title>` is a concise kebab-case slug. Keep the same filename when moving a plan from `active/` to `completed/`.
+
+To print the next sequence number:
+
+```sh
+./scripts/next-plan-number.sh
+```
+
 ## Rules
 
 - Prefer bullets over prose.
