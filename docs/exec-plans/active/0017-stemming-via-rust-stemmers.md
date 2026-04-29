@@ -12,10 +12,10 @@ description: "Add Snowball English (Porter2) stemming via the `rust-stemmers` cr
 
 - In:
   - `rust-stemmers = "1.2"` dependency in `Cargo.toml`
-  - One shared `Stemmer` instance for `Algorithm::English` held in a `OnceLock` in `src/score.rs` next to the existing stopword set
-  - Stemming inside the shared `tokenize` helper, applied **after** lowercasing and stopword filtering so `normalize_text` and `normalize_path` return stemmed tokens (matches Lucene `EnglishAnalyzer` ordering — the shipped stopword list is unstemmed surface forms)
-  - Crate-private single-token analyzer that exposes the same lowercase + stopword + stem chain for callers that already hold a single token; used by both `tokenize` and `flush_render_token` so highlighting and scoring share one source of truth
-  - `flush_render_token` in `src/matching.rs` highlights a surface token whose stem matches an analyzed query term (`plans` highlights when the query is `plan`)
+  - One shared `Stemmer` instance for `Algorithm::English` held in a `OnceLock<rust_stemmers::Stemmer>` in `src/score.rs` next to the existing stopword set (`Stemmer` is `Sync` in current versions, so `OnceLock` is the right primitive; `Stemmer::create` is cheap but not free, so initialize once)
+  - Crate-private `pub(crate) fn analyze_token(&str) -> Option<String>` in `src/score.rs` as the **single source of truth** for per-token analysis: lowercase → empty filter → stopword filter → Porter2 stem, returning `None` when the token is empty or a stopword
+  - `tokenize` becomes a thin splitter that calls `analyze_token` via `filter_map` over each chunk; `normalize_text` and `normalize_path` keep their signatures and start producing stemmed tokens transparently (analyzer order matches Lucene `EnglishAnalyzer` — the shipped stopword list is unstemmed surface forms)
+  - `flush_render_token` in `src/matching.rs` calls `analyze_token` on the surface token and highlights when the result matches an analyzed `query_terms` entry (`plans` highlights when the query is `plan`); the ad-hoc `to_lowercase` + raw `contains` path is removed so highlighting cannot drift from scoring
   - Stopword-only-query rejection in `execute_match` keeps working post-analysis with stemming on
   - `src/score.rs` unit tests for: `normalize_text` stems (`plans`→`plan`, `reviews`→`review`, `analyzed`→`analyz`), `normalize_path` stems on path-segmented input, single-token analyzer returns `None` for empty and stopword input, stopword filtering still applies before stemming, deterministic ordering, empty input is unaffected
   - `src/matching.rs` unit tests for: a token whose stem matches a query term is highlighted; a stopword surface token is not highlighted
@@ -45,24 +45,21 @@ description: "Add Snowball English (Porter2) stemming via the `rust-stemmers` cr
 
 ## Open Questions
 
-- Confirm `rust_stemmers::Stemmer` is `Sync` (it is, in current versions) so a `OnceLock<Stemmer>` is safe; if not, fall back to `thread_local!` — `Stemmer::create(Algorithm::English)` is cheap but not free.
-- The current `explain_score_band` rule is relative + coverage (`relative >= 0.75 && coverage >= 0.75` → high; etc.), so band cutoffs are not absolute and should generally survive any score shift from stemming. Verify this against the fixture exact-color assertions in `tests/cli.rs` and only adjust an assertion if the relative/coverage thresholds genuinely flip a fixture row.
-- `tests/cli.rs` routing-separation `top >= second * 1.5` floors may shift slightly; hold the assertion shape and only relax a specific factor if dogfooding shows a real regression rather than a noise-level change.
-- Whether to expose the single-token analyzer as `pub(crate) fn analyze_token(&str) -> Option<String>` or to refactor `tokenize` to return an iterator that maps through the same per-token function. Either is acceptable as long as `tokenize`, `normalize_text`/`normalize_path`, and the highlighter share one definition of "analyzed token."
+- None.
 
 ## Steps
 
 - [ ] Add `rust-stemmers = "1.2"` to `[dependencies]` in `Cargo.toml`; run `cargo build` to refresh `Cargo.lock`
-- [ ] In `src/score.rs`, add a `OnceLock<rust_stemmers::Stemmer>` initialized to `Stemmer::create(Algorithm::English)`; add a crate-private single-token analyzer that lowercases, returns `None` for empty or stopword tokens, and otherwise returns the Porter2 stem as `String`
-- [ ] Refactor the existing `tokenize` helper so the per-chunk pipeline is `lowercase → empty filter → stopword filter → stem`, keeping `normalize_text` and `normalize_path` signatures unchanged so `CombinedFieldStats::build`, `score()`, and `execute_match` start observing stemmed tokens transparently
+- [ ] In `src/score.rs`, add a `OnceLock<rust_stemmers::Stemmer>` initialized to `Stemmer::create(Algorithm::English)`; add `pub(crate) fn analyze_token(token: &str) -> Option<String>` as the single per-token entry point: lowercase → empty filter → stopword filter → Porter2 stem, returning `None` on empty or stopword input
+- [ ] Refactor `tokenize` into a thin splitter that calls `analyze_token` via `filter_map` over each chunk, so `normalize_text` and `normalize_path` keep their signatures and `CombinedFieldStats::build`, `score()`, and `execute_match` start observing stemmed tokens transparently
 - [ ] Add `src/score.rs` unit tests: `normalize_text("plans reviews")` returns `["plan", "review"]`; `normalize_path("docs/the-active-plans/scoring-guide.md")` stems each path segment; the single-token analyzer returns `None` for `""` and for stopwords (`"the"`, `"is"`); analyzer lowercases mixed case (`"Reviews"` → `Some("review")`); ordering is preserved
-- [ ] Update `flush_render_token` in `src/matching.rs` to analyze the surface token via the same single-token analyzer and check the stemmed result against `query_terms`; remove the ad-hoc `to_lowercase` + raw `contains` path so highlighting cannot drift from scoring
+- [ ] Update `flush_render_token` in `src/matching.rs` to call `analyze_token` on the surface token and check the result against `query_terms`; remove the ad-hoc `to_lowercase` + raw `contains` path so highlighting cannot drift from scoring
 - [ ] Add `src/matching.rs` unit tests: a surface token whose stem matches a query term is wrapped with the highlight ANSI sequence; a stopword token never highlights
 - [ ] Add `tests/cli.rs` end-to-end test that a singular query (e.g., `plan`) returns at least one document whose only surface form is the plural variant; assert top result path and (with `--explain` and forced color) that the plural surface form is wrapped in the highlight escape sequence. If the existing fixtures do not already exercise this, add one minimal fixture under `tests/discovery-repo/docs/`
 - [ ] Re-run the five Suggested Evaluation queries from ExecPlan 0010 against the discovery fixture and the live repo (`cargo run -- match …` for each); record top three scores and the top-vs-second gap per query under `Discoveries`
 - [ ] If routing-separation `top >= second * 1.5` floors no longer hold in `match_routes_review_queries_to_expected_execplan_docs`, `match_routes_plan_authoring_and_implementation_queries`, or `match_routes_scoring_query_to_scoring_guide`, document the regression in `Discoveries` and update only the specific failing factor; do not relax assertions wholesale
-- [ ] If any fixture exact-color assertion in `tests/cli.rs` flips because the relative/coverage band changed, document the new expected band in `Discoveries` and update that assertion; do not soften the test
-- [ ] Update `docs/design-docs/scoring.md`: rewrite the "Proposed Future Direction 1: Stemming" section as shipped behavior; document the analyzer order (lowercase → split → stopword → Porter2 stem), the shared single-token analyzer, the highlighting alignment, and the `rust-stemmers` dependency; cite ADRs 0003 and 0004; keep the remaining future directions (cutoff, phrase/proximity) intact
+- [ ] Do not add per-fixture band-color assertions for stemming tests. Score bands (`--explain` red/yellow/green) are visual-only output for human inspection and are not part of the match contract. The existing `match_explain_colorizes_scores_by_relative_and_coverage_bands` test exercises the band feature with a varied fixture; if stemming shifts its scores enough that all three bands no longer appear, adjust the fixture inputs to restore band coverage rather than asserting any specific band per row
+- [ ] Update `docs/design-docs/scoring.md`: rewrite the "Proposed Future Direction 1: Stemming" section as shipped behavior; document the analyzer order (lowercase → split → stopword → Porter2 stem), the shared `analyze_token` entry point, the highlighting alignment, and the `rust-stemmers` dependency; cite ADRs 0003 and 0004; keep the remaining future directions (cutoff, phrase/proximity) intact
 - [ ] Update `docs/design-docs/match-and-list.md` analyzer-contract description to mention stemming alongside stopword filtering, only where it is already described
 - [ ] Run `cargo run -- lint <changed-md-files> --color never` for any docs changed in the previous two steps
 
