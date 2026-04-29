@@ -25,7 +25,7 @@ Today it:
 - scores over `name`, `path_prefix`, and `description`
 - uses BM25F with `k1 = 1.2` and `b = 0.75`, matching Lucene `BM25Similarity` defaults
 - applies field boosts of `name = 3.0`, `path_prefix = 1.0`, and `description = 1.0`
-- receives analyzed tokens from the shared tokenizer described in [`tokenizer.md`](tokenizer.md)
+- receives analyzed tokens from the shared analyzer chain described in [`analyzer.md`](analyzer.md)
 - computes IDF from document-level collection statistics: `df(term)` is the number of candidates where the term appears in any scoring field, and `N` is the total candidate count
 - sorts by raw score, then matched query-term count, then best matched field, then path
 - limits default `docgarden match` output to the top 5 ranked results unless `--limit` / `-n` is supplied

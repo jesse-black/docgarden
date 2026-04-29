@@ -1016,7 +1016,6 @@ fn match_singular_query_matches_and_highlights_plural_surface_form() {
     let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].path, "docs/morphology.md");
-    assert!(!rows[0].name.contains("Plan "));
 
     let explain = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)

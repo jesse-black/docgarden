@@ -1,39 +1,50 @@
 ---
-description: "Design draft for `docgarden match` tokenization and Lucene analyzer comparison; read when changing query parsing, apostrophe handling, CamelCase splitting, compound-word handling, or tokenizer dependencies."
+description: "Design draft for the `docgarden match` analyzer chain — lowercasing, tokenization, stopword filtering, and Snowball English stemming; read when changing query parsing, apostrophe handling, CamelCase splitting, compound-word handling, stopword behavior, stemming, or tokenizer dependencies."
 ---
 
-# Match Tokenization
+# Match Analyzer
 
 ## Purpose
 
-This document owns the tokenization contract for `docgarden match`.
+This document owns the analyzer chain for `docgarden match`: lowercasing, tokenization, stopword filtering, and stemming.
 
-The tokenizer's job is to turn short repository metadata fields and user queries into the shared lexical tokens used by:
+The analyzer's job is to turn short repository metadata fields and user queries into the shared lexical tokens used by:
 
 - corpus statistics
 - BM25F scoring
 - explain-mode coverage
 - matched-term highlighting
 
-Scoring details live in [`scoring.md`](scoring.md). This document describes the surface tokens emitted before later analyzer steps.
+BM25F mechanics live in [`scoring.md`](scoring.md). This document owns the full analyzer chain that produces the tokens BM25F operates on.
 
 ## Current State
 
-The shipped tokenizer lives in `src/score.rs` and is reused by `src/matching.rs`.
+The shipped analyzer lives in `src/score.rs` and is reused by `src/matching.rs`.
 
 It has two splitter wrappers:
 
 - `normalize_text` for query strings, names, and descriptions
 - `normalize_path` for path prefixes
 
-The per-token analyzer is `analyze_token`.
+Both call the shared per-token entry point `analyze_token`, which is also called by `flush_render_token` in `src/matching.rs` so highlighting cannot drift from scoring.
 
-The current tokenizer behavior is:
+### Analyzer Order
 
-1. split text fields on whitespace or ASCII punctuation
-2. split path prefixes on `/`, `_`, `-`, `.`, whitespace, or ASCII punctuation, after stripping a trailing `.md`
+The shared analyzer chain is:
 
-Index-time and query-time tokenization must stay symmetric. If a candidate field can produce a token, a query should produce the same token from the same surface form. Highlighting should also use the same tokenization path, so displayed matches do not drift from scoring.
+1. lowercase
+2. split text fields on whitespace or ASCII punctuation, or split path prefixes on `/`, `_`, `-`, `.`, whitespace, or ASCII punctuation after stripping a trailing `.md`
+3. drop empty tokens and English stopwords (the shipped stopword list contains unstemmed surface forms, so stopword filtering happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md))
+4. apply Snowball English (Porter2) stemming through the [`rust-stemmers`](https://docs.rs/rust-stemmers/latest/rust_stemmers/) crate, per the implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md)
+
+`analyze_token` performs steps 1, 3, and 4 on a single token; `normalize_text` and `normalize_path` are splitter wrappers that apply step 2 and feed each chunk through `analyze_token` via `filter_map`.
+
+This means:
+
+- corpus statistics, BM25F scoring, explain-mode coverage, and matched-term highlighting all observe the same analyzed token stream
+- index-time and query-time analysis use the same entry point, so a candidate field and a query produce the same token from the same surface form
+- highlighting analyzes each displayed surface token and wraps it in the highlight escape when its stem matches an analyzed query term, so a plural surface form (`plans`) can highlight for a singular query (`plan`)
+- stopword-only queries are rejected before scoring because every token analyzes to `None`
 
 ## Current Differences From Lucene
 
@@ -70,7 +81,7 @@ Adopt:
 - **CamelCase splitting.** `ExecPlan` should emit `Exec` and `Plan`; `PowerShot` should emit `Power` and `Shot`.
 - **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`.
 - **Existing ASCII punctuation splitting except apostrophes.** Keep current punctuation boundary behavior for forms such as `planner-execplan`, `repository-local`, `rust-stemmers`, and `docs/PLANS.md`; apostrophes are the only punctuation class called out for near-term special handling.
-- **A single tokenizer helper used by text, paths, scoring, and highlighting.** Any new split rule must affect query analysis and candidate analysis identically.
+- **A single analyzer entry point used by text, paths, scoring, and highlighting.** Any new split rule must affect query analysis and candidate analysis identically.
 
 Consider later:
 

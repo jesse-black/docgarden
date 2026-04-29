@@ -195,7 +195,7 @@ That should print one repository-relative path per line.
 - ordering is the primary contract for default output
 - raw numeric score is an explain-mode aid, not the main user-facing interface
 - ranking-model changes belong in `docs/design-docs/scoring.md`
-- tokenization and analyzer changes belong in `docs/design-docs/tokenizer.md`
+- analyzer-chain changes (tokenization, stopwords, stemming) belong in `docs/design-docs/analyzer.md`
 - output shape, default display, and explain-mode presentation belong in this document
 
 ### `docgarden list`
