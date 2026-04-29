@@ -23,7 +23,7 @@ The shipped scorer lives in `src/score.rs` and `src/matching.rs`.
 Today it:
 
 - scores over `name`, `path_prefix`, and `description`
-- uses Lucene-shaped combined-field BM25F with `k1 = 1.2` and `b = 0.75`
+- uses a Lucene-shaped combined-field BM25F approximation with `k1 = 1.2` and `b = 0.75`
 - applies field boosts of `name = 3.0`, `path_prefix = 1.0`, and `description = 1.0`
 - lowercases and tokenizes query and candidate fields symmetrically
 - filters English stopwords inside the shared normalization path used for both corpus statistics and query parsing
@@ -44,9 +44,9 @@ The shipped BM25F field model uses three fields:
 
 The reason `name` falls back to the filename stem rather than treating them as separate fields is that many documents do not have a frontmatter `name`, so the filename is the next-best identity source. For skills the inverse is true: every skill file is named `SKILL.md`, so the filename carries no useful signal and the frontmatter `name` is the actual identifier. Merging them into one field with frontmatter taking priority handles both cases cleanly.
 
-### Lucene-Derived Scoring Shape
+### Current Lucene-Derived Scoring Shape
 
-The intended implementation follows Lucene's [`CombinedFieldQuery`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/CombinedFieldQuery.java), [`MultiNormsLeafSimScorer`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/MultiNormsLeafSimScorer.java), and [`BM25Similarity`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/core/src/java/org/apache/lucene/search/similarities/BM25Similarity.java) shape:
+The current implementation follows Lucene's [`CombinedFieldQuery`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/CombinedFieldQuery.java), [`MultiNormsLeafSimScorer`](https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/MultiNormsLeafSimScorer.java), and [`BM25Similarity`](https://lucene.apache.org/core/9_9_1/core/org/apache/lucene/search/similarities/BM25Similarity.html) shape:
 
     // Treat multiple fields as one synthetic weighted field.
     for each query term t:
@@ -65,7 +65,7 @@ The intended implementation follows Lucene's [`CombinedFieldQuery`](https://gith
             idf(t) * ((k1 + 1) * combined_freq(t, d))
                      / (combined_freq(t, d) + k1 * (1 - b + b * combined_length(d) / avgdl))
 
-This is the validation target to mirror: combine weighted field statistics, term frequency, and field length first, then apply one BM25 scorer over the synthetic field. It is not equivalent to running BM25 independently per field and summing the results.
+This describes the shipped scorer shape, not the durable scoring-model source of truth. [ADR 0002](../decisions/0002-use-bm25f-as-the-scoring-model.md) records BM25F as the model that should own field weighting, term-frequency saturation, and document-level IDF semantics. Lucene remains useful implementation history for combining weighted field statistics, term frequency, and field length before applying one BM25 scorer over the synthetic field. It is not equivalent to running BM25 independently per field and summing the results.
 
 ### Stopword Filtering
 
@@ -101,9 +101,9 @@ The scorer should improve separation and recall without turning `docgarden match
 
 ## Proposed Future Directions
 
-Lucene's `CombinedFieldQuery` and `BM25Similarity` remain the source of truth for the shipped lexical ranking model. Future work should build on that base rather than reopening the pre-BM25F tiered scorer.
+ADR 0002 records BM25F as the source of truth for the lexical ranking model. Future work should close gaps between the current Lucene-shaped approximation and BM25F rather than reopening the pre-BM25F tiered scorer.
 
-### 1. Evaluate Document-Union Pseudo Statistics
+### 1. Evaluate Document-Level IDF Statistics
 
 The shipped scorer intentionally follows Lucene's combined-field shape, including these corpus-level approximations:
 
@@ -112,18 +112,22 @@ The shipped scorer intentionally follows Lucene's combined-field shape, includin
 
 That behavior is consistent with the linked Lucene implementation and should not be treated as a correctness bug in the current scorer.
 
-A plausible future experiment is to replace those max-based pseudo statistics with document-union statistics that treat a term as present when it appears in any scoring field of a document:
+The max-based form is a Lucene `CombinedFieldQuery` engineering choice rather than the canonical BM25F definition. Robertson, Zaragoza, and Taylor's "Simple BM25 Extension to Multiple Weighted Fields" (CIKM 2004) and the later "The Probabilistic Relevance Framework: BM25 and Beyond" (2009) compute IDF once per term at the document level, treating a term as present in a document if it appears in any field. Moving to BM25F document-level collection statistics is therefore moving *toward* textbook BM25F, not away from it.
 
-- `pseudo_df(term) = number of documents where the term appears in any scoring field`
-- `pseudo_doc_count = total candidate documents`
+A plausible future experiment is to replace those max-based pseudo statistics with BM25F collection statistics that treat a term as present when it appears in any scoring field of a document:
 
-The motivation would be repository-routing quality, not fidelity to Lucene. In small curated corpora, union-style statistics may reduce cases where a term that appears in different fields across different documents is treated as rarer than it feels to a human reader.
+- `df(term) = number of documents where the term appears in any scoring field`
+- `N = total candidate documents`
+
+Functionally empty routed documents should be caught by linting and authoring quality checks rather than excluded from the BM25F collection-size statistic.
+
+The motivation is both repository-routing quality and closer alignment with the original BM25F definition. In small curated corpora, union-style statistics may reduce cases where a term that appears in different fields across different documents is treated as rarer than it feels to a human reader.
 
 If this is explored, it should be treated as a deliberate scoring-model change:
 
 - compare ranking quality against the current Lucene-shaped baseline on real repo queries
 - update `docs/design-docs/match-and-list.md` if the ranking contract changes materially
-- document clearly that `docgarden` is no longer mirroring Lucene's pseudo-statistics approximation exactly
+- document clearly that `docgarden` uses BM25F document-level IDF rather than Lucene's per-field-max pseudo-statistics approximation
 
 This is worth evaluating before more speculative scoring additions if dogfooding shows corpus-statistics shape matters more than token normalization.
 
@@ -169,9 +173,9 @@ Implementation shape if accepted:
 
 ### 3. Relevancy Cutoff After Ranking Tuning
 
-The next result-shaping step after document-union statistics and stemming should be a relevancy cutoff, so `docgarden match` can hide weak tail results even when they are inside the default top 5.
+The next result-shaping step after document-level IDF statistics and stemming should be a relevancy cutoff, so `docgarden match` can hide weak tail results even when they are inside the default top 5.
 
-This should wait until document-union statistics and stemming have both been evaluated because those changes may alter score distribution, term coverage, and the apparent quality gap between useful and weak matches. A cutoff tuned against today's scores could become too strict or too permissive once ranking changes.
+This should wait until document-level IDF statistics and stemming have both been evaluated because those changes may alter score distribution, term coverage, and the apparent quality gap between useful and weak matches. A cutoff tuned against today's scores could become too strict or too permissive once ranking changes.
 
 Potential cutoff calculations to evaluate:
 
@@ -221,6 +225,8 @@ The recommended scoring model. BM25F extends BM25 with per-field weighting and i
 
 References:
 
+- Robertson, Zaragoza, Taylor, "Simple BM25 Extension to Multiple Weighted Fields" (CIKM 2004): https://dl.acm.org/doi/10.1145/1031171.1031181
+- Robertson, Zaragoza, "The Probabilistic Relevance Framework: BM25 and Beyond" (2009): https://www.nowpublishers.com/article/Details/INR-019
 - BM25F in Lucene discussion: https://opensourceconnections.com/blog/2016/10/19/bm25f-in-lucene/
 - Lucene `BM25Similarity` docs: https://lucene.apache.org/core/9_9_1/core/org/apache/lucene/search/similarities/BM25Similarity.html
 - Lucene `CombinedFieldQuery` source: https://github.com/apache/lucene-solr/blob/branch_8_11/lucene/sandbox/src/java/org/apache/lucene/search/CombinedFieldQuery.java
