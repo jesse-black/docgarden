@@ -112,7 +112,9 @@ Implements [ADR 0002 — Use BM25F as the scoring model](../../decisions/0002-us
 - Existing explain-mode relative-plus-coverage bands still fit the sampled distributions, so `score_band`, `match --help`, and `docs/design-docs/match-and-list.md` did not need contract changes.
 - `cargo run -- lint docs/design-docs/scoring.md docs/design-docs/match-and-list.md docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never` passes.
 - `cargo xtask validate` passes, including `cargo fmt --check`, clippy, full test suite, llvm-cov report generation, and diff coverage gate.
+- Addressed review by deleting the single-field `FieldStats` wrapper and folding length counters into `CombinedFieldStats::build`.
 
 ## Review
 
-- [ ] **`FieldStats` is now a single-field wrapper.** After the rename it holds only `sum_total_term_freq: u32` plus one trivial accumulator and one boost helper. CODESTYLE flags wrapper structs as a smell, and the plan explicitly allowed deleting the type. The three call sites could fold to plain `u32` counters and a free-standing `boost * count` expression in `build`. Not a defect — flagging because the plan permits the simplification and the post-rename shape is the moment to take it.
+- [x] **`FieldStats` is now a single-field wrapper.** After the rename it holds only `sum_total_term_freq: u32` plus one trivial accumulator and one boost helper. CODESTYLE flags wrapper structs as a smell, and the plan explicitly allowed deleting the type. The three call sites could fold to plain `u32` counters and a free-standing `boost * count` expression in `build`. Not a defect — flagging because the plan permits the simplification and the post-rename shape is the moment to take it.
+- [x] Re-reviewed the follow-up that removes `FieldStats`; no remaining issue found. `cargo test --lib score`, `cargo run -- lint docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never`, and `cargo fmt --check` pass.

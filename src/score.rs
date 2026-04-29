@@ -15,9 +15,9 @@ pub(crate) struct CombinedFieldStats {
 
 impl CombinedFieldStats {
     pub(crate) fn build(candidates: &[Candidate<'_>]) -> Self {
-        let mut name = FieldStats::default();
-        let mut path_prefix = FieldStats::default();
-        let mut description = FieldStats::default();
+        let mut name_sum_total_term_freq = 0;
+        let mut path_prefix_sum_total_term_freq = 0;
+        let mut description_sum_total_term_freq = 0;
         let mut df = HashMap::new();
 
         for candidate in candidates {
@@ -28,9 +28,9 @@ impl CombinedFieldStats {
                 .map(normalize_text)
                 .unwrap_or_default();
 
-            name.record(&name_terms);
-            path_prefix.record(&path_prefix_terms);
-            description.record(&description_terms);
+            name_sum_total_term_freq += name_terms.len() as u32;
+            path_prefix_sum_total_term_freq += path_prefix_terms.len() as u32;
+            description_sum_total_term_freq += description_terms.len() as u32;
 
             let mut seen = HashSet::new();
             for term in name_terms
@@ -45,9 +45,9 @@ impl CombinedFieldStats {
         }
 
         let doc_count = candidates.len() as f32;
-        let combined_sum_total_term_freq = name.boosted_sum_total_term_freq(NAME_BOOST)
-            + path_prefix.boosted_sum_total_term_freq(PATH_PREFIX_BOOST)
-            + description.boosted_sum_total_term_freq(DESCRIPTION_BOOST);
+        let combined_sum_total_term_freq = NAME_BOOST * name_sum_total_term_freq as f32
+            + PATH_PREFIX_BOOST * path_prefix_sum_total_term_freq as f32
+            + DESCRIPTION_BOOST * description_sum_total_term_freq as f32;
         let avgdl = if doc_count > 0.0 && combined_sum_total_term_freq > 0.0 {
             combined_sum_total_term_freq / doc_count
         } else {
@@ -69,21 +69,6 @@ impl CombinedFieldStats {
 
     fn avgdl(&self) -> f32 {
         self.avgdl
-    }
-}
-
-#[derive(Default)]
-struct FieldStats {
-    sum_total_term_freq: u32,
-}
-
-impl FieldStats {
-    fn record(&mut self, tokens: &[String]) {
-        self.sum_total_term_freq += tokens.len() as u32;
-    }
-
-    fn boosted_sum_total_term_freq(&self, boost: f32) -> f32 {
-        boost * self.sum_total_term_freq as f32
     }
 }
 
