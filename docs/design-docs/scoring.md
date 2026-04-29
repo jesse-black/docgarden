@@ -1,5 +1,5 @@
 ---
-description: "Working design draft for `docgarden match` scoring, including the shipped BM25F model, stopword handling, and candidate future tuning directions such as stemming."
+description: "Working design draft for `docgarden match` scoring, including the shipped BM25F model, analyzer pipeline, stopword handling, stemming, and candidate future tuning directions."
 ---
 
 # Match Scoring
@@ -25,8 +25,7 @@ Today it:
 - scores over `name`, `path_prefix`, and `description`
 - uses BM25F with Lucene-derived combined-field term-frequency and length accounting, `k1 = 1.2`, and `b = 0.75`
 - applies field boosts of `name = 3.0`, `path_prefix = 1.0`, and `description = 1.0`
-- lowercases and tokenizes query and candidate fields symmetrically
-- filters English stopwords inside the shared normalization path used for both corpus statistics and query parsing
+- lowercases, tokenizes, filters English stopwords, and stems query and candidate fields symmetrically
 - computes IDF from document-level collection statistics: `df(term)` is the number of candidates where the term appears in any scoring field, and `N` is the total candidate count
 - sorts by raw score, then matched query-term count, then best matched field, then path
 - limits default `docgarden match` output to the top 5 ranked results unless `--limit` / `-n` is supplied
@@ -74,14 +73,26 @@ Candidates with no tokens in any scoring field still count toward `N`. Functiona
 
 This describes the shipped scorer shape, not the durable scoring-model source of truth. [ADR 0002](../decisions/0002-use-bm25f-as-the-scoring-model.md) records BM25F as the model that owns field weighting, term-frequency saturation, and document-level IDF semantics. Lucene remains useful implementation history for combining weighted field statistics, term frequency, and field length before applying one BM25 scorer over the synthetic field, but `docgarden` no longer follows Lucene's max-based pseudo-statistics for IDF. The model is not equivalent to running BM25 independently per field and summing the results.
 
-### Stopword Filtering
+### Analyzer Pipeline
 
-`docgarden` now uses analyzer-style stopword filtering:
+`docgarden` uses one shared analyzer pipeline for query terms, candidate fields, corpus statistics, scoring, explain-mode coverage, and matched-term highlighting.
 
-- filter stopwords inside `normalize_text` and `normalize_path` so every caller receives already-filtered tokens
-- apply the same filtering at index time and query time
-- compute BM25F term statistics and field lengths from the filtered token streams
+The analyzer order is:
+
+1. lowercase
+2. split on text or path separators
+3. remove English stopwords
+4. apply Snowball English (Porter2) stemming through `rust-stemmers`
+
+`src/score.rs` keeps the per-token contract in `analyze_token`, with `normalize_text` and `normalize_path` acting as splitter wrappers around that shared function. The shipped stopword list contains unstemmed surface forms, so stopword filtering intentionally happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md) and the Snowball implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md).
+
+This means:
+
+- every scoring caller receives already-filtered and already-stemmed tokens
+- index-time and query-time analysis use the same token stream
+- BM25F term statistics and field lengths are computed from analyzed tokens
 - reject stopword-only queries as invalid
+- matched-term highlighting analyzes each displayed surface token and highlights it when its stem matches an analyzed query term
 
 This keeps corpus statistics, query parsing, and displayed explain metrics aligned around one shared token stream.
 
@@ -89,10 +100,8 @@ This keeps corpus statistics, query parsing, and displayed explain metrics align
 
 The shipped scorer is much closer to the intended routing behavior, but a few limitations remain:
 
-- no stemming, so `plan` does not match `plans` and `review` does not match `reviews`
 - no phrase or proximity evidence beyond unigram coverage
 - explain-mode colors still need calibration over more real-world query sets
-- default highlighting is still exact-token based, so pluralization and related morphology can look inconsistent to a human even when the result ordering is reasonable
 
 ## Design Goals For Future Tuning
 
@@ -110,51 +119,11 @@ The scorer should improve separation and recall without turning `docgarden match
 
 ADR 0002 records BM25F as the source of truth for the lexical ranking model. Future work should close remaining gaps in normalization, cutoff behavior, and phrase evidence rather than reopening the pre-BM25F tiered scorer.
 
-### 1. Stemming With A Shared Normalization Path
+### 1. Relevancy Cutoff After Ranking Tuning
 
-The next plausible routing improvement is stemming, and current repo dogfooding suggests it has more upside than phrase/proximity bonuses.
+The next result-shaping step should be a relevancy cutoff, so `docgarden match` can hide weak tail results even when they are inside the default top 5.
 
-Motivating examples:
-
-- `plan` should likely match `plans`
-- `review` should likely match `reviews`
-- `exec` should likely match `execution`
-- highlighting should not suggest a weaker match story than the scorer actually used
-
-Current evidence from repo queries:
-
-- the canonical routing queries such as `review against the active plan` and `implement from the active plan` already have strong BM25F separation
-- the more obvious remaining mismatch is morphological, such as `exec plan` ranking `ExecPlan` documents very close to or above documents that contain `Execution plan`
-- that pattern suggests normalization is a better next lever than phrase-aware bonuses
-
-If stemming is added, it should use one shared code path as the source of truth for:
-
-- corpus statistics
-- query parsing
-- scoring
-- matched-term highlighting
-- explain-mode coverage metrics
-
-The repository should avoid a split where scoring uses stemming but display highlighting still uses only exact token matches, or vice versa.
-
-Candidate evaluation direction:
-
-- evaluate the `rust-stemmers` crate as the likely lightweight implementation option
-- verify whether its stemming behavior is conservative enough for repository-routing queries
-- keep stopword filtering and stemming in the same normalization pipeline so all consumers observe the same post-analysis tokens
-- dogfood carefully against this repo before treating stemming as the new default, because overly aggressive stemming could reduce routing precision in a small curated corpus
-
-Implementation shape if accepted:
-
-- keep one shared normalization pipeline in `src/score.rs`
-- expose enough normalized-token information for `src/matching.rs` highlighting to follow the same analyzed terms
-- add tests showing that ranking and highlighting stay aligned for stemmed forms such as `plan` / `plans`
-
-### 2. Relevancy Cutoff After Ranking Tuning
-
-The next result-shaping step after stemming should be a relevancy cutoff, so `docgarden match` can hide weak tail results even when they are inside the default top 5.
-
-This should wait until stemming has been evaluated because that change may alter score distribution, term coverage, and the apparent quality gap between useful and weak matches. A cutoff tuned against today's scores could become too strict or too permissive once ranking changes.
+Now that stemming has shipped, cutoff tuning should use the post-stemming score distribution, term coverage, and apparent quality gap between useful and weak matches.
 
 Potential cutoff calculations to evaluate:
 
@@ -166,11 +135,11 @@ Potential cutoff calculations to evaluate:
 
 The cutoff should remain deterministic and explainable. If a result is hidden by relevance rather than by `--limit`, explain mode should make that behavior inspectable, either by exposing the cutoff value or by offering a later flag that shows filtered tail results for debugging.
 
-### 3. Partial Phrase And Proximity Bonuses (Deferred)
+### 2. Partial Phrase And Proximity Bonuses (Deferred)
 
 BM25F is a bag-of-words model and does not capture phrase evidence. Bigram bonuses or limited proximity evidence could still add signal on top of BM25F for routing queries where term co-occurrence matters.
 
-This is now a lower-priority direction than stemming because BM25F already resolves many of the motivating phrase-shaped routing queries well. Phrase-aware bonuses should be added only if dogfooding after stemming or other normalization improvements still shows a remaining gap.
+This remains lower priority because BM25F plus stemming resolves many of the motivating routing queries. Phrase-aware bonuses should be added only if dogfooding after stemming or other normalization improvements still shows a remaining gap.
 
 If implemented:
 
@@ -181,8 +150,7 @@ If implemented:
 ## What Implementation Would Look Like
 
 - `src/score.rs`
-  - keep BM25F and stopword filtering as the shared baseline
-  - if stemming is added later, implement it in the shared normalization path rather than in a display-only helper
+  - keep BM25F, stopword filtering, and stemming in the shared analyzer baseline
 - `src/matching.rs`
   - keep explain-mode and highlighting aligned with the same normalized-token pipeline the scorer uses
 - `src/cli.rs`
@@ -190,7 +158,7 @@ If implemented:
 - `tests/cli.rs`
   - keep routing-separation tests for evaluator vs planner vs generator queries
   - keep tests that stopwords do not dominate rankings
-  - if stemming lands, add tests showing highlighting and scoring agree on stemmed query/document forms
+  - keep tests showing highlighting and scoring agree on stemmed query/document forms
 - `docs/design-docs/match-and-list.md`
   - update if future scoring or highlighting semantics change materially
 - `docs/exec-plans/active/*.md`
@@ -230,17 +198,16 @@ Reference:
 
 ### Stemming
 
-Stemming is a plausible next step if `docgarden` needs better recall across singular/plural and other closely related word forms without adopting fuzzier matching.
+Stemming improves recall across singular/plural and other closely related word forms without adopting fuzzier matching.
 
-Candidate library to evaluate:
+Chosen implementation:
 
-- `rust-stemmers`
+- `rust-stemmers` with `Algorithm::English`, which implements Snowball English / Porter2
 
 ## Open Questions
 
 - What are the right BM25F `k1` and `b` values for this corpus? Lucene's `BM25Similarity` defaults are `k1 = 1.2`, `b = 0.75` and are the right starting point. The combined-field length is dominated by short `name` and `path_prefix` content, so a lower `b` may reduce length penalty for documents with longer descriptions; more dogfooding will confirm whether the defaults hold.
 - Should explain-mode color bands remain the current relative-plus-coverage rule, or become more dynamic after more real-world query sets are sampled?
-- Should stemming be adopted for both scoring and highlighting, or is exact-token behavior still the better fit for repository-routing precision?
 
 ## Explain And Display
 
@@ -256,7 +223,7 @@ The default `docgarden match` output should prioritize routing clarity over scor
 - print a header row followed by `score | relative | coverage | path | name | description`
 - `score` is the raw BM25F score rendered with two decimal places
 - `relative` is the result's percentage of the top score in that result set
-- `coverage` is `matched_terms/query_terms` after stopword filtering
+- `coverage` is `matched_terms/query_terms` after stopword filtering and stemming
 - any color bands should apply only in explain mode and should use a hybrid relative-plus-coverage rule rather than fixed absolute raw-score thresholds
 
 ## Suggested Evaluation

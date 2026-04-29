@@ -194,6 +194,8 @@ That should print one repository-relative path per line.
 The contract here is intentionally narrow:
 
 - `match` ranks over discovery metadata rather than Markdown body text
+- query and candidate metadata use the same analyzer contract: lowercase, split, remove English stopwords, and apply Snowball English stemming
+- matched-term highlighting follows the analyzed token stream, so a displayed plural can highlight for a singular query
 - ordering is the primary contract for default output
 - raw numeric score is an explain-mode aid, not the main user-facing interface
 - changes to scoring, normalization, tie-breaking, or explain-specific score semantics belong in `docs/design-docs/scoring.md`

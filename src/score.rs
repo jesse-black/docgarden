@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
+use rust_stemmers::{Algorithm, Stemmer};
+
 pub(crate) struct Candidate<'a> {
     pub(crate) name: Option<&'a str>,
     pub(crate) path_prefix: &'a str,
@@ -93,11 +95,25 @@ const BM25_K1: f32 = 1.2;
 const BM25_B: f32 = 0.75;
 
 static STOPWORDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+static ENGLISH_STEMMER: OnceLock<Stemmer> = OnceLock::new();
 
 pub(crate) fn is_stopword(term: &str) -> bool {
     STOPWORDS
         .get_or_init(|| include_str!("data/stopwords_en.txt").lines().collect())
         .contains(term)
+}
+
+fn english_stemmer() -> &'static Stemmer {
+    ENGLISH_STEMMER.get_or_init(|| Stemmer::create(Algorithm::English))
+}
+
+pub(crate) fn analyze_token(token: &str) -> Option<String> {
+    let normalized = token.to_lowercase();
+    if normalized.is_empty() || is_stopword(&normalized) {
+        return None;
+    }
+
+    Some(english_stemmer().stem(&normalized).into_owned())
 }
 
 pub(crate) fn normalize_text(text: &str) -> Vec<String> {
@@ -117,10 +133,8 @@ where
     F: Fn(char) -> bool,
 {
     input
-        .to_lowercase()
         .split(is_separator)
-        .filter(|term| !term.is_empty() && !is_stopword(term))
-        .map(str::to_string)
+        .filter_map(analyze_token)
         .collect()
 }
 
@@ -221,6 +235,45 @@ mod tests {
     }
 
     #[test]
+    fn normalize_text_stems_morphological_variants() {
+        assert_eq!(
+            normalize_text("plans reviews analyzed"),
+            vec!["plan", "review", "analyz"]
+        );
+    }
+
+    #[test]
+    fn normalize_path_stems_path_segments() {
+        assert_eq!(
+            normalize_path("docs/the-active-plans/scoring-guide.md"),
+            vec!["doc", "activ", "plan", "score", "guid"]
+        );
+    }
+
+    #[test]
+    fn analyze_token_filters_empty_and_stopword_input() {
+        assert_eq!(analyze_token(""), None);
+        assert_eq!(analyze_token("the"), None);
+        assert_eq!(analyze_token("is"), None);
+    }
+
+    #[test]
+    fn analyze_token_filters_stopwords_before_stemming() {
+        assert_eq!(analyze_token("was"), None);
+    }
+
+    #[test]
+    fn analyze_token_lowercases_and_stems_mixed_case_input() {
+        assert_eq!(analyze_token("Reviews"), Some("review".to_string()));
+    }
+
+    #[test]
+    fn normalize_text_preserves_token_ordering_and_empty_input() {
+        assert_eq!(normalize_text("Reviews plans"), vec!["review", "plan"]);
+        assert!(normalize_text("").is_empty());
+    }
+
+    #[test]
     fn rare_term_outranks_common_term() {
         let docs = vec![
             candidate(Some("rare guide"), "", None),
@@ -245,7 +298,7 @@ mod tests {
         ];
         let stats = CombinedFieldStats::build(&docs);
 
-        assert_eq!(stats.df.get("routing"), Some(&2));
+        assert_eq!(stats.df.get("rout"), Some(&2));
     }
 
     #[test]
@@ -264,7 +317,7 @@ mod tests {
         let docs = vec![candidate(Some("routing"), "routing", Some("routing"))];
         let stats = CombinedFieldStats::build(&docs);
 
-        assert_eq!(stats.df.get("routing"), Some(&1));
+        assert_eq!(stats.df.get("rout"), Some(&1));
     }
 
     #[test]
@@ -310,10 +363,10 @@ mod tests {
         ];
         let stats = CombinedFieldStats::build(&docs);
 
-        assert_eq!(normalize_text("the active plan"), vec!["active", "plan"]);
+        assert_eq!(normalize_text("the active plan"), vec!["activ", "plan"]);
         assert_eq!(
             normalize_path("docs/the-active-plan.md"),
-            vec!["docs", "active", "plan"]
+            vec!["doc", "activ", "plan"]
         );
         assert!(score(&terms("the active plan"), &docs[0], &stats).score > 0.0);
     }
@@ -356,7 +409,7 @@ mod tests {
     #[test]
     fn normalize_path_strips_extension_and_splits_separators() {
         let toks = normalize_path("docs/the-active-plan/my_guide.md");
-        assert_eq!(toks, vec!["docs", "active", "plan", "my", "guide"]);
+        assert_eq!(toks, vec!["doc", "activ", "plan", "my", "guid"]);
     }
 
     #[test]

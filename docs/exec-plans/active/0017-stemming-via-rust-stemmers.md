@@ -49,19 +49,19 @@ description: "Add Snowball English (Porter2) stemming via the `rust-stemmers` cr
 
 ## Steps
 
-- [ ] Add `rust-stemmers = "1.2"` to `[dependencies]` in `Cargo.toml`; run `cargo build` to refresh `Cargo.lock`
-- [ ] In `src/score.rs`, add a `OnceLock<rust_stemmers::Stemmer>` initialized to `Stemmer::create(Algorithm::English)`; add `pub(crate) fn analyze_token(token: &str) -> Option<String>` as the single per-token entry point: lowercase → empty filter → stopword filter → Porter2 stem, returning `None` on empty or stopword input
-- [ ] Refactor `tokenize` into a thin splitter that calls `analyze_token` via `filter_map` over each chunk, so `normalize_text` and `normalize_path` keep their signatures and `CombinedFieldStats::build`, `score()`, and `execute_match` start observing stemmed tokens transparently
-- [ ] Add `src/score.rs` unit tests: `normalize_text("plans reviews")` returns `["plan", "review"]`; `normalize_path("docs/the-active-plans/scoring-guide.md")` stems each path segment; the single-token analyzer returns `None` for `""` and for stopwords (`"the"`, `"is"`); analyzer lowercases mixed case (`"Reviews"` → `Some("review")`); ordering is preserved
-- [ ] Update `flush_render_token` in `src/matching.rs` to call `analyze_token` on the surface token and check the result against `query_terms`; remove the ad-hoc `to_lowercase` + raw `contains` path so highlighting cannot drift from scoring
-- [ ] Add `src/matching.rs` unit tests: a surface token whose stem matches a query term is wrapped with the highlight ANSI sequence; a stopword token never highlights
-- [ ] Add `tests/cli.rs` end-to-end test that a singular query (e.g., `plan`) returns at least one document whose only surface form is the plural variant; assert top result path and (with `--explain` and forced color) that the plural surface form is wrapped in the highlight escape sequence. If the existing fixtures do not already exercise this, add one minimal fixture under `tests/discovery-repo/docs/`
-- [ ] Re-run the five Suggested Evaluation queries from ExecPlan 0010 against the discovery fixture and the live repo (`cargo run -- match …` for each); record top three scores and the top-vs-second gap per query under `Discoveries`
-- [ ] If routing-separation `top >= second * 1.5` floors no longer hold in `match_routes_review_queries_to_expected_execplan_docs`, `match_routes_plan_authoring_and_implementation_queries`, or `match_routes_scoring_query_to_scoring_guide`, document the regression in `Discoveries` and update only the specific failing factor; do not relax assertions wholesale
-- [ ] Do not add per-fixture band-color assertions for stemming tests. Score bands (`--explain` red/yellow/green) are visual-only output for human inspection and are not part of the match contract. The existing `match_explain_colorizes_scores_by_relative_and_coverage_bands` test exercises the band feature with a varied fixture; if stemming shifts its scores enough that all three bands no longer appear, adjust the fixture inputs to restore band coverage rather than asserting any specific band per row
-- [ ] Update `docs/design-docs/scoring.md`: rewrite the "Proposed Future Direction 1: Stemming" section as shipped behavior; document the analyzer order (lowercase → split → stopword → Porter2 stem), the shared `analyze_token` entry point, the highlighting alignment, and the `rust-stemmers` dependency; cite ADRs 0003 and 0004; keep the remaining future directions (cutoff, phrase/proximity) intact
-- [ ] Update `docs/design-docs/match-and-list.md` analyzer-contract description to mention stemming alongside stopword filtering, only where it is already described
-- [ ] Run `cargo run -- lint <changed-md-files> --color never` for any docs changed in the previous two steps
+- [x] Add `rust-stemmers = "1.2"` to `[dependencies]` in `Cargo.toml`; run `cargo build` to refresh `Cargo.lock`
+- [x] In `src/score.rs`, add a `OnceLock<rust_stemmers::Stemmer>` initialized to `Stemmer::create(Algorithm::English)`; add `pub(crate) fn analyze_token(token: &str) -> Option<String>` as the single per-token entry point: lowercase → empty filter → stopword filter → Porter2 stem, returning `None` on empty or stopword input
+- [x] Refactor `tokenize` into a thin splitter that calls `analyze_token` via `filter_map` over each chunk, so `normalize_text` and `normalize_path` keep their signatures and `CombinedFieldStats::build`, `score()`, and `execute_match` start observing stemmed tokens transparently
+- [x] Add `src/score.rs` unit tests: `normalize_text("plans reviews")` returns `["plan", "review"]`; `normalize_path("docs/the-active-plans/scoring-guide.md")` stems each path segment; the single-token analyzer returns `None` for `""` and for stopwords (`"the"`, `"is"`); analyzer lowercases mixed case (`"Reviews"` → `Some("review")`); ordering is preserved
+- [x] Update `flush_render_token` in `src/matching.rs` to call `analyze_token` on the surface token and check the result against `query_terms`; remove the ad-hoc `to_lowercase` + raw `contains` path so highlighting cannot drift from scoring
+- [x] Add `src/matching.rs` unit tests: a surface token whose stem matches a query term is wrapped with the highlight ANSI sequence; a stopword token never highlights
+- [x] Add `tests/cli.rs` end-to-end test that a singular query (e.g., `plan`) returns at least one document whose only surface form is the plural variant; assert top result path and (with `--explain` and forced color) that the plural surface form is wrapped in the highlight escape sequence. If the existing fixtures do not already exercise this, add one minimal fixture under `tests/discovery-repo/docs/`
+- [x] Re-run the five Suggested Evaluation queries from ExecPlan 0010 against the discovery fixture and the live repo (`cargo run -- match …` for each); record top three scores and the top-vs-second gap per query under `Discoveries`
+- [x] If routing-separation `top >= second * 1.5` floors no longer hold in `match_routes_review_queries_to_expected_execplan_docs`, `match_routes_plan_authoring_and_implementation_queries`, or `match_routes_scoring_query_to_scoring_guide`, document the regression in `Discoveries` and update only the specific failing factor; do not relax assertions wholesale
+- [x] Do not add per-fixture band-color assertions for stemming tests. Score bands (`--explain` red/yellow/green) are visual-only output for human inspection and are not part of the match contract. The existing `match_explain_colorizes_scores_by_relative_and_coverage_bands` test exercises the band feature with a varied fixture; if stemming shifts its scores enough that all three bands no longer appear, adjust the fixture inputs to restore band coverage rather than asserting any specific band per row
+- [x] Update `docs/design-docs/scoring.md`: rewrite the "Proposed Future Direction 1: Stemming" section as shipped behavior; document the analyzer order (lowercase → split → stopword → Porter2 stem), the shared `analyze_token` entry point, the highlighting alignment, and the `rust-stemmers` dependency; cite ADRs 0003 and 0004; keep the remaining future directions (cutoff, phrase/proximity) intact
+- [x] Update `docs/design-docs/match-and-list.md` analyzer-contract description to mention stemming alongside stopword filtering, only where it is already described
+- [x] Run `cargo run -- lint <changed-md-files> --color never` for any docs changed in the previous two steps
 
 ## Validation
 
@@ -83,7 +83,20 @@ description: "Add Snowball English (Porter2) stemming via the `rust-stemmers` cr
 
 ## Discoveries
 
-- None yet
+- Focused unit and CLI checks pass post-stemming: `cargo test --lib score`, `cargo test --lib matching`, `cargo test --test cli match_singular_query_matches_and_highlights_plural_surface_form`, `cargo test --test cli match_routes`, and `cargo test --test cli match`.
+- Final validation passed with `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, validation `cargo run -- match ...` commands from this plan, `cargo run -- lint docs/exec-plans/active/0017-stemming-via-rust-stemmers.md docs/design-docs/scoring.md docs/design-docs/match-and-list.md --color never`, and `cargo xtask validate`.
+- Discovery fixture evaluation (`cargo run --manifest-path /workspaces/dglint/Cargo.toml -- match --explain --limit 3 ...` from `tests/discovery-repo/`):
+  - `review`: `docs/evaluator-execplan.md` 2.13; no second result.
+  - `review against the active plan`: `docs/evaluator-execplan.md` 6.24, `docs/exec-plans/active/current.md` 2.61, `docs/generator-execplan.md` 2.47; top/second gap 2.39.
+  - `implement from the active plan`: `docs/generator-execplan.md` 6.15, `docs/exec-plans/active/current.md` 2.61, `docs/planner-execplan.md` 2.47; top/second gap 2.36.
+  - `revise the active plan`: `docs/planner-execplan.md` 4.55, `docs/exec-plans/active/current.md` 2.61, `docs/generator-execplan.md` 2.47; top/second gap 1.74.
+  - `docgarden match scoring`: `docs/scoring-guide.md` 2.27, `docs/discovery-overview.md` 1.32, `docs/common-word.md` 1.03; top/second gap 1.72.
+- Live repo evaluation (`cargo run -- match --explain --limit 3 ...` from `/workspaces/dglint`):
+  - `review`: `docs/REVIEWING.md` 3.87, `.agents/skills/evaluator-execplan/SKILL.md` 2.92, `docs/TESTING.md` 2.83; top/second gap 1.33.
+  - `review against the active plan`: `.agents/skills/evaluator-execplan/SKILL.md` 9.89, `docs/REVIEWING.md` 4.65, `.agents/skills/generator-execplan/SKILL.md` 4.08; top/second gap 2.13.
+  - `implement from the active plan`: `.agents/skills/generator-execplan/SKILL.md` 9.18, `docs/exec-plans/completed/0016-document-union-pseudo-statistics.md` 4.57, `.agents/skills/planner-execplan/SKILL.md` 3.33; top/second gap 2.01.
+  - `revise the active plan`: `.agents/skills/planner-execplan/SKILL.md` 5.38, `.agents/skills/generator-execplan/SKILL.md` 4.08, `docs/PLANS.md` 3.44; top/second gap 1.32.
+  - `docgarden match scoring`: `docs/design-docs/scoring.md` 5.12, `docs/exec-plans/completed/0010-bm25f-scoring.md` 4.92, `docs/decisions/0002-use-bm25f-as-the-scoring-model.md` 4.85; top/second gap 1.04.
 
 ## Review
 

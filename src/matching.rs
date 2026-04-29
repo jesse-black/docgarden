@@ -9,7 +9,7 @@ use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
 use crate::documents::{escape_pipe, load_document_metadata_for_paths};
 use crate::root::{RootMarker, infer_repository_root};
 use crate::scopes::{Scope, discover_scope_files};
-use crate::score::{Candidate, CombinedFieldStats, Field, normalize_text};
+use crate::score::{Candidate, CombinedFieldStats, Field, analyze_token, normalize_text};
 
 struct MatchResult {
     repo_relative_path: String,
@@ -273,9 +273,13 @@ fn flush_render_token(
         return;
     }
 
-    let normalized = token.to_lowercase();
     let escaped = escape_pipe(token);
-    if style_output && query_terms.contains(normalized.as_str()) {
+    let analyzed = analyze_token(token);
+    if style_output
+        && analyzed
+            .as_deref()
+            .is_some_and(|term| query_terms.contains(term))
+    {
         rendered.push_str("\u{1b}[1m");
         rendered.push_str(&escaped);
         rendered.push_str("\u{1b}[0m");
@@ -377,7 +381,7 @@ mod tests {
 
     #[test]
     fn render_match_field_highlights_matching_path_terms() {
-        let query_terms: HashSet<&str> = HashSet::from(["scoring"]);
+        let query_terms: HashSet<&str> = HashSet::from(["score"]);
         let rendered = render_match_field(
             "docs/active-scoring.md",
             &query_terms,
@@ -385,5 +389,25 @@ mod tests {
             FieldRenderMode::Path,
         );
         assert!(rendered.contains("\u{1b}[1mscoring\u{1b}[0m"));
+    }
+
+    #[test]
+    fn render_match_field_highlights_surface_token_by_stem() {
+        let query_terms: HashSet<&str> = HashSet::from(["plan"]);
+        let rendered = render_match_field(
+            "Review the active plans",
+            &query_terms,
+            true,
+            FieldRenderMode::Text,
+        );
+        assert!(rendered.contains("\u{1b}[1mplans\u{1b}[0m"));
+    }
+
+    #[test]
+    fn render_match_field_does_not_highlight_stopword_surface_token() {
+        let query_terms: HashSet<&str> = HashSet::from(["the"]);
+        let rendered = render_match_field("the plan", &query_terms, true, FieldRenderMode::Text);
+        assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
+        assert!(rendered.contains("the"));
     }
 }
