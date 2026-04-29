@@ -49,16 +49,16 @@ Implements [ADR 0002 — Use BM25F as the scoring model](../../decisions/0002-us
 
 ## Steps
 
-- [ ] In `src/score.rs::CombinedFieldStats::build`, collect per-candidate token sets across all scoring fields (after `normalize_text` / `normalize_path` and stopword filtering), then increment `df[term]` once per candidate that contains `term` in the union, and set `doc_count` / `N` to the total number of candidate documents in the scoring collection, including candidates whose scoring fields normalize to zero tokens. Keep sum-total-term-frequency and `avgdl` boost-weighted as today.
-- [ ] Remove the per-field `df.max(...)` and `doc_count.max(...)` reductions from `CombinedFieldStats::build`; per-field `FieldStats` may stay only if still needed for sum-total-term-frequency / `avgdl`. Delete `FieldStats` fields that become unused.
-- [ ] Rename `CombinedFieldStats` fields and tests from Lucene-style `pseudo_df` / `pseudo_doc_count` to BM25F-oriented names such as `df` / `doc_count`, `document_frequency` / `document_count`, or similarly clear local names.
-- [ ] Add `src/score.rs` unit tests:
+- [x] In `src/score.rs::CombinedFieldStats::build`, collect per-candidate token sets across all scoring fields (after `normalize_text` / `normalize_path` and stopword filtering), then increment `df[term]` once per candidate that contains `term` in the union, and set `doc_count` / `N` to the total number of candidate documents in the scoring collection, including candidates whose scoring fields normalize to zero tokens. Keep sum-total-term-frequency and `avgdl` boost-weighted as today.
+- [x] Remove the per-field `df.max(...)` and `doc_count.max(...)` reductions from `CombinedFieldStats::build`; per-field `FieldStats` may stay only if still needed for sum-total-term-frequency / `avgdl`. Delete `FieldStats` fields that become unused.
+- [x] Rename `CombinedFieldStats` fields and tests from Lucene-style `pseudo_df` / `pseudo_doc_count` to BM25F-oriented names such as `df` / `doc_count`, `document_frequency` / `document_count`, or similarly clear local names.
+- [x] Add `src/score.rs` unit tests:
   - a term appearing in `name` of doc A and `description` of doc B has `df == 2`, not `1` (the previous max-based behavior);
   - a candidate with all fields empty after normalization still contributes to `N`;
   - a single-doc corpus where the term appears in two fields still has `df == 1`;
   - existing assertions (rare-term outranks common term, boosted field outranks weaker field, longer combined length penalty, deterministic ordering, empty `path_prefix` no-panic) continue to hold.
-- [ ] Run `cargo test --lib score` and `cargo test --test cli match`; fix any test that asserts exact pre-change scores rather than ordering.
-- [ ] Dogfood the Suggested Evaluation queries against this repo and the discovery fixture:
+- [x] Run `cargo test --lib score` and `cargo test --test cli match`; fix any test that asserts exact pre-change scores rather than ordering.
+- [x] Dogfood the Suggested Evaluation queries against this repo and the discovery fixture:
   - `cargo run -- match review`
   - `cargo run -- match review against the active plan`
   - `cargo run -- match implement from the active plan`
@@ -66,15 +66,15 @@ Implements [ADR 0002 — Use BM25F as the scoring model](../../decisions/0002-us
   - `cargo run -- match docgarden match scoring`
   - `cargo run -- match the` (must still error)
   Record top-result scores and the gap to the second result under `Discoveries`. Add more queries only if this set exposes a coverage gap.
-- [ ] Recalibrate `score_band` thresholds and `match --help` long_about only if the recorded distribution makes the current relative-plus-coverage bands wrong. If unchanged, note that explicitly under `Discoveries`.
-- [ ] Update `docs/design-docs/scoring.md`:
+- [x] Recalibrate `score_band` thresholds and `match --help` long_about only if the recorded distribution makes the current relative-plus-coverage bands wrong. If unchanged, note that explicitly under `Discoveries`.
+- [x] Update `docs/design-docs/scoring.md`:
   - rewrite "Current Lucene-Derived Scoring Shape" pseudocode so `df` is document-union and `N` is total candidate documents;
   - add a one-paragraph note in "Current State" that `docgarden` follows BM25F document-level IDF and intentionally diverges from Lucene's `CombinedFieldQuery` per-field-max approximation;
   - delete "### 1. Evaluate Document-Level IDF Statistics" from "Proposed Future Directions" and renumber the remaining directions;
   - refresh "Open Questions" if needed.
-- [ ] Update `docs/design-docs/match-and-list.md` only if the ranking contract changed materially.
-- [ ] Run `cargo run -- lint docs/design-docs/scoring.md docs/design-docs/match-and-list.md docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never` and address any findings.
-- [ ] Run `cargo xtask validate` as the final pre-handoff check.
+- [x] Update `docs/design-docs/match-and-list.md` only if the ranking contract changed materially.
+- [x] Run `cargo run -- lint docs/design-docs/scoring.md docs/design-docs/match-and-list.md docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never` and address any findings.
+- [x] Run `cargo xtask validate` as the final pre-handoff check.
 
 ## Validation
 
@@ -93,8 +93,28 @@ Implements [ADR 0002 — Use BM25F as the scoring model](../../decisions/0002-us
 
 ## Discoveries
 
-- None yet
+- Added `src/score.rs` regression tests for document-level union `df`, empty candidates contributing to `N`, and duplicate term appearances across fields in one document counting as `df == 1`; `cargo test --lib score` passes.
+- `cargo test --test cli match` passes without exact-score fixture updates.
+- Suggested Evaluation on this repo after document-union IDF:
+  - `review`: top `.agents/skills/evaluator-execplan/SKILL.md` 3.06, second `docs/REVIEWING.md` 2.61, gap 0.45.
+  - `review against the active plan`: top evaluator skill 11.23, second generator skill 5.60, gap 5.63.
+  - `implement from the active plan`: top generator skill 12.01, second planner skill 4.83, gap 7.18.
+  - `revise the active plan`: top planner skill 6.80, second generator skill 5.60, gap 1.20.
+  - `docgarden match scoring`: top `docs/design-docs/scoring.md` 5.94, second ADR 0002 5.52, gap 0.42.
+  - `the`: still exits non-zero with `query must contain at least one non-stopword term`.
+- Suggested Evaluation on `tests/discovery-repo` after document-union IDF:
+  - `review`: top `docs/evaluator-execplan.md` 2.13; no second result.
+  - `review against the active plan`: top evaluator fixture 6.24, second generator fixture 2.47, gap 3.77.
+  - `implement from the active plan`: top generator fixture 6.15, second planner fixture 2.28, gap 3.87.
+  - `revise the active plan`: top planner fixture 4.36, second generator fixture 2.47, gap 1.89.
+  - `docgarden match scoring`: top `docs/scoring-guide.md` 2.27, second `docs/discovery-overview.md` 1.32, gap 0.95.
+  - `the`: still exits non-zero with `query must contain at least one non-stopword term`.
+- Existing explain-mode relative-plus-coverage bands still fit the sampled distributions, so `score_band`, `match --help`, and `docs/design-docs/match-and-list.md` did not need contract changes.
+- `cargo run -- lint docs/design-docs/scoring.md docs/design-docs/match-and-list.md docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never` passes.
+- `cargo xtask validate` passes, including `cargo fmt --check`, clippy, full test suite, llvm-cov report generation, and diff coverage gate.
+- Addressed review by deleting the single-field `FieldStats` wrapper and folding length counters into `CombinedFieldStats::build`.
 
 ## Review
 
-- [ ] None yet
+- [x] **`FieldStats` is now a single-field wrapper.** After the rename it holds only `sum_total_term_freq: u32` plus one trivial accumulator and one boost helper. CODESTYLE flags wrapper structs as a smell, and the plan explicitly allowed deleting the type. The three call sites could fold to plain `u32` counters and a free-standing `boost * count` expression in `build`. Not a defect — flagging because the plan permits the simplification and the post-rename shape is the moment to take it.
+- [x] Re-reviewed the follow-up that removes `FieldStats`; no remaining issue found. `cargo test --lib score`, `cargo run -- lint docs/exec-plans/active/0016-document-union-pseudo-statistics.md --color never`, and `cargo fmt --check` pass.

@@ -8,102 +8,67 @@ pub(crate) struct Candidate<'a> {
 }
 
 pub(crate) struct CombinedFieldStats {
-    pseudo_doc_count: f32,
+    doc_count: f32,
     avgdl: f32,
-    pseudo_df: HashMap<String, u32>,
+    df: HashMap<String, u32>,
 }
 
 impl CombinedFieldStats {
     pub(crate) fn build(candidates: &[Candidate<'_>]) -> Self {
-        let mut name = FieldStats::default();
-        let mut path_prefix = FieldStats::default();
-        let mut description = FieldStats::default();
+        let mut name_sum_total_term_freq = 0;
+        let mut path_prefix_sum_total_term_freq = 0;
+        let mut description_sum_total_term_freq = 0;
+        let mut df = HashMap::new();
 
         for candidate in candidates {
-            name.record(candidate.name.map(normalize_text).unwrap_or_default());
-            path_prefix.record(normalize_path(candidate.path_prefix));
-            description.record(
-                candidate
-                    .description
-                    .map(normalize_text)
-                    .unwrap_or_default(),
-            );
+            let name_terms = candidate.name.map(normalize_text).unwrap_or_default();
+            let path_prefix_terms = normalize_path(candidate.path_prefix);
+            let description_terms = candidate
+                .description
+                .map(normalize_text)
+                .unwrap_or_default();
+
+            name_sum_total_term_freq += name_terms.len() as u32;
+            path_prefix_sum_total_term_freq += path_prefix_terms.len() as u32;
+            description_sum_total_term_freq += description_terms.len() as u32;
+
+            let mut seen = HashSet::new();
+            for term in name_terms
+                .iter()
+                .chain(path_prefix_terms.iter())
+                .chain(description_terms.iter())
+            {
+                if seen.insert(term.as_str()) {
+                    *df.entry(term.clone()).or_default() += 1;
+                }
+            }
         }
 
-        let pseudo_doc_count = name
-            .doc_count
-            .max(path_prefix.doc_count)
-            .max(description.doc_count) as f32;
-        let pseudo_sum_total_term_freq = name.boosted_sum_total_term_freq(NAME_BOOST)
-            + path_prefix.boosted_sum_total_term_freq(PATH_PREFIX_BOOST)
-            + description.boosted_sum_total_term_freq(DESCRIPTION_BOOST);
-        let avgdl = if pseudo_doc_count > 0.0 && pseudo_sum_total_term_freq > 0.0 {
-            pseudo_sum_total_term_freq / pseudo_doc_count
+        let doc_count = candidates.len() as f32;
+        let combined_sum_total_term_freq = NAME_BOOST * name_sum_total_term_freq as f32
+            + PATH_PREFIX_BOOST * path_prefix_sum_total_term_freq as f32
+            + DESCRIPTION_BOOST * description_sum_total_term_freq as f32;
+        let avgdl = if doc_count > 0.0 && combined_sum_total_term_freq > 0.0 {
+            combined_sum_total_term_freq / doc_count
         } else {
             1.0
         };
 
-        let mut pseudo_df = HashMap::new();
-        for term in name
-            .df
-            .keys()
-            .chain(path_prefix.df.keys())
-            .chain(description.df.keys())
-        {
-            let df = name
-                .df
-                .get(term)
-                .copied()
-                .unwrap_or(0)
-                .max(path_prefix.df.get(term).copied().unwrap_or(0))
-                .max(description.df.get(term).copied().unwrap_or(0));
-            pseudo_df.insert(term.clone(), df);
-        }
-
         Self {
-            pseudo_doc_count,
+            doc_count,
             avgdl,
-            pseudo_df,
+            df,
         }
     }
 
     fn idf(&self, term: &str) -> f32 {
-        let doc_count = self.pseudo_doc_count.max(1.0);
-        let df = self.pseudo_df.get(term).copied().unwrap_or(0) as f32;
+        let doc_count = self.doc_count.max(1.0);
+        let df = self.df.get(term).copied().unwrap_or(0) as f32;
         (1.0 + (doc_count - df + 0.5) / (df + 0.5)).ln()
     }
 
     fn avgdl(&self) -> f32 {
         self.avgdl
-    }
-}
-
-#[derive(Default)]
-struct FieldStats {
-    df: HashMap<String, u32>,
-    doc_count: u32,
-    sum_total_term_freq: u32,
-}
-
-impl FieldStats {
-    fn record(&mut self, tokens: Vec<String>) {
-        if tokens.is_empty() {
-            return;
-        }
-
-        self.doc_count += 1;
-        self.sum_total_term_freq += tokens.len() as u32;
-
-        let mut seen = HashSet::new();
-        for token in tokens {
-            if seen.insert(token.clone()) {
-                *self.df.entry(token).or_default() += 1;
-            }
-        }
-    }
-
-    fn boosted_sum_total_term_freq(&self, boost: f32) -> f32 {
-        boost * self.sum_total_term_freq as f32
     }
 }
 
@@ -269,6 +234,37 @@ mod tests {
         let common = score(&terms("common"), &docs[1], &stats);
 
         assert!(rare.score > common.score);
+    }
+
+    #[test]
+    fn document_frequency_counts_term_once_across_all_fields_per_document() {
+        let docs = vec![
+            candidate(Some("routing"), "", None),
+            candidate(None, "", Some("routing")),
+            candidate(Some("other"), "", None),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+
+        assert_eq!(stats.df.get("routing"), Some(&2));
+    }
+
+    #[test]
+    fn empty_candidate_contributes_to_document_count() {
+        let docs = vec![
+            candidate(Some("routing"), "", None),
+            candidate(Some("the"), "", Some("and")),
+        ];
+        let stats = CombinedFieldStats::build(&docs);
+
+        assert_eq!(stats.doc_count, 2.0);
+    }
+
+    #[test]
+    fn term_in_multiple_fields_of_one_document_has_document_frequency_one() {
+        let docs = vec![candidate(Some("routing"), "routing", Some("routing"))];
+        let stats = CombinedFieldStats::build(&docs);
+
+        assert_eq!(stats.df.get("routing"), Some(&1));
     }
 
     #[test]
