@@ -34,5 +34,8 @@ Do not use this step for code-first work, code symbol searches, test names, comp
 - `docs/TESTING.md` – Canonical testing workflow, TDD expectations, and validation guidance. Read this when adding features, fixing regressions, or deciding how to verify a change.
 - `tests/` – Integration tests, fixture-backed regression coverage, and shared CLI harness code. Start here for bug repros, CLI behavior, repository-walking scenarios, and end-to-end validation.
 
+### Start Here for Reviews
+- `docs/REVIEWING.md` – Review routing guide for branches, PRs, worktrees, ADRs, plans, tests, and documentation changes. Read this before reviewing repository changes.
+
 ### Start Here for Code Style and Quality
 - `docs/CODESTYLE.md` – Rust coding conventions and prohibited code smells for the crate. Read this before introducing new structs, validators, parsers, or CLI flags, and when reviewing a refactor.
