@@ -100,4 +100,7 @@ description: "Add Snowball English (Porter2) stemming via the `rust-stemmers` cr
 
 ## Review
 
-- [ ] None yet
+- [x] **ADR 0001 was edited after being committed.** exception to ADR immutability made in this case as the deleted line was violating the last rule of `DECISIONS.md` and deleting non-decision text does not change the decision therefore there is nothing to supersede.
+- [x] **Out-of-scope policy edits to `docs/DECISIONS.md`.** This is edited outside of the normal plan workflow and is accepted.
+- [ ] **`docs/design-docs/match-and-list.md` adds new analyzer-contract description rather than augmenting an existing one.** Plan step says: "Update `docs/design-docs/match-and-list.md` analyzer-contract description to mention stemming alongside stopword filtering, **only where it is already described**." `git show main:docs/design-docs/match-and-list.md | grep -i stopword` returns nothing — the original file had no analyzer-contract description in this section. The implementation adds two new bullets (one for analyzer contract, one for highlighting alignment) under "Relationship To Scoring", which conflicts with the plan's "scoring/normalization belong in `docs/design-docs/scoring.md`" final bullet right above. Either drop the two new bullets and let `scoring.md` own the analyzer description, or update the plan step to authorize introducing a new analyzer mention here. ([docs/design-docs/match-and-list.md](../../design-docs/match-and-list.md))
+
