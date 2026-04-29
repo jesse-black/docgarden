@@ -991,6 +991,45 @@ fn match_default_output_highlights_matching_terms_when_styled() {
 }
 
 #[test]
+fn match_singular_query_matches_and_highlights_plural_surface_form() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/morphology.md"),
+        "---\nname: Release Plans\ndescription: Operational plans archive.\n---\n# Release Plans\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/other.md"),
+        "---\nname: Other\ndescription: Unrelated archive.\n---\n# Other\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "plan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].path, "docs/morphology.md");
+
+    let explain = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--explain", "--color", "always", "plan"])
+        .output()
+        .unwrap();
+    assert!(explain.status.success());
+    let stdout = String::from_utf8(explain.stdout).unwrap();
+    assert!(stdout.contains("docs/morphology.md"));
+    assert!(stdout.contains("Release \u{1b}[1mPlans\u{1b}[0m"));
+    assert!(stdout.contains("Operational \u{1b}[1mplans\u{1b}[0m archive."));
+}
+
+#[test]
 fn match_stopword_only_query_is_rejected() {
     let (_temp, root) = fixture_repo("discovery-repo");
 

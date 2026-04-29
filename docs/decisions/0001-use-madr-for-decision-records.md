@@ -30,4 +30,3 @@ Chosen option: "MADR 4.0.0", because:
 - MADR is part of the broader ADR ecosystem rather than a private `docgarden` convention.
 - The format is lean and matches `docgarden`'s preference for compact, low-ceremony documentation.
 
-This decision chooses the ADR format only; local authoring conventions may evolve without superseding it.

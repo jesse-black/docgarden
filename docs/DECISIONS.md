@@ -30,6 +30,7 @@ ls docs/decisions/ | grep -E '^[0-9]{4}-' | sort | tail -1 | cut -d- -f1 | awk '
 - Link only to stable sources that are part of the durable rationale, such as prior ADRs, external papers, standards, specifications, or permanent issue discussions.
 - Do not link to active ExecPlans, living design docs, transient task plans, or implementation files from accepted ADRs.
 - Do not pin operational details such as template variants, required frontmatter, lint configuration, file paths outside the ADR directory, validation commands, or code locations.
+- End the body at the last `Decision Outcome` rationale. Do not append a closing paragraph that disclaims scope, pre-empts hypothetical future swaps, or restates what the ADR does not commit to.
 
 ## Template
 
@@ -71,7 +72,7 @@ Before accepting an ADR, read it as if the implementation is already complete an
 
 ## Supersession Rules
 
-ADRs are immutable once accepted. Do not edit the body of an existing ADR to change the decision.
+ADRs become immutable once committed. Do not edit the body of a committed ADR to change the decision. Uncommitted drafts may still be revised, renamed, or renumbered freely; the supersession workflow only applies after the ADR lands in git.
 
 To replace a decision:
 - write a new ADR that records the new context and outcome;

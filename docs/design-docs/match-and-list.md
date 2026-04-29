@@ -189,14 +189,14 @@ That should print one repository-relative path per line.
 
 ## Relationship To Scoring
 
-`match` is a ranked discovery command, but the scoring design no longer lives in this document.
-
-The contract here is intentionally narrow:
+`match` is a ranked discovery command. The contract is:
 
 - `match` ranks over discovery metadata rather than Markdown body text
 - ordering is the primary contract for default output
 - raw numeric score is an explain-mode aid, not the main user-facing interface
-- changes to scoring, normalization, tie-breaking, or explain-specific score semantics belong in `docs/design-docs/scoring.md`
+- ranking-model changes belong in `docs/design-docs/scoring.md`
+- analyzer-chain changes (tokenization, stopwords, stemming) belong in `docs/design-docs/analyzer.md`
+- output shape, default display, and explain-mode presentation belong in this document
 
 ### `docgarden list`
 
@@ -266,7 +266,7 @@ The implementation should consider:
 
 The default output should stay compact and show the common result fields in ranked order without a raw score column.
 
-`--explain` is the diagnostic output mode for ranking inspection. The scoring model, normalization rules, and explain-only score semantics belong in `docs/design-docs/scoring.md`.
+`--explain` is the diagnostic output mode for ranking inspection. Its output shape and presentation contract belong in this document; the underlying ranking model belongs in `docs/design-docs/scoring.md`.
 
 #### Scope switches
 
