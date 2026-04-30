@@ -7,6 +7,11 @@ static STOPWORDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
 static ENGLISH_STEMMER: OnceLock<Stemmer> = OnceLock::new();
 static COMPOUND_DICTIONARY: &[(&str, &[&str])] = &[("execplan", &["exec", "plan"])];
 
+pub(crate) struct AnalyzedSpan<'a> {
+    pub(crate) surface: &'a str,
+    pub(crate) terms: Vec<String>,
+}
+
 pub(crate) fn is_stopword(term: &str) -> bool {
     STOPWORDS
         .get_or_init(|| include_str!("data/stopwords_en.txt").lines().collect())
@@ -42,11 +47,40 @@ pub(crate) fn normalize_path(path: &str) -> Vec<String> {
     tokenize(without_ext)
 }
 
+pub(crate) fn analyze_surface_spans(token: &str) -> Vec<AnalyzedSpan<'_>> {
+    let (base, suffix) = split_possessive_surface(token);
+    let mut spans: Vec<AnalyzedSpan<'_>> = split_camel_case(base)
+        .into_iter()
+        .filter(|surface| !surface.is_empty())
+        .flat_map(analyze_surface_part)
+        .collect();
+
+    if let Some(surface) = suffix {
+        spans.push(AnalyzedSpan {
+            surface,
+            terms: Vec::new(),
+        });
+    }
+
+    spans
+}
+
+fn analyze_surface_part(surface: &str) -> Vec<AnalyzedSpan<'_>> {
+    if let Some(spans) = split_compound_surface(surface) {
+        return spans;
+    }
+
+    vec![AnalyzedSpan {
+        surface,
+        terms: analyze_token(surface),
+    }]
+}
+
 fn tokenize(input: &str) -> Vec<String> {
     input
         .split(is_separator)
-        .flat_map(split_camel_case)
-        .flat_map(analyze_token)
+        .flat_map(analyze_surface_spans)
+        .flat_map(|span| span.terms)
         .collect()
 }
 
@@ -86,19 +120,48 @@ fn is_camel_boundary(chars: &[(usize, char)], index: usize) -> bool {
 }
 
 fn strip_possessive(token: &str) -> String {
-    if let Some(stripped) = token.strip_suffix("'s") {
-        stripped.to_string()
-    } else if let Some(stripped) = token.strip_suffix('\'') {
-        if stripped.ends_with('s') {
-            if stripped == "s" {
-                return String::new();
-            }
-            return stripped.to_string();
-        }
-        token.to_string()
+    let (base, suffix) = split_possessive_surface(token);
+    if suffix.is_some() {
+        base.to_string()
     } else {
         token.to_string()
     }
+}
+
+fn split_possessive_surface(token: &str) -> (&str, Option<&str>) {
+    let lower = token.to_lowercase();
+    if lower == "s'" {
+        ("", Some(token))
+    } else if lower.ends_with("'s") {
+        let (base, suffix) = token.split_at(token.len() - 2);
+        (base, Some(suffix))
+    } else if lower.ends_with("s'") {
+        let (base, suffix) = token.split_at(token.len() - 1);
+        (base, Some(suffix))
+    } else {
+        (token, None)
+    }
+}
+
+fn split_compound_surface(token: &str) -> Option<Vec<AnalyzedSpan<'_>>> {
+    let lower = token.to_lowercase();
+    let (_, expansion) = COMPOUND_DICTIONARY
+        .iter()
+        .find(|(compound, _)| *compound == lower)?;
+
+    let mut start = 0;
+    let mut spans = Vec::new();
+    for part in *expansion {
+        let end = start + part.len();
+        let surface = token.get(start..end)?;
+        spans.push(AnalyzedSpan {
+            surface,
+            terms: vec![stem_token(part)],
+        });
+        start = end;
+    }
+
+    (start == token.len()).then_some(spans)
 }
 
 fn stem_token(token: &str) -> String {
@@ -213,5 +276,51 @@ mod tests {
         let path_terms = normalize_path("docs/planner-execplan.md");
         assert!(path_terms.contains(&"exec".to_string()));
         assert!(path_terms.contains(&"plan".to_string()));
+    }
+
+    #[test]
+    fn analyze_surface_spans_splits_camel_case_with_terms() {
+        let spans = analyze_surface_spans("ExecPlan");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].surface, "Exec");
+        assert_eq!(spans[0].terms, vec!["exec"]);
+        assert_eq!(spans[1].surface, "Plan");
+        assert_eq!(spans[1].terms, vec!["plan"]);
+    }
+
+    #[test]
+    fn analyze_surface_spans_keeps_possessive_suffix_termless() {
+        let spans = analyze_surface_spans("Jim's");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].surface, "Jim");
+        assert_eq!(spans[0].terms, vec!["jim"]);
+        assert_eq!(spans[1].surface, "'s");
+        assert!(spans[1].terms.is_empty());
+    }
+
+    #[test]
+    fn analyze_surface_spans_splits_compound_surface_boundaries() {
+        let spans = analyze_surface_spans("execplan");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].surface, "exec");
+        assert_eq!(spans[0].terms, vec!["exec"]);
+        assert_eq!(spans[1].surface, "plan");
+        assert_eq!(spans[1].terms, vec!["plan"]);
+    }
+
+    #[test]
+    fn analyze_surface_spans_emits_no_terms_for_stopword_and_suffix() {
+        let spans = analyze_surface_spans("the's");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].surface, "the");
+        assert!(spans[0].terms.is_empty());
+        assert_eq!(spans[1].surface, "'s");
+        assert!(spans[1].terms.is_empty());
+
+        let bare_plural = analyze_surface_spans("s'");
+        assert_eq!(bare_plural.len(), 1);
+        assert_eq!(bare_plural[0].surface, "s'");
+        assert!(bare_plural[0].terms.is_empty());
+        assert!(normalize_text("s'").is_empty());
     }
 }

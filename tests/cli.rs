@@ -1082,6 +1082,22 @@ fn match_explain_highlights_matching_camel_case_half_only() {
 }
 
 #[test]
+fn match_explain_highlights_matching_compound_dictionary_part_only() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--explain", "--color", "always", "plan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("exec\u{1b}[1mplan\u{1b}[0m"));
+    assert!(!stdout.contains("\u{1b}[1mexecplan\u{1b}[0m"));
+}
+
+#[test]
 fn match_stopword_only_query_is_rejected() {
     let (_temp, root) = fixture_repo("discovery-repo");
 

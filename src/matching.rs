@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
-use crate::analyzer::{analyze_token, is_separator, normalize_text, split_camel_case};
+use crate::analyzer::{analyze_surface_spans, is_separator, normalize_text};
 use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
 use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
@@ -235,10 +235,11 @@ fn flush_render_token(
         return;
     }
 
-    for part in render_token_parts(token) {
-        let escaped = escape_pipe(part);
+    for span in analyze_surface_spans(token) {
+        let escaped = escape_pipe(span.surface);
         if style_output
-            && analyze_token(part)
+            && span
+                .terms
                 .iter()
                 .any(|term| query_terms.contains(term.as_str()))
         {
@@ -250,28 +251,6 @@ fn flush_render_token(
         }
     }
     token.clear();
-}
-
-fn render_token_parts(token: &str) -> Vec<&str> {
-    let (base, possessive_suffix) = split_possessive_suffix(token);
-    let mut parts = split_camel_case(base);
-    if let Some(suffix) = possessive_suffix {
-        parts.push(suffix);
-    }
-    parts
-}
-
-fn split_possessive_suffix(token: &str) -> (&str, Option<&str>) {
-    let lower = token.to_lowercase();
-    if lower.ends_with("'s") {
-        let (base, suffix) = token.split_at(token.len() - 2);
-        (base, Some(suffix))
-    } else if lower.ends_with("s'") {
-        let (base, suffix) = token.split_at(token.len() - 1);
-        (base, Some(suffix))
-    } else {
-        (token, None)
-    }
 }
 
 fn push_escaped_char(rendered: &mut String, ch: char) {
@@ -393,9 +372,9 @@ mod tests {
     }
 
     #[test]
-    fn render_match_field_highlights_compound_surface_token() {
+    fn render_match_field_highlights_compound_dictionary_parts() {
         let query_terms: HashSet<&str> = HashSet::from(["plan"]);
         let rendered = render_match_field("execplan", &query_terms, true);
-        assert_eq!(rendered, "\u{1b}[1mexecplan\u{1b}[0m");
+        assert_eq!(rendered, "exec\u{1b}[1mplan\u{1b}[0m");
     }
 }

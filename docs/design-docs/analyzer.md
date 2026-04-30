@@ -26,7 +26,7 @@ It has two splitter wrappers:
 - `normalize_text` for query strings, names, and descriptions
 - `normalize_path` for path prefixes
 
-Both call the shared per-token entry point `analyze_token`, which is also called by `flush_render_token` in `src/matching.rs` so highlighting cannot drift from scoring. `analyze_token` may emit zero tokens for empty or stopword input, one token for normal input, or multiple tokens when the explicit compound dictionary expands a term.
+Both call the shared surface-span analyzer used by `src/matching.rs` highlighting, so display boundaries cannot drift from scoring. Its per-token step may emit zero tokens for empty or stopword input, one token for normal input, or multiple tokens when the explicit compound dictionary expands a term.
 
 ### Analyzer Order
 
@@ -40,14 +40,14 @@ The shared analyzer chain is:
 6. apply the explicit compound dictionary; matching entries replace the original token and may emit multiple tokens, initially `execplan` → `exec`, `plan`
 7. apply Snowball English (Porter2) stemming through the [`rust-stemmers`](https://docs.rs/rust-stemmers/latest/rust_stemmers/) crate, per the implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md)
 
-`analyze_token` performs steps 3 through 7 on a single token. `normalize_text` and `normalize_path` are splitter wrappers that apply steps 1 and 2 and feed each chunk through `analyze_token`.
+`analyze_token` performs steps 3 through 7 on a single token. `analyze_surface_spans` adds display spans for CamelCase, possessive suffixes, and explicit compound-dictionary boundaries. `normalize_text` and `normalize_path` are splitter wrappers that apply step 1 and feed each chunk through `analyze_surface_spans`, then flatten span terms.
 
 This means:
 
 - corpus statistics, BM25F scoring, explain-mode coverage, and matched-term highlighting all observe the same analyzed token stream
 - index-time and query-time analysis use the same entry point, so a candidate field and a query produce the same token from the same surface form
 - highlighting analyzes each displayed surface token and wraps it in the highlight escape when its stem matches an analyzed query term, so a plural surface form (`plans`) can highlight for a singular query (`plan`)
-- CamelCase halves are highlighted independently (`ExecPlan` can highlight only `Plan`), while lowercase compound matches highlight the whole surface token (`execplan`) when any expanded token matches
+- CamelCase halves and explicit compound-dictionary parts are highlighted independently (`ExecPlan` and `execplan` can both highlight only `Plan`/`plan`)
 - internal apostrophes are preserved inside surface tokens (`O'Reilly`, `you're`), while trailing possessive suffixes are not highlighted as part of the base token (`Jim's`)
 - stopword-only queries are rejected before scoring because every token analyzes to an empty output
 
