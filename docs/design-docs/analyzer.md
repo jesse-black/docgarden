@@ -82,16 +82,20 @@ Adopt:
 - **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`.
 - **Existing ASCII punctuation splitting except apostrophes.** Keep current punctuation boundary behavior for forms such as `planner-execplan`, `repository-local`, `rust-stemmers`, and `docs/PLANS.md`; apostrophes are the only punctuation class called out for near-term special handling.
 - **A single analyzer entry point used by text, paths, scoring, and highlighting.** Any new split rule must affect query analysis and candidate analysis identically.
+- **A small explicit compound-word splitter dictionary** for repository compounds where both halves carry routing signal but the lowercase compound hides it. Splits replace the original token rather than coexisting with it (matching the "Avoid preserving originals" stance below), and the same dictionary is applied at query time so symmetry is preserved. Initial entries:
+  - `execplan` → `exec`, `plan`
+
+  New entries should be added only when both halves carry routing signal in this repo's vocabulary (e.g., not `frontmatter`, where `front` and `matter` are too generic to improve routing).
 
 Consider later:
 
 - **Unicode word-boundary splitting** if non-ASCII repository metadata becomes common enough that ASCII punctuation rules produce surprising output.
 - **Conservative letter-number boundary splitting** if compact identifier patterns such as `ADR0004`, `RFC9110`, `PR42`, or `issue123` become common routing misses. Avoid splitting existing shapes such as `BM25F`, `v1`, `f32`, `u32`, and `R2D2` without a separate identifier policy.
-- **A small explicit alias layer** for repository vocabulary such as `execplan => exec, plan` or carefully chosen role/task mappings. This should be a separate tokenizer expansion step.
+- **A semantic alias layer** for role or task mappings beyond compound decomposition. This is a separate problem from the compound-word dictionary above and would need its own scoring design for multi-position or alternate tokens.
 
 Avoid for now:
 
-- **General lowercase compound splitting.** There is no reliable boundary in `execplan`; substring or dictionary guessing can create noisy matches.
+- **Algorithmic compound splitting without a dictionary.** Substring guessing or scanning a general English dictionary across all lowercase words creates noisy splits whenever a substring happens to be a real word. The explicit dictionary above is bounded and curated; do not extend it to algorithmic decomposition.
 - **Preserving originals or catenating split parts by default.** Extra tokens inflate term frequency and field length in BM25F, so this should wait until there is a clear scoring design for multi-position or alternate tokens.
 - **Using tokenizer rules to make `planner` emit `plan`.** That is a semantic alias problem, not a token-boundary problem. Broad derivational guessing would make unrelated words collide.
 
