@@ -1,5 +1,5 @@
 ---
-description: "Design draft for the `docgarden match` analyzer chain — lowercasing, tokenization, stopword filtering, and Snowball English stemming; read when changing query parsing, apostrophe handling, CamelCase splitting, compound-word handling, stopword behavior, stemming, or tokenizer dependencies."
+description: "Design draft for the `docgarden match` analyzer chain — lowercasing, tokenization, stopword filtering, and Snowball English stemming; read when changing query parsing, apostrophe handling, CamelCase splitting, compound-word handling, stopword behavior, or stemming."
 ---
 
 # Match Analyzer
@@ -79,7 +79,7 @@ The next tokenizer improvement should target repository and code-identifier meta
 Adopt:
 
 - **CamelCase splitting.** `ExecPlan` should emit `Exec` and `Plan`; `PowerShot` should emit `Power` and `Shot`.
-- **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`.
+- **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`. Plural possessives are stripped the same way, so `dogs'` should emit `dogs` (stemmed alongside the singular).
 - **Existing ASCII punctuation splitting except apostrophes.** Keep current punctuation boundary behavior for forms such as `planner-execplan`, `repository-local`, `rust-stemmers`, and `docs/PLANS.md`; apostrophes are the only punctuation class called out for near-term special handling.
 - **A single analyzer entry point used by text, paths, scoring, and highlighting.** Any new split rule must affect query analysis and candidate analysis identically.
 - **A small explicit compound-word splitter dictionary** for repository compounds where both halves carry routing signal but the lowercase compound hides it. Splits replace the original token rather than coexisting with it (matching the "Avoid preserving originals" stance below), and the same dictionary is applied at query time so symmetry is preserved. Initial entries:
@@ -95,23 +95,14 @@ Consider later:
 
 Avoid for now:
 
-- **Algorithmic compound splitting without a dictionary.** Substring guessing or scanning a general English dictionary across all lowercase words creates noisy splits whenever a substring happens to be a real word. The explicit dictionary above is bounded and curated; do not extend it to algorithmic decomposition.
+- **Using a full English dictionary for compound splitting.** Scanning a general English word list across all lowercase words creates noisy splits whenever a substring happens to be a real word. The explicit dictionary above is bounded and curated; do not extend it into broad lexical decomposition.
 - **Preserving originals or catenating split parts by default.** Extra tokens inflate term frequency and field length in BM25F, so this should wait until there is a clear scoring design for multi-position or alternate tokens.
 - **Using tokenizer rules to make `planner` emit `plan`.** That is a semantic alias problem, not a token-boundary problem. Broad derivational guessing would make unrelated words collide.
 
-## Library Options
+## Relevant Decisions
 
-The current in-house tokenizer is small and easy to reason about. It remains the best default unless the project needs Unicode segmentation, CJK support, or a full search-engine tokenizer pipeline.
-
-Options worth knowing:
-
-- [`unicode-segmentation`](https://docs.rs/unicode-segmentation/latest/unicode_segmentation/) implements Unicode Standard Annex #29 grapheme, word, and sentence boundaries. It is the most plausible dependency if `docgarden` wants Unicode word splitting without adopting a search engine. It would not replace path splitting, CamelCase splitting, or apostrophe handling.
-- [`tantivy`](https://docs.rs/tantivy/latest/tantivy/tokenizer/index.html) and [`tantivy-tokenizer-api`](https://docs.rs/tantivy-tokenizer-api/latest/tantivy_tokenizer_api/) provide Rust search-engine tokenizer traits and built-in tokenizers. They are a better fit if `docgarden` later adopts Tantivy-like indexing. For the current metadata router, they are probably more framework than needed.
-- [`tokenizers`](https://docs.rs/tokenizers/latest/tokenizers/) is Hugging Face's Rust tokenizer pipeline for ML subword tokenization. It is optimized for BPE and model vocabularies, not transparent lexical routing, so it is not a good fit for `docgarden match`.
-- [`lindera`](https://docs.rs/crate/lindera/latest) and [`jieba-rs`](https://docs.rs/crate/jieba-rs/latest) are useful for Japanese and Chinese segmentation. They are language-specific and heavier than the current English-oriented metadata use case.
-- [`language-tokenizer`](https://docs.rs/language-tokenizer/latest/language_tokenizer/) wraps several language-processing paths, including CJK segmentation. It may be worth a spike for multilingual support, but it would outsource more policy than `docgarden` currently needs.
-
-Recommended near-term choice: continue building the tokenizer in-house, add small code-identifier split rules, and consider `unicode-segmentation` only if Unicode word-boundary behavior becomes a real product requirement.
+- [ADR 0005: Build our own match tokenizer](../decisions/0005-build-our-own-match-tokenizer.md)
+- [ADR 0006: Build our own compound-word splitter dictionary](../decisions/0006-build-our-own-compound-word-splitter-dictionary.md)
 
 ## References
 
