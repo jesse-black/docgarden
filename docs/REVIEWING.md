@@ -8,9 +8,9 @@ Use this guide when reviewing repository changes. It adds repository-specific ro
 
 ## Review Routes
 
-Read the relevant source documents for the changed surface:
+Read the relevant source documents for the changed surface and apply their rules before recording findings:
 
-| Changed surface | Read |
+| Changed surface | Read and apply |
 | --- | --- |
 | Rust code | [`docs/CODESTYLE.md`](CODESTYLE.md) |
 | Tests | [`docs/TESTING.md`](TESTING.md) |

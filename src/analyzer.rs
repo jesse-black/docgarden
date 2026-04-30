@@ -27,14 +27,6 @@ pub(crate) fn analyze_token(token: &str) -> Vec<String> {
     if normalized.is_empty() || is_stopword(&normalized) {
         return Vec::new();
     }
-
-    if let Some((_, expansion)) = COMPOUND_DICTIONARY
-        .iter()
-        .find(|(compound, _)| *compound == normalized)
-    {
-        return expansion.iter().map(|token| stem_token(token)).collect();
-    }
-
     vec![stem_token(&normalized)]
 }
 
@@ -119,27 +111,29 @@ fn is_camel_boundary(chars: &[(usize, char)], index: usize) -> bool {
             || (previous.is_ascii_uppercase() && next.is_some_and(|ch| ch.is_ascii_lowercase())))
 }
 
-fn strip_possessive(token: &str) -> String {
-    let (base, suffix) = split_possessive_surface(token);
-    if suffix.is_some() {
-        base.to_string()
+fn possessive_suffix_len(lower: &str) -> Option<usize> {
+    if lower.ends_with("'s") || lower.ends_with("s'") {
+        Some(2)
     } else {
-        token.to_string()
+        None
+    }
+}
+
+fn strip_possessive(token: &str) -> String {
+    match possessive_suffix_len(token) {
+        Some(len) => token[..token.len() - len].to_string(),
+        None => token.to_string(),
     }
 }
 
 fn split_possessive_surface(token: &str) -> (&str, Option<&str>) {
     let lower = token.to_lowercase();
-    if lower == "s'" {
-        ("", Some(token))
-    } else if lower.ends_with("'s") {
-        let (base, suffix) = token.split_at(token.len() - 2);
-        (base, Some(suffix))
-    } else if lower.ends_with("s'") {
-        let (base, suffix) = token.split_at(token.len() - 1);
-        (base, Some(suffix))
-    } else {
-        (token, None)
+    match possessive_suffix_len(&lower) {
+        Some(len) => {
+            let split = token.len() - len;
+            (&token[..split], Some(&token[split..]))
+        }
+        None => (token, None),
     }
 }
 
@@ -239,12 +233,18 @@ mod tests {
 
     #[test]
     fn normalize_text_preserves_digit_identifier_shapes() {
-        for token in ["BM25F", "v1", "f32", "R2D2", "SD500", "ADR0004"] {
-            assert_eq!(
-                normalize_text(token),
-                vec![stem_token(&token.to_lowercase())],
-                "{token} should stay one analyzed token"
-            );
+        let cases = [
+            ("BM25F", "bm25f"),
+            ("v1", "v1"),
+            ("f32", "f32"),
+            ("R2D2", "r2d2"),
+            ("SD500", "sd500"),
+            ("ADR0004", "adr0004"),
+        ];
+        for (token, expected_stem) in cases {
+            let result = normalize_text(token);
+            assert_eq!(result.len(), 1, "{token} should stay one analyzed token");
+            assert_eq!(result, vec![expected_stem], "{token} stem mismatch");
         }
     }
 
@@ -265,13 +265,12 @@ mod tests {
     #[test]
     fn analyze_token_preserves_internal_apostrophes() {
         assert_eq!(analyze_token("you're"), vec!["you'r"]);
-        assert_eq!(analyze_token("O'Reilly").len(), 1);
+        assert_eq!(analyze_token("O'Reilly"), vec!["o'reilli"]);
         assert_eq!(normalize_text("O'Reilly's"), normalize_text("O'Reilly"));
     }
 
     #[test]
     fn compound_dictionary_expands_curated_entries() {
-        assert_eq!(analyze_token("execplan"), vec!["exec", "plan"]);
         assert_eq!(normalize_text("execplan"), vec!["exec", "plan"]);
         let path_terms = normalize_path("docs/planner-execplan.md");
         assert!(path_terms.contains(&"exec".to_string()));

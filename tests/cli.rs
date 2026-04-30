@@ -1066,6 +1066,24 @@ fn match_lowercase_compound_name_expands_for_exec_query() {
 }
 
 #[test]
+fn match_possessive_name_routes_for_base_query() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "jim"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert!(
+        rows.iter()
+            .any(|row| { row.path == "docs/possessive-only.md" && row.name == "Jim's Notebook" })
+    );
+}
+
+#[test]
 fn match_explain_highlights_matching_camel_case_half_only() {
     let (_temp, root) = fixture_repo("discovery-repo");
 
