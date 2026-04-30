@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::OnceLock;
 
-use rust_stemmers::{Algorithm, Stemmer};
+use crate::analyzer::{normalize_path, normalize_text};
 
 pub(crate) struct Candidate<'a> {
     pub(crate) name: Option<&'a str>,
@@ -94,50 +93,6 @@ const DESCRIPTION_BOOST: f32 = 1.0;
 const BM25_K1: f32 = 1.2;
 const BM25_B: f32 = 0.75;
 
-static STOPWORDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
-static ENGLISH_STEMMER: OnceLock<Stemmer> = OnceLock::new();
-
-pub(crate) fn is_stopword(term: &str) -> bool {
-    STOPWORDS
-        .get_or_init(|| include_str!("data/stopwords_en.txt").lines().collect())
-        .contains(term)
-}
-
-fn english_stemmer() -> &'static Stemmer {
-    ENGLISH_STEMMER.get_or_init(|| Stemmer::create(Algorithm::English))
-}
-
-pub(crate) fn analyze_token(token: &str) -> Option<String> {
-    let normalized = token.to_lowercase();
-    if normalized.is_empty() || is_stopword(&normalized) {
-        return None;
-    }
-
-    Some(english_stemmer().stem(&normalized).into_owned())
-}
-
-pub(crate) fn normalize_text(text: &str) -> Vec<String> {
-    tokenize(text, |c| c.is_whitespace() || c.is_ascii_punctuation())
-}
-
-pub(crate) fn normalize_path(path: &str) -> Vec<String> {
-    let lower = path.to_lowercase();
-    let without_ext = lower.strip_suffix(".md").unwrap_or(&lower);
-    tokenize(without_ext, |c| {
-        matches!(c, '/' | '_' | '-' | '.') || c.is_whitespace() || c.is_ascii_punctuation()
-    })
-}
-
-fn tokenize<F>(input: &str, is_separator: F) -> Vec<String>
-where
-    F: Fn(char) -> bool,
-{
-    input
-        .split(is_separator)
-        .filter_map(analyze_token)
-        .collect()
-}
-
 pub(crate) fn score(
     query_terms: &[String],
     candidate: &Candidate<'_>,
@@ -217,6 +172,7 @@ fn best_field_hit(current: Option<Field>, candidate: Field) -> Option<Field> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::{normalize_path, normalize_text};
 
     fn candidate<'a>(
         name: Option<&'a str>,
@@ -232,45 +188,6 @@ mod tests {
 
     fn terms(q: &str) -> Vec<String> {
         normalize_text(q)
-    }
-
-    #[test]
-    fn normalize_text_stems_morphological_variants() {
-        assert_eq!(
-            normalize_text("plans reviews analyzed"),
-            vec!["plan", "review", "analyz"]
-        );
-    }
-
-    #[test]
-    fn normalize_path_stems_path_segments() {
-        assert_eq!(
-            normalize_path("docs/the-active-plans/scoring-guide.md"),
-            vec!["doc", "activ", "plan", "score", "guid"]
-        );
-    }
-
-    #[test]
-    fn analyze_token_filters_empty_and_stopword_input() {
-        assert_eq!(analyze_token(""), None);
-        assert_eq!(analyze_token("the"), None);
-        assert_eq!(analyze_token("is"), None);
-    }
-
-    #[test]
-    fn analyze_token_filters_stopwords_before_stemming() {
-        assert_eq!(analyze_token("was"), None);
-    }
-
-    #[test]
-    fn analyze_token_lowercases_and_stems_mixed_case_input() {
-        assert_eq!(analyze_token("Reviews"), Some("review".to_string()));
-    }
-
-    #[test]
-    fn normalize_text_preserves_token_ordering_and_empty_input() {
-        assert_eq!(normalize_text("Reviews plans"), vec!["review", "plan"]);
-        assert!(normalize_text("").is_empty());
     }
 
     #[test]
@@ -398,18 +315,6 @@ mod tests {
         assert_eq!(first.matched_terms, second.matched_terms);
         assert_eq!(first.first_field_hit, Some(Field::Name));
         assert_eq!(second.first_field_hit, Some(Field::Description));
-    }
-
-    #[test]
-    fn normalize_text_lowercases_splits_and_filters_stopwords() {
-        let toks = normalize_text("Hello, The World!");
-        assert_eq!(toks, vec!["hello", "world"]);
-    }
-
-    #[test]
-    fn normalize_path_strips_extension_and_splits_separators() {
-        let toks = normalize_path("docs/the-active-plan/my_guide.md");
-        assert_eq!(toks, vec!["doc", "activ", "plan", "my", "guid"]);
     }
 
     #[test]

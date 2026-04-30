@@ -1030,6 +1030,58 @@ fn match_singular_query_matches_and_highlights_plural_surface_form() {
 }
 
 #[test]
+fn match_camel_case_name_signal_matches_plan_query() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "plan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert!(
+        rows.iter()
+            .any(|row| { row.path == "docs/camelcase-only.md" && row.name == "ExecPlan" })
+    );
+}
+
+#[test]
+fn match_lowercase_compound_name_expands_for_exec_query() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "exec"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let rows = parse_match_rows(&String::from_utf8(output.stdout).unwrap());
+    assert!(
+        rows.iter()
+            .any(|row| { row.path == "docs/compound-only.md" && row.name == "execplan" })
+    );
+}
+
+#[test]
+fn match_explain_highlights_matching_camel_case_half_only() {
+    let (_temp, root) = fixture_repo("discovery-repo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(&root)
+        .args(["match", "--explain", "--color", "always", "plan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Exec\u{1b}[1mPlan\u{1b}[0m"));
+    assert!(!stdout.contains("\u{1b}[1mExec\u{1b}[0mPlan"));
+}
+
+#[test]
 fn match_stopword_only_query_is_rejected() {
     let (_temp, root) = fixture_repo("discovery-repo");
 
