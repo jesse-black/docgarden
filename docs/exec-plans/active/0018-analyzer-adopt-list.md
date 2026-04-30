@@ -84,6 +84,11 @@ Splitting and per-token analysis remain consolidated behind one analyzer entry p
 - [x] If routing-separation floors in `match_routes_review_queries_to_expected_execplan_docs`, `match_routes_plan_authoring_and_implementation_queries`, or `match_routes_scoring_query_to_scoring_guide` regress, document the regression under `Discoveries` and update only the specific failing factor; do not relax assertions wholesale.
 - [x] Update [docs/design-docs/analyzer.md](../../design-docs/analyzer.md): rewrite "Analyzer Order" to describe the new chain, note that `analyze_token` may emit multiple tokens, move CamelCase, apostrophe handling, and the compound dictionary out of the "Adopt" list and into the shipped description, and keep the compound-word "Avoid" language aligned with ADR 0006's "full English dictionary" framing.
 - [x] Run `cargo run -- lint docs/design-docs/analyzer.md docs/exec-plans/active/0018-analyzer-adopt-list.md --color never` plus any other `.md` files touched.
+- [ ] Replace matching-owned display splitting with an analyzer-owned span API. Add an analyzer helper such as `analyze_surface_spans(token) -> Vec<AnalyzedSpan<'_>>`, where each span carries the original display slice plus analyzed terms. It should emit `Exec`/`Plan` spans for CamelCase, `Jim` plus a no-terms possessive suffix span for `Jim's`, and one `execplan` span whose terms are `["exec", "plan"]`.
+- [ ] Rebase `normalize_text` and `normalize_path` on the span API by splitting on the shared separator, feeding each separator-delimited chunk through the span helper, and flattening span terms. Preserve the existing analyzer order: lowercase, possessive handling, stopword filtering, compound expansion, then stemming.
+- [ ] Update `src/matching.rs::flush_render_token` to consume analyzer spans instead of `render_token_parts` and `split_possessive_suffix`; remove the matching-local possessive splitter so display boundaries and analyzed terms live in `src/analyzer.rs`. Highlight a span when any span term is in `query_terms`; continue escaping pipe characters in the rendered surface.
+- [ ] Add focused coverage for the span API and rendering handoff: analyzer unit tests for `ExecPlan`, `Jim's`, `execplan`, and stopword suffix/no-term spans; matching unit tests proving the existing highlight cases still pass through analyzer spans.
+- [ ] Re-run validation after the span API refactor: `cargo test --lib analyzer`, `cargo test --lib matching`, `cargo test --test cli match`, `cargo run -- lint docs/exec-plans/active/0018-analyzer-adopt-list.md docs/design-docs/analyzer.md --color never`, and the final validation commands listed below if any production code or design docs changed.
 
 ## Validation
 
@@ -129,4 +134,5 @@ Splitting and per-token analysis remain consolidated behind one analyzer entry p
 
 ## Review
 
-- [ ] None yet
+- [ ] Update `ARCHITECTURE.md` after extracting `src/analyzer.rs`: the code map still says `src/score.rs` owns shared token normalization and stopword filtering, but this branch moved the analyzer chain into `src/analyzer.rs` and reuses it from `src/score.rs` and `src/matching.rs`.
+- [ ] Align display highlighting with the analyzer boundary source. `src/matching.rs` currently carries display-only possessive splitting while `src/analyzer.rs` owns possessive analysis, which weakens the "one fact, one place" style goal and could drift when analyzer boundary rules change.
