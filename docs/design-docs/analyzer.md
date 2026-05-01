@@ -1,12 +1,12 @@
 ---
-description: "Design draft for the `docgarden match` analyzer chain — lowercasing, tokenization, stopword filtering, and Snowball English stemming; read when changing query parsing, apostrophe handling, CamelCase splitting, compound-word handling, stopword behavior, stemming, or tokenizer dependencies."
+description: "Design draft for the shipped `docgarden match` analyzer chain — punctuation splitting, CamelCase splitting, apostrophe and possessive handling, explicit compound expansion, stopword filtering, and Snowball English stemming."
 ---
 
 # Match Analyzer
 
 ## Purpose
 
-This document owns the analyzer chain for `docgarden match`: lowercasing, tokenization, stopword filtering, and stemming.
+This document owns the analyzer chain for `docgarden match`: punctuation and identifier splitting, lowercasing, possessive stripping, stopword filtering, compound expansion, and stemming.
 
 The analyzer's job is to turn short repository metadata fields and user queries into the shared lexical tokens used by:
 
@@ -19,32 +19,37 @@ BM25F mechanics live in [`scoring.md`](scoring.md). This document owns the full 
 
 ## Current State
 
-The shipped analyzer lives in `src/score.rs` and is reused by `src/matching.rs`.
+The shipped analyzer lives in `src/analyzer.rs` and is reused by `src/score.rs` and `src/matching.rs`.
 
 It has two splitter wrappers:
 
 - `normalize_text` for query strings, names, and descriptions
 - `normalize_path` for path prefixes
 
-Both call the shared per-token entry point `analyze_token`, which is also called by `flush_render_token` in `src/matching.rs` so highlighting cannot drift from scoring.
+Both call the shared surface-span analyzer used by `src/matching.rs` highlighting, so display boundaries cannot drift from scoring. `analyze_surface_spans` may emit zero terms for empty or stopword input, one term for a normal span, or multiple spans when CamelCase or the explicit compound dictionary creates display boundaries.
 
 ### Analyzer Order
 
 The shared analyzer chain is:
 
-1. lowercase
-2. split text fields on whitespace or ASCII punctuation, or split path prefixes on `/`, `_`, `-`, `.`, whitespace, or ASCII punctuation after stripping a trailing `.md`
-3. drop empty tokens and English stopwords (the shipped stopword list contains unstemmed surface forms, so stopword filtering happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md))
-4. apply Snowball English (Porter2) stemming through the [`rust-stemmers`](https://docs.rs/rust-stemmers/latest/rust_stemmers/) crate, per the implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md)
+1. split text fields on whitespace or ASCII punctuation except apostrophes, or strip a trailing `.md` from path prefixes and apply the same splitter
+2. split each post-punctuation chunk at CamelCase boundaries: lowercase-to-uppercase and acronym-to-word uppercase-to-uppercase-to-lowercase boundaries; digit transitions are not boundaries
+3. apply explicit compound-dictionary boundaries for matching surface chunks; matching entries replace the original surface with independently highlightable spans, initially `execplan` → `exec`, `plan`
+4. lowercase each surface token or compound part
+5. strip trailing English possessives: singular `'s` and plural trailing apostrophes after `s`
+6. drop empty tokens and English stopwords (the shipped stopword list contains unstemmed surface forms, so stopword filtering happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md))
+7. apply Snowball English (Porter2) stemming through the [`rust-stemmers`](https://docs.rs/rust-stemmers/latest/rust_stemmers/) crate, per the implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md)
 
-`analyze_token` performs steps 1, 3, and 4 on a single token; `normalize_text` and `normalize_path` are splitter wrappers that apply step 2 and feed each chunk through `analyze_token` via `filter_map`.
+`analyze_surface_spans` performs steps 2 through 7 for one separator-delimited surface chunk and is the canonical shared analyzer entry point for scoring and highlighting. `analyze_token` performs steps 4 through 7 on one already-boundaried surface token and returns zero or one stemmed term. `normalize_text` and `normalize_path` are splitter wrappers that apply step 1 and feed each chunk through `analyze_surface_spans`, then flatten span terms.
 
 This means:
 
 - corpus statistics, BM25F scoring, explain-mode coverage, and matched-term highlighting all observe the same analyzed token stream
 - index-time and query-time analysis use the same entry point, so a candidate field and a query produce the same token from the same surface form
 - highlighting analyzes each displayed surface token and wraps it in the highlight escape when its stem matches an analyzed query term, so a plural surface form (`plans`) can highlight for a singular query (`plan`)
-- stopword-only queries are rejected before scoring because every token analyzes to `None`
+- CamelCase halves and explicit compound-dictionary parts are highlighted independently (`ExecPlan` and `execplan` can both highlight only `Plan`/`plan`)
+- internal apostrophes are preserved inside surface tokens (`O'Reilly`, `you're`), while trailing possessive suffixes are not highlighted as part of the base token (`Jim's`)
+- stopword-only queries are rejected before scoring because every token analyzes to an empty output
 
 ## Current Differences From Lucene
 
@@ -56,7 +61,6 @@ Differences from Lucene `StandardAnalyzer`:
 
 - **Unicode segmentation:** Lucene's standard tokenizer follows Unicode text-segmentation behavior. `docgarden` currently uses simple ASCII punctuation and whitespace splitting.
 - **Token classes:** Lucene emits token types such as alphanumeric, numeric, Southeast Asian, ideographic, Hiragana, Katakana, Hangul, and emoji. `docgarden` emits only strings.
-- **Internal apostrophes:** Lucene keeps internal apostrophes inside word tokens, so examples such as `O'Reilly`, `you're`, and `Jim's` remain one surface token. `docgarden` treats apostrophes as ASCII punctuation separators.
 - **Numbers and dotted numeric forms:** Lucene keeps forms such as `21.35`, `216.239.63.104`, `R2D2`, and `C3PO` together. `docgarden` splits on ASCII punctuation and does not give numeric forms special handling.
 - **Underscore and connector punctuation:** Lucene's Unicode word-break grammar treats connector characters such as `_` as part of alphanumeric tokens in some contexts. `docgarden` treats `_` as a separator for paths and as ASCII punctuation for text.
 - **Emoji and CJK behavior:** Lucene has explicit tokenizer rules for emoji sequences and CJK scripts. `docgarden` has no script-aware token classes.
@@ -64,50 +68,43 @@ Differences from Lucene `StandardAnalyzer`:
 
 Differences from optional Lucene analysis components:
 
-- **CamelCase:** `WordDelimiterGraphFilter` can split `PowerShot` into `Power` and `Shot` when `splitOnCaseChange` is enabled. `docgarden` currently keeps `ExecPlan` as one token, `execplan`.
 - **Letter-number boundaries:** `WordDelimiterGraphFilter` can split `SD500` into `SD` and `500` when `splitOnNumerics` is enabled. `docgarden` currently keeps `sd500`.
-- **Possessives:** `WordDelimiterGraphFilter` can remove trailing English possessives from subwords. `docgarden` currently treats apostrophes as punctuation separators.
 - **Original-token preservation and catenation:** `WordDelimiterGraphFilter` can emit subwords, preserved originals, and concatenated variants. `docgarden` currently emits only one flat token stream.
 - **URLs and email addresses:** Lucene's separate `UAX29URLEmailTokenizer` preserves URL and email shapes. `docgarden` currently splits them mechanically.
-- **Compound words:** Lucene and Elasticsearch have dictionary or hyphenation decompounders for some languages and domains. `docgarden` currently does no decompounding, so lowercase compounds such as `execplan` remain one token.
-- **Aliases and synonyms:** Lucene-style systems can add synonym filters or token override maps. `docgarden` currently has no alias layer, so domain terms such as `execplan` do not emit `exec` and `plan`.
+- **Compound words:** Lucene and Elasticsearch have dictionary or hyphenation decompounders for some languages and domains. `docgarden` has only a small explicit dictionary for repository vocabulary.
+- **Aliases and synonyms:** Lucene-style systems can add synonym filters or token override maps. `docgarden` currently has no alias layer, so role terms such as `planner` do not emit `plan`.
 
 ## Recommended Direction
 
-The next tokenizer improvement should target repository and code-identifier metadata, not broad fuzzy search.
+Tokenizer improvements should target repository and code-identifier metadata, not broad fuzzy search.
 
-Adopt:
+Shipped:
 
 - **CamelCase splitting.** `ExecPlan` should emit `Exec` and `Plan`; `PowerShot` should emit `Power` and `Shot`.
-- **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`.
+- **Internal apostrophe preservation with trailing possessive removal.** `O'Reilly` and `you're` should stay one token, while `Jim's` should emit `Jim` and `O'Reilly's` should emit `O'Reilly`. Plural possessives are stripped the same way, so `dogs'` should emit `dogs` (stemmed alongside the singular).
 - **Existing ASCII punctuation splitting except apostrophes.** Keep current punctuation boundary behavior for forms such as `planner-execplan`, `repository-local`, `rust-stemmers`, and `docs/PLANS.md`; apostrophes are the only punctuation class called out for near-term special handling.
 - **A single analyzer entry point used by text, paths, scoring, and highlighting.** Any new split rule must affect query analysis and candidate analysis identically.
+- **A small explicit compound-word splitter dictionary** for repository compounds where both halves carry routing signal but the lowercase compound hides it. Splits replace the original token rather than coexisting with it (matching the "Avoid preserving originals" stance below), and the same dictionary is applied at query time so symmetry is preserved. Initial entries:
+  - `execplan` → `exec`, `plan`
+
+  New entries should be added only when both halves carry routing signal in this repo's vocabulary (e.g., not `frontmatter`, where `front` and `matter` are too generic to improve routing).
 
 Consider later:
 
 - **Unicode word-boundary splitting** if non-ASCII repository metadata becomes common enough that ASCII punctuation rules produce surprising output.
 - **Conservative letter-number boundary splitting** if compact identifier patterns such as `ADR0004`, `RFC9110`, `PR42`, or `issue123` become common routing misses. Avoid splitting existing shapes such as `BM25F`, `v1`, `f32`, `u32`, and `R2D2` without a separate identifier policy.
-- **A small explicit alias layer** for repository vocabulary such as `execplan => exec, plan` or carefully chosen role/task mappings. This should be a separate tokenizer expansion step.
+- **A semantic alias layer** for role or task mappings beyond compound decomposition. This is a separate problem from the compound-word dictionary above and would need its own scoring design for multi-position or alternate tokens.
 
 Avoid for now:
 
-- **General lowercase compound splitting.** There is no reliable boundary in `execplan`; substring or dictionary guessing can create noisy matches.
+- **Using a full English dictionary for compound splitting.** Scanning a full English dictionary across all lowercase words creates noisy splits whenever a substring happens to be a real word. The explicit dictionary above is bounded and curated; do not extend it into broad lexical decomposition.
 - **Preserving originals or catenating split parts by default.** Extra tokens inflate term frequency and field length in BM25F, so this should wait until there is a clear scoring design for multi-position or alternate tokens.
 - **Using tokenizer rules to make `planner` emit `plan`.** That is a semantic alias problem, not a token-boundary problem. Broad derivational guessing would make unrelated words collide.
 
-## Library Options
+## Relevant Decisions
 
-The current in-house tokenizer is small and easy to reason about. It remains the best default unless the project needs Unicode segmentation, CJK support, or a full search-engine tokenizer pipeline.
-
-Options worth knowing:
-
-- [`unicode-segmentation`](https://docs.rs/unicode-segmentation/latest/unicode_segmentation/) implements Unicode Standard Annex #29 grapheme, word, and sentence boundaries. It is the most plausible dependency if `docgarden` wants Unicode word splitting without adopting a search engine. It would not replace path splitting, CamelCase splitting, or apostrophe handling.
-- [`tantivy`](https://docs.rs/tantivy/latest/tantivy/tokenizer/index.html) and [`tantivy-tokenizer-api`](https://docs.rs/tantivy-tokenizer-api/latest/tantivy_tokenizer_api/) provide Rust search-engine tokenizer traits and built-in tokenizers. They are a better fit if `docgarden` later adopts Tantivy-like indexing. For the current metadata router, they are probably more framework than needed.
-- [`tokenizers`](https://docs.rs/tokenizers/latest/tokenizers/) is Hugging Face's Rust tokenizer pipeline for ML subword tokenization. It is optimized for BPE and model vocabularies, not transparent lexical routing, so it is not a good fit for `docgarden match`.
-- [`lindera`](https://docs.rs/crate/lindera/latest) and [`jieba-rs`](https://docs.rs/crate/jieba-rs/latest) are useful for Japanese and Chinese segmentation. They are language-specific and heavier than the current English-oriented metadata use case.
-- [`language-tokenizer`](https://docs.rs/language-tokenizer/latest/language_tokenizer/) wraps several language-processing paths, including CJK segmentation. It may be worth a spike for multilingual support, but it would outsource more policy than `docgarden` currently needs.
-
-Recommended near-term choice: continue building the tokenizer in-house, add small code-identifier split rules, and consider `unicode-segmentation` only if Unicode word-boundary behavior becomes a real product requirement.
+- [ADR 0005: Build our own match tokenizer](../decisions/0005-build-our-own-match-tokenizer.md)
+- [ADR 0006: Build our own compound-word splitter dictionary](../decisions/0006-build-our-own-compound-word-splitter-dictionary.md)
 
 ## References
 

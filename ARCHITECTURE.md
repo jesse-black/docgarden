@@ -32,7 +32,7 @@ That shared setup is important: matching and linting should see the same reposit
 The main architectural boundary is between repository-level orchestration and per-document analysis.
 
 - `src/cli.rs`, `src/root.rs`, `src/config.rs`, and `src/discover.rs` decide what repository is being operated on and which Markdown files are in scope.
-- `src/matching.rs`, `src/score.rs`, and `src/frontmatter.rs` implement metadata-based routing.
+- `src/matching.rs`, `src/score.rs`, `src/analyzer.rs`, and `src/frontmatter.rs` implement metadata-based routing.
 - `src/lint/` implements deterministic document validation and safe rewrites.
 
 There is also a deliberate boundary between metadata discovery and body analysis:
@@ -48,7 +48,7 @@ There is also a deliberate boundary between metadata discovery and body analysis
 
 `src/main.rs` is the binary entry point and delegates to `docgarden::run()`.
 
-`src/lib.rs` wires together the repository-root, discovery, matching, frontmatter, scoring, and lint modules.
+`src/lib.rs` wires together the repository-root, discovery, matching, analyzer, frontmatter, scoring, and lint modules.
 
 ### CLI orchestration
 
@@ -92,7 +92,9 @@ The config layer currently owns:
 - scores and sorts results
 - renders either compact routing output or `--explain` diagnostics
 
-`src/score.rs` owns the lexical ranking model used by `match`. The shipped scorer is combined-field BM25F over `name`, `path_prefix`, and `description`, with shared token normalization and stopword filtering.
+`src/analyzer.rs` owns the shared lexical analysis used by `match`: separator and CamelCase splitting, apostrophe and possessive handling, stopword filtering, compound expansion, stemming, and display spans for highlighting.
+
+`src/score.rs` owns the lexical ranking model used by `match`. The shipped scorer is combined-field BM25F over `name`, `path_prefix`, and `description`, using analyzer terms from `src/analyzer.rs`.
 
 ### Lint engine
 

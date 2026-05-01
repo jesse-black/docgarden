@@ -3,13 +3,14 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
+use crate::analyzer::{analyze_surface_spans, is_separator, normalize_text};
 use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
 use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
 use crate::documents::{escape_pipe, load_document_metadata_for_paths};
 use crate::root::{RootMarker, infer_repository_root};
 use crate::scopes::{Scope, discover_scope_files};
-use crate::score::{Candidate, CombinedFieldStats, Field, analyze_token, normalize_text};
+use crate::score::{Candidate, CombinedFieldStats, Field};
 
 struct MatchResult {
     repo_relative_path: String,
@@ -144,29 +145,12 @@ fn render_default_row(
     query_terms: &HashSet<&str>,
     style_output: bool,
 ) -> String {
-    let path = render_match_field(
-        &result.repo_relative_path,
-        query_terms,
-        style_output,
-        FieldRenderMode::Path,
-    );
-    let name = render_match_field(
-        &result.name,
-        query_terms,
-        style_output,
-        FieldRenderMode::Text,
-    );
+    let path = render_match_field(&result.repo_relative_path, query_terms, style_output);
+    let name = render_match_field(&result.name, query_terms, style_output);
     let description = result
         .description
         .as_deref()
-        .map(|description| {
-            render_match_field(
-                description,
-                query_terms,
-                style_output,
-                FieldRenderMode::Text,
-            )
-        })
+        .map(|description| render_match_field(description, query_terms, style_output))
         .unwrap_or_default();
 
     format!("{path} | {name} | {description}")
@@ -193,29 +177,12 @@ fn render_explain_row(
     );
     let relative = format!("{}% of top", relative as u32);
     let coverage = format!("{}/{} terms", result.matched_terms, query_term_count);
-    let path = render_match_field(
-        &result.repo_relative_path,
-        query_terms,
-        style_output,
-        FieldRenderMode::Path,
-    );
-    let name = render_match_field(
-        &result.name,
-        query_terms,
-        style_output,
-        FieldRenderMode::Text,
-    );
+    let path = render_match_field(&result.repo_relative_path, query_terms, style_output);
+    let name = render_match_field(&result.name, query_terms, style_output);
     let description = result
         .description
         .as_deref()
-        .map(|description| {
-            render_match_field(
-                description,
-                query_terms,
-                style_output,
-                FieldRenderMode::Text,
-            )
-        })
+        .map(|description| render_match_field(description, query_terms, style_output))
         .unwrap_or_default();
 
     format!("{score} | {relative} | {coverage} | {path} | {name} | {description}")
@@ -241,17 +208,12 @@ fn render_explain_score(
     format!("\u{1b}[1;{code}m{rendered}\u{1b}[0m")
 }
 
-fn render_match_field(
-    input: &str,
-    query_terms: &HashSet<&str>,
-    style_output: bool,
-    mode: FieldRenderMode,
-) -> String {
+fn render_match_field(input: &str, query_terms: &HashSet<&str>, style_output: bool) -> String {
     let mut rendered = String::new();
     let mut token = String::new();
 
     for ch in input.chars() {
-        if is_separator(ch, mode) {
+        if is_separator(ch) {
             flush_render_token(&mut rendered, &mut token, query_terms, style_output);
             push_escaped_char(&mut rendered, ch);
         } else {
@@ -273,18 +235,20 @@ fn flush_render_token(
         return;
     }
 
-    let escaped = escape_pipe(token);
-    let analyzed = analyze_token(token);
-    if style_output
-        && analyzed
-            .as_deref()
-            .is_some_and(|term| query_terms.contains(term))
-    {
-        rendered.push_str("\u{1b}[1m");
-        rendered.push_str(&escaped);
-        rendered.push_str("\u{1b}[0m");
-    } else {
-        rendered.push_str(&escaped);
+    for span in analyze_surface_spans(token) {
+        let escaped = escape_pipe(span.surface);
+        if style_output
+            && span
+                .terms
+                .iter()
+                .any(|term| query_terms.contains(term.as_str()))
+        {
+            rendered.push_str("\u{1b}[1m");
+            rendered.push_str(&escaped);
+            rendered.push_str("\u{1b}[0m");
+        } else {
+            rendered.push_str(&escaped);
+        }
     }
     token.clear();
 }
@@ -294,15 +258,6 @@ fn push_escaped_char(rendered: &mut String, ch: char) {
         rendered.push_str(r"\|");
     } else {
         rendered.push(ch);
-    }
-}
-
-fn is_separator(ch: char, mode: FieldRenderMode) -> bool {
-    match mode {
-        FieldRenderMode::Text => ch.is_whitespace() || ch.is_ascii_punctuation(),
-        FieldRenderMode::Path => {
-            matches!(ch, '/' | '_' | '-' | '.') || ch.is_whitespace() || ch.is_ascii_punctuation()
-        }
     }
 }
 
@@ -338,12 +293,6 @@ enum ScoreBand {
     High,
 }
 
-#[derive(Clone, Copy)]
-enum FieldRenderMode {
-    Text,
-    Path,
-}
-
 fn field_priority(field: Option<Field>) -> u8 {
     match field {
         Some(Field::Name) => 0,
@@ -355,7 +304,7 @@ fn field_priority(field: Option<Field>) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{FieldRenderMode, field_priority, render_match_field};
+    use super::{field_priority, render_match_field};
     use crate::score::Field;
     use std::collections::HashSet;
 
@@ -369,12 +318,7 @@ mod tests {
     #[test]
     fn render_match_field_highlights_matching_text_terms() {
         let query_terms: HashSet<&str> = HashSet::from(["review"]);
-        let rendered = render_match_field(
-            "Review the active plan",
-            &query_terms,
-            true,
-            FieldRenderMode::Text,
-        );
+        let rendered = render_match_field("Review the active plan", &query_terms, true);
         assert!(rendered.contains("\u{1b}[1mReview\u{1b}[0m"));
         assert!(rendered.contains("active"));
     }
@@ -382,32 +326,55 @@ mod tests {
     #[test]
     fn render_match_field_highlights_matching_path_terms() {
         let query_terms: HashSet<&str> = HashSet::from(["score"]);
-        let rendered = render_match_field(
-            "docs/active-scoring.md",
-            &query_terms,
-            true,
-            FieldRenderMode::Path,
-        );
+        let rendered = render_match_field("docs/active-scoring.md", &query_terms, true);
         assert!(rendered.contains("\u{1b}[1mscoring\u{1b}[0m"));
     }
 
     #[test]
     fn render_match_field_highlights_surface_token_by_stem() {
         let query_terms: HashSet<&str> = HashSet::from(["plan"]);
-        let rendered = render_match_field(
-            "Review the active plans",
-            &query_terms,
-            true,
-            FieldRenderMode::Text,
-        );
+        let rendered = render_match_field("Review the active plans", &query_terms, true);
         assert!(rendered.contains("\u{1b}[1mplans\u{1b}[0m"));
     }
 
     #[test]
     fn render_match_field_does_not_highlight_stopword_surface_token() {
         let query_terms: HashSet<&str> = HashSet::from(["the"]);
-        let rendered = render_match_field("the plan", &query_terms, true, FieldRenderMode::Text);
+        let rendered = render_match_field("the plan", &query_terms, true);
         assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
         assert!(rendered.contains("the"));
+    }
+
+    #[test]
+    fn render_match_field_highlights_camel_case_halves() {
+        let plan_terms: HashSet<&str> = HashSet::from(["plan"]);
+        let plan_rendered = render_match_field("ExecPlan", &plan_terms, true);
+        assert!(plan_rendered.contains("Exec\u{1b}[1mPlan\u{1b}[0m"));
+        assert!(!plan_rendered.contains("\u{1b}[1mExec\u{1b}[0mPlan"));
+
+        let exec_terms: HashSet<&str> = HashSet::from(["exec"]);
+        let exec_rendered = render_match_field("ExecPlan", &exec_terms, true);
+        assert!(exec_rendered.contains("\u{1b}[1mExec\u{1b}[0mPlan"));
+    }
+
+    #[test]
+    fn render_match_field_highlights_possessive_base_only() {
+        let query_terms: HashSet<&str> = HashSet::from(["jim"]);
+        let rendered = render_match_field("Jim's notebook", &query_terms, true);
+        assert!(rendered.contains("\u{1b}[1mJim\u{1b}[0m's"));
+    }
+
+    #[test]
+    fn render_match_field_does_not_match_inside_internal_apostrophe() {
+        let query_terms: HashSet<&str> = HashSet::from(["the"]);
+        let rendered = render_match_field("there's", &query_terms, true);
+        assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
+    }
+
+    #[test]
+    fn render_match_field_highlights_compound_dictionary_parts() {
+        let query_terms: HashSet<&str> = HashSet::from(["plan"]);
+        let rendered = render_match_field("execplan", &query_terms, true);
+        assert_eq!(rendered, "exec\u{1b}[1mplan\u{1b}[0m");
     }
 }
