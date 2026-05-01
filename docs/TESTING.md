@@ -50,6 +50,8 @@ Good unit-test targets in this repository include:
 
 Every user-visible CLI switch, subcommand, or repository-walking behavior must have at least one end-to-end integration test.
 
+Prefer one integration test per user-visible workflow boundary, with unit tests covering rule permutations beneath it. Add duplicate end-to-end coverage only for regressions, risky wiring, or behavior not observable through lower-level tests.
+
 - Cover command-surface behavior in `tests/cli.rs` and `tests/config.rs`.
 - Cover path-resolution and repository-layout scenarios in `tests/path_behavior.rs`.
 - Prefer copied fixtures from `tests/test-repos/` when the scenario represents a realistic repository state that should stay easy to inspect.

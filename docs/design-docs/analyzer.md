@@ -26,7 +26,7 @@ It has two splitter wrappers:
 - `normalize_text` for query strings, names, and descriptions
 - `normalize_path` for path prefixes
 
-Both call the shared surface-span analyzer used by `src/matching.rs` highlighting, so display boundaries cannot drift from scoring. Its per-token step may emit zero tokens for empty or stopword input, one token for normal input, or multiple tokens when the explicit compound dictionary expands a term.
+Both call the shared surface-span analyzer used by `src/matching.rs` highlighting, so display boundaries cannot drift from scoring. `analyze_surface_spans` may emit zero terms for empty or stopword input, one term for a normal span, or multiple spans when CamelCase or the explicit compound dictionary creates display boundaries.
 
 ### Analyzer Order
 
@@ -34,13 +34,13 @@ The shared analyzer chain is:
 
 1. split text fields on whitespace or ASCII punctuation except apostrophes, or strip a trailing `.md` from path prefixes and apply the same splitter
 2. split each post-punctuation chunk at CamelCase boundaries: lowercase-to-uppercase and acronym-to-word uppercase-to-uppercase-to-lowercase boundaries; digit transitions are not boundaries
-3. lowercase each surface token
-4. strip trailing English possessives: singular `'s` and plural trailing apostrophes after `s`
-5. drop empty tokens and English stopwords (the shipped stopword list contains unstemmed surface forms, so stopword filtering happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md))
-6. apply the explicit compound dictionary; matching entries replace the original token and may emit multiple tokens, initially `execplan` → `exec`, `plan`
+3. apply explicit compound-dictionary boundaries for matching surface chunks; matching entries replace the original surface with independently highlightable spans, initially `execplan` → `exec`, `plan`
+4. lowercase each surface token or compound part
+5. strip trailing English possessives: singular `'s` and plural trailing apostrophes after `s`
+6. drop empty tokens and English stopwords (the shipped stopword list contains unstemmed surface forms, so stopword filtering happens before stemming, matching the analyzer order accepted in [ADR 0003](../decisions/0003-use-stemming-for-match-tokens.md))
 7. apply Snowball English (Porter2) stemming through the [`rust-stemmers`](https://docs.rs/rust-stemmers/latest/rust_stemmers/) crate, per the implementation choice in [ADR 0004](../decisions/0004-use-snowball-english-via-rust-stemmers.md)
 
-`analyze_token` performs steps 3 through 7 on a single token. `analyze_surface_spans` adds display spans for CamelCase, possessive suffixes, and explicit compound-dictionary boundaries. `normalize_text` and `normalize_path` are splitter wrappers that apply step 1 and feed each chunk through `analyze_surface_spans`, then flatten span terms.
+`analyze_surface_spans` performs steps 2 through 7 for one separator-delimited surface chunk and is the canonical shared analyzer entry point for scoring and highlighting. `analyze_token` performs steps 4 through 7 on one already-boundaried surface token and returns zero or one stemmed term. `normalize_text` and `normalize_path` are splitter wrappers that apply step 1 and feed each chunk through `analyze_surface_spans`, then flatten span terms.
 
 This means:
 
