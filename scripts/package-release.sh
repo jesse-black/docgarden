@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 4 ]]; then
+	echo "usage: $0 <binary-path> <release-tag> <target> <archive-format>" >&2
+	exit 1
+fi
+
+binary_path="$1"
+release_tag="$2"
+target="$3"
+archive_format="$4"
+
+if [[ ! -f "${binary_path}" ]]; then
+	echo "binary not found: ${binary_path}" >&2
+	exit 1
+fi
+
+version="${release_tag}"
+archive_base="docgarden-${version}-${target}"
+stage_dir="${STAGE_DIR:-dist/stage}"
+out_dir="${OUT_DIR:-dist}"
+archive_dir="${stage_dir}/${archive_base}"
+
+rm -rf "${archive_dir}"
+mkdir -p "${archive_dir}" "${out_dir}"
+
+binary_name="$(basename "${binary_path}")"
+cp "${binary_path}" "${archive_dir}/${binary_name}"
+cp README.md LICENSE "${archive_dir}/"
+
+case "${archive_format}" in
+	tar.gz)
+		tar -C "${stage_dir}" -czf "${out_dir}/${archive_base}.tar.gz" "${archive_base}"
+		;;
+	zip)
+		if command -v zip >/dev/null 2>&1; then
+			(
+				cd "${stage_dir}"
+				rm -f "${OLDPWD}/${out_dir}/${archive_base}.zip"
+				zip -qr "${OLDPWD}/${out_dir}/${archive_base}.zip" "${archive_base}"
+			)
+		else
+			if pwd -W >/dev/null 2>&1; then
+				workspace_root="$(pwd -W)"
+			else
+				workspace_root="$(pwd)"
+			fi
+			archive_dir_abs="${workspace_root}\\${archive_dir//\//\\}"
+			out_dir_abs="${workspace_root}\\${out_dir//\//\\}"
+			archive_zip_abs="${out_dir_abs}\\${archive_base}.zip"
+			pwsh -NoLogo -NoProfile -Command \
+				"Compress-Archive -Path '${archive_dir_abs}' -DestinationPath '${archive_zip_abs}' -Force"
+		fi
+		;;
+	*)
+		echo "unsupported archive format: ${archive_format}" >&2
+		exit 1
+		;;
+esac

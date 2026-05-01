@@ -6,55 +6,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  quality-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: covgate@0.1.4
-      - name: Format
-        id: format
-        run: cargo fmt --check
-      - name: Clippy
-        id: clippy
-        if: ${{ always() }}
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Coverage
-        id: coverage
-        if: ${{ always() }}
-        run: cargo llvm-cov --json --output-path target/coverage.json
-      - name: Covgate
-        if: ${{ always() && steps.coverage.outcome == 'success' }}
-        run: covgate check target/coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
-
-  dependency-hygiene:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - uses: taiki-e/install-action@cargo-machete
-      - name: Dependency hygiene
-        run: cargo machete
-
-  dependency-policy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - uses: taiki-e/install-action@cargo-deny
-      - name: Dependency policy
-        run: cargo deny check advisories licenses sources bans
-
-  dogfood-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Dogfood lint
-        run: cargo run -- lint .
+  checks:
+    uses: ./.github/workflows/reusable-ci.yml
