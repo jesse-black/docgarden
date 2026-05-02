@@ -17,7 +17,7 @@ const DEFAULT_MATCH_LIMIT: usize = 5;
 
 #[derive(Parser, Debug)]
 #[command(name = "docgarden")]
-#[command(about = "Repository knowledge tooling for agentic engineering repositories")]
+#[command(version, about)]
 pub struct Args {
     #[command(subcommand)]
     command: Command,
