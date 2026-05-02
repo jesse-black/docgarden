@@ -41,6 +41,10 @@ To print the next sequence number:
 ## Template
 
 ```md
+---
+description: "<plan-specific routing cue; read when implementing, reviewing, or continuing this task>"
+---
+
 # <Short task title>
 
 ## Goal
