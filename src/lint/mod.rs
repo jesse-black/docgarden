@@ -170,9 +170,7 @@ fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
     sorted.sort_by_key(|edit| std::cmp::Reverse(edit.start_offset));
     let mut rewritten = source.to_string();
 
-    for window in sorted.windows(2) {
-        let earlier = window[1];
-        let later = window[0];
+    for [later, earlier] in sorted.array_windows::<2>() {
         if earlier.end_offset > later.start_offset {
             return Err(anyhow!(
                 "overlapping fix edits at byte offsets {}..{} and {}..{}",
