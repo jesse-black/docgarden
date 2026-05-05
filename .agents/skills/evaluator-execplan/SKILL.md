@@ -9,21 +9,28 @@ Use this skill when the task is to review the current PR branch or worktree that
 
 ## Read first
 
-Before reviewing, read:
+MUST READ before reviewing:
 
-- `docs/REVIEWING.md`
 - the current ExecPlan
+- `docs/CODESTYLE.md`
+- `docs/TESTING.md`
 - the implementation diff or current branch/worktree state
 
-Use `docs/REVIEWING.md` for repository-specific review routing, documentation-freshness checks, and validation expectations. Treat the ExecPlan as the source of intent and acceptance criteria. Role-specific review responsibilities stop here; `docs/PLANS.md` remains the source of truth for ExecPlan structure and maintenance rules.
+Review against all three authorities: the ExecPlan, `CODESTYLE.md`, and `TESTING.md`. The ExecPlan defines task intent, but it is not the only acceptance criteria. If the plan conflicts with, narrows away, or omits a requirement from the code or testing docs, record that as a finding instead of accepting the plan as authoritative.
+
+Apply each rule at the granularity it requires. For example, if `TESTING.md` says individual tests must move unless they call private functions, inspect individual tests, not just whether a module contains any private-helper test.
+
+Role-specific review responsibilities stop here; `docs/PLANS.md` remains the source of truth for ExecPlan structure and maintenance rules.
 
 ## You own
 
 As evaluator, you own:
 
 - independent review of the branch diff and the relevant ExecPlan
-- identifying bugs, regressions, missing tests, plan mismatches, and unnecessary complexity
+- identifying bugs, regressions, missing tests, plan mismatches, plan defects, `CODESTYLE.md` violations, `TESTING.md` violations, and unnecessary complexity
+- challenging completed plan items when the worktree evidence does not support them
 - recording review findings and evidence in the ExecPlan
+- checking off the Evaluator items in the `Definition of Done` section once the review is clean and all findings are addressed
 
 You do not own:
 
