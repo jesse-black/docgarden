@@ -149,7 +149,23 @@ fn children_mut(node: &Node) -> Option<&Vec<Node>> {
         Node::FootnoteDefinition(definition) => Some(&definition.children),
         Node::MdxJsxFlowElement(element) => Some(&element.children),
         Node::MdxJsxTextElement(element) => Some(&element.children),
-        _ => None,
+        Node::MdxjsEsm(_)
+        | Node::Toml(_)
+        | Node::Yaml(_)
+        | Node::Break(_)
+        | Node::InlineCode(_)
+        | Node::InlineMath(_)
+        | Node::MdxTextExpression(_)
+        | Node::FootnoteReference(_)
+        | Node::Html(_)
+        | Node::Image(_)
+        | Node::ImageReference(_)
+        | Node::Text(_)
+        | Node::Code(_)
+        | Node::Math(_)
+        | Node::MdxFlowExpression(_)
+        | Node::ThematicBreak(_)
+        | Node::Definition(_) => None,
     }
 }
 

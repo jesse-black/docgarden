@@ -341,7 +341,10 @@ impl Config {
                     Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = false,
                     Rule::MaxTokens => policy.max_tokens = None,
                     Rule::MaxLines => policy.max_lines = None,
-                    rule => {
+                    Rule::UnresolvedLinkPath
+                    | Rule::FrontmatterFieldMissing
+                    | Rule::FrontmatterMalformed
+                    | Rule::FrontmatterFieldMaxChars => {
                         policy.ignored_rules.insert(*rule);
                     }
                 }
@@ -353,7 +356,12 @@ impl Config {
                         policy.backtick_path_severity = Some(app.severity.into());
                     }
                     Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = true,
-                    _ => {}
+                    Rule::UnresolvedLinkPath
+                    | Rule::MaxTokens
+                    | Rule::MaxLines
+                    | Rule::FrontmatterFieldMissing
+                    | Rule::FrontmatterMalformed
+                    | Rule::FrontmatterFieldMaxChars => {}
                 }
             }
 

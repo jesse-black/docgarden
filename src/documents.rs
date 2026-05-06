@@ -24,7 +24,7 @@ pub(crate) fn load_document_metadata(config: &Config, path: &Path) -> Result<Doc
             extract_scalar(&fm, "name"),
             extract_scalar(&fm, "description"),
         ),
-        _ => (None, None),
+        FrontmatterParseResult::None | FrontmatterParseResult::Malformed { .. } => (None, None),
     };
     let name = frontmatter_name.unwrap_or_else(|| fallback_name_from_path(&repo_relative_path));
     let path_prefix = path_prefix(&repo_relative_path);
@@ -78,9 +78,10 @@ pub(crate) fn render_metadata_row(document: &DocumentMetadata) -> String {
 }
 
 fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Option<String> {
-    match fm.get(key)? {
-        YamlValue::Scalar(s) => Some(s.clone()),
-        _ => None,
+    if let YamlValue::Scalar(s) = fm.get(key)? {
+        Some(s.clone())
+    } else {
+        None
     }
 }
 

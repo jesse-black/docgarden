@@ -147,7 +147,7 @@ fn normalize_path(candidate: PathBuf) -> Option<String> {
                 }
                 parts.pop();
             }
-            _ => return None,
+            Component::Prefix(_) | Component::RootDir => return None,
         }
     }
     if parts.is_empty() {
@@ -195,7 +195,7 @@ fn render_relative_path(from_dir: &Path, target: &Path, is_directory: bool) -> S
     let mut shared = 0;
     while shared < from_parts.len()
         && shared < target_parts.len()
-        && from_parts[shared] == target_parts[shared]
+        && from_parts.get(shared) == target_parts.get(shared)
     {
         shared += 1;
     }
@@ -204,7 +204,7 @@ fn render_relative_path(from_dir: &Path, target: &Path, is_directory: bool) -> S
     for _ in shared..from_parts.len() {
         parts.push("..".to_string());
     }
-    for part in &target_parts[shared..] {
+    for part in target_parts.iter().skip(shared) {
         parts.push(part.clone());
     }
 
@@ -222,7 +222,9 @@ fn render_relative_path(from_dir: &Path, target: &Path, is_directory: bool) -> S
 fn component_to_string(component: Component<'_>) -> Option<String> {
     match component {
         Component::Normal(value) => Some(value.to_string_lossy().to_string()),
-        _ => None,
+        Component::Prefix(_) | Component::RootDir | Component::CurDir | Component::ParentDir => {
+            None
+        }
     }
 }
 
@@ -263,7 +265,37 @@ pub(crate) fn label_text(children: &[Node]) -> String {
             Node::Text(Text { value, .. }) => text.push_str(value),
             Node::InlineCode(InlineCode { value, .. }) => text.push_str(value),
             Node::Link(link) => text.push_str(&label_text(&link.children)),
-            _ => {}
+            Node::Root(_)
+            | Node::Blockquote(_)
+            | Node::FootnoteDefinition(_)
+            | Node::MdxJsxFlowElement(_)
+            | Node::List(_)
+            | Node::MdxjsEsm(_)
+            | Node::Toml(_)
+            | Node::Yaml(_)
+            | Node::Break(_)
+            | Node::InlineMath(_)
+            | Node::Delete(_)
+            | Node::Emphasis(_)
+            | Node::MdxTextExpression(_)
+            | Node::FootnoteReference(_)
+            | Node::Html(_)
+            | Node::Image(_)
+            | Node::ImageReference(_)
+            | Node::MdxJsxTextElement(_)
+            | Node::LinkReference(_)
+            | Node::Strong(_)
+            | Node::Code(_)
+            | Node::Math(_)
+            | Node::MdxFlowExpression(_)
+            | Node::Heading(_)
+            | Node::Table(_)
+            | Node::ThematicBreak(_)
+            | Node::TableRow(_)
+            | Node::TableCell(_)
+            | Node::ListItem(_)
+            | Node::Definition(_)
+            | Node::Paragraph(_) => {}
         }
     }
     text

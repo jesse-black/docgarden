@@ -30,9 +30,10 @@ impl ParsedFrontmatter {
 
     /// Returns the char count of a top-level scalar field, if present.
     pub fn scalar_char_count(&self, key: &str) -> Option<usize> {
-        match self.get(key)? {
-            YamlValue::Scalar(s) => Some(s.chars().count()),
-            _ => None,
+        if let YamlValue::Scalar(s) = self.get(key)? {
+            Some(s.chars().count())
+        } else {
+            None
         }
     }
 }
@@ -109,8 +110,7 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
     let mut fields: Vec<(String, YamlValue)> = Vec::new();
     let mut i = 0;
 
-    while i < lines.len() {
-        let (line_num, line) = lines[i];
+    while let Some(&(line_num, line)) = lines.get(i) {
         i += 1;
 
         // Skip empty lines and comment lines.
@@ -205,7 +205,10 @@ fn parse_block_value(
     }
 
     // Determine whether this is a sequence or a nested mapping.
-    let first_trimmed = child_lines[0].1.trim_start();
+    let Some((_, first_line)) = child_lines.first() else {
+        return Err(parent_line);
+    };
+    let first_trimmed = first_line.trim_start();
     let value = if first_trimmed.starts_with("- ") || first_trimmed == "-" {
         parse_sequence(&child_lines)?
     } else {
@@ -351,6 +354,15 @@ fn has_unsupported_scalar_prefix(value: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn assert_valid(src: &str) -> ParsedFrontmatter {
+        let result = parse_from_str(src);
+        if let FrontmatterParseResult::Valid(fm) = result {
+            fm
+        } else {
+            panic!("expected Valid, got {result:?}");
+        }
+    }
+
     // --- Parser tests ---
 
     #[test]
@@ -366,97 +378,73 @@ mod tests {
     #[test]
     fn parse_simple_scalar_fields() {
         let src = "---\ntitle: My Doc\nauthor: Alice\n---\n# Body\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("title"),
-                    Some(&YamlValue::Scalar("My Doc".to_string()))
-                );
-                assert_eq!(
-                    fm.get("author"),
-                    Some(&YamlValue::Scalar("Alice".to_string()))
-                );
-                assert!(fm.get("missing").is_none());
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("title"),
+            Some(&YamlValue::Scalar("My Doc".to_string()))
+        );
+        assert_eq!(
+            fm.get("author"),
+            Some(&YamlValue::Scalar("Alice".to_string()))
+        );
+        assert!(fm.get("missing").is_none());
     }
 
     #[test]
     fn parse_quoted_string_strips_quotes() {
         let src = "---\ndescription: \"A quoted description.\"\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("description"),
-                    Some(&YamlValue::Scalar("A quoted description.".to_string()))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar("A quoted description.".to_string()))
+        );
     }
 
     #[test]
     fn parse_boolean_and_integer_scalars() {
         let src = "---\npublished: true\ncount: 42\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("published"),
-                    Some(&YamlValue::Scalar("true".to_string()))
-                );
-                assert_eq!(fm.get("count"), Some(&YamlValue::Scalar("42".to_string())));
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("published"),
+            Some(&YamlValue::Scalar("true".to_string()))
+        );
+        assert_eq!(fm.get("count"), Some(&YamlValue::Scalar("42".to_string())));
     }
 
     #[test]
     fn parse_date_scalar() {
         let src = "---\nretrieved: 2026-04-01\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("retrieved"),
-                    Some(&YamlValue::Scalar("2026-04-01".to_string()))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("retrieved"),
+            Some(&YamlValue::Scalar("2026-04-01".to_string()))
+        );
     }
 
     #[test]
     fn parse_sequence_value() {
         let src = "---\ntags:\n  - rust\n  - docs\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("tags"),
-                    Some(&YamlValue::Sequence(vec![
-                        YamlValue::Scalar("rust".to_string()),
-                        YamlValue::Scalar("docs".to_string()),
-                    ]))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("tags"),
+            Some(&YamlValue::Sequence(vec![
+                YamlValue::Scalar("rust".to_string()),
+                YamlValue::Scalar("docs".to_string()),
+            ]))
+        );
     }
 
     #[test]
     fn parse_nested_mapping() {
         let src = "---\nmetadata:\n  version: 1.0\n  status: draft\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("metadata"),
-                    Some(&YamlValue::Mapping(vec![
-                        ("version".to_string(), YamlValue::Scalar("1.0".to_string())),
-                        ("status".to_string(), YamlValue::Scalar("draft".to_string())),
-                    ]))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("metadata"),
+            Some(&YamlValue::Mapping(vec![
+                ("version".to_string(), YamlValue::Scalar("1.0".to_string())),
+                ("status".to_string(), YamlValue::Scalar("draft".to_string())),
+            ]))
+        );
     }
 
     #[test]
@@ -518,69 +506,49 @@ mod tests {
     fn parse_later_triple_dash_is_body_content() {
         // Only the first --- ... --- block is frontmatter; later --- is body.
         let src = "---\ntitle: Hello\n---\n\n# Body\n\n---\nThis is a thematic break.\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("title"),
-                    Some(&YamlValue::Scalar("Hello".to_string()))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("title"),
+            Some(&YamlValue::Scalar("Hello".to_string()))
+        );
     }
 
     #[test]
     fn parse_empty_frontmatter_block_is_valid() {
         let src = "---\n---\n# Body\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert!(fm.fields.is_empty());
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert!(fm.fields.is_empty());
     }
 
     #[test]
     fn parse_blank_value_at_end_of_block() {
         // key: with nothing following it and no more lines before closing ---
         let src = "---\ntitle: Hello\npublished:\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(
-                    fm.get("title"),
-                    Some(&YamlValue::Scalar("Hello".to_string()))
-                );
-                assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("title"),
+            Some(&YamlValue::Scalar("Hello".to_string()))
+        );
+        assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
     }
 
     #[test]
     fn parse_blank_value_followed_by_another_key() {
         // key: with no value, followed immediately by another top-level key
         let src = "---\npublished:\nauthor: Alice\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
-                assert_eq!(
-                    fm.get("author"),
-                    Some(&YamlValue::Scalar("Alice".to_string()))
-                );
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        assert_eq!(fm.get("published"), Some(&YamlValue::Scalar(String::new())));
+        assert_eq!(
+            fm.get("author"),
+            Some(&YamlValue::Scalar("Alice".to_string()))
+        );
     }
 
     #[test]
     fn scalar_char_count_measures_unicode_correctly() {
         let src = "---\ndescription: héllo\n---\n";
-        match parse_from_str(src) {
-            FrontmatterParseResult::Valid(fm) => {
-                // "héllo" is 5 chars (h, é, l, l, o)
-                assert_eq!(fm.scalar_char_count("description"), Some(5));
-            }
-            other => panic!("expected Valid, got {other:?}"),
-        }
+        let fm = assert_valid(src);
+        // "héllo" is 5 chars (h, é, l, l, o)
+        assert_eq!(fm.scalar_char_count("description"), Some(5));
     }
 }

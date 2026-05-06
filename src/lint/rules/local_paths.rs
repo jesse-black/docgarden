@@ -16,10 +16,12 @@ pub(crate) fn evaluate_node<'a>(
     context: &NodeRuleContext<'a>,
     node: &'a Node,
 ) -> Result<Vec<Finding<'a>>> {
-    match node {
-        Node::InlineCode(inline) => lint_inline_code_node(context, inline),
-        Node::Link(link) => lint_link_node(context, link),
-        _ => Ok(Vec::new()),
+    if let Node::InlineCode(inline) = node {
+        lint_inline_code_node(context, inline)
+    } else if let Node::Link(link) = node {
+        lint_link_node(context, link)
+    } else {
+        Ok(Vec::new())
     }
 }
 
