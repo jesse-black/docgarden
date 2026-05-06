@@ -15,6 +15,11 @@ Do not use this step for code-first work, code symbol searches, test names, comp
 - ALWAYS address bug reports and review findings with TDD: reproduce the issue in a failing test first, then fix it and rerun the relevant tests until they pass.
 - ALWAYS consult `docs/CODESTYLE.md` before adding handwritten validators, wrapper structs, parallel collections, or stringly-typed identifiers; it captures the recurring code smells this repo rejects at review.
 
+## Workflow
+- During the edit-build-test loop, run the narrowest command that covers the changed surface, such as a focused `cargo test`, `cargo fmt`, or `cargo clippy`.
+- Use `cargo xtask validate` when the change affects Rust behavior, fixtures, coverage semantics, gate defaults, release validation, or any path where the full coverage and dependency-audit sweep is the evidence needed.
+- When skipping `cargo xtask validate`, state which focused checks were run and why they are sufficient for the change.
+
 ## Repository Map
 ### Start Here for Architecture and Implementation
 - `ARCHITECTURE.md` – Top-level code map, module boundaries, and architectural invariants for `docgarden`. Read this first when you need the current system boundaries, shared seams, or architectural intent.
