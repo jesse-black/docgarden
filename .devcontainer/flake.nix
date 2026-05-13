@@ -42,6 +42,10 @@
               shellcheck
               shfmt
 
+              # Nix editor tooling
+              nil
+              nixfmt
+
               # Rust tooling
               rustup
               cargo-llvm-cov
