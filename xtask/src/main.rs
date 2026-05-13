@@ -113,7 +113,7 @@ fn release_version(version: &str) -> Result<()> {
 
     let lockfile_before = read_optional_file(&lockfile_path)?;
     Runner::new("cargo")
-        .args(["generate-lockfile"])
+        .args(["update", "-p", "docgarden", "--precise", version])
         .current_dir(&repo_root)
         .run()?;
     let lockfile_after = read_optional_file(&lockfile_path)?;
