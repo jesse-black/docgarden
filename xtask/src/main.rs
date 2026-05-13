@@ -11,6 +11,8 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Task::Validate => validate(),
         Task::Clippy => clippy(),
+        Task::LlvmCov { args } => llvm_cov_task(&args),
+        Task::Covgate { args } => covgate_task(&args),
         Task::ReleaseVersion { version } => release_version(&version),
     }
 }
@@ -26,23 +28,23 @@ struct Cli {
 enum Task {
     Validate,
     Clippy,
-    ReleaseVersion { version: String },
+    LlvmCov {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    Covgate {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    ReleaseVersion {
+        version: String,
+    },
 }
 
 fn validate() -> Result<()> {
     Runner::new("cargo").args(["fmt", "--check"]).run()?;
     clippy()?;
-    Runner::new("cargo")
-        .args([
-            "llvm-cov",
-            "--json",
-            "--output-path",
-            "target/coverage.json",
-        ])
-        .run()?;
-    Runner::new("covgate")
-        .args(["check", "target/coverage.json"])
-        .run()?;
+    covgate_task(&[])?;
     Ok(())
 }
 
@@ -58,6 +60,42 @@ fn clippy() -> Result<()> {
             "warnings",
         ])
         .run()
+}
+
+fn llvm_cov_task(extra_args: &[String]) -> Result<()> {
+    let coverage_path = stable_coverage_path();
+    run_llvm_cov(&coverage_path, extra_args)
+}
+
+fn covgate_task(extra_args: &[String]) -> Result<()> {
+    let coverage_path = stable_coverage_path();
+    run_llvm_cov(&coverage_path, &[])?;
+    let coverage_json_str = coverage_path
+        .to_str()
+        .context("coverage output path contained non-utf8 characters")?;
+    let mut covgate_args = vec!["check".to_string(), coverage_json_str.to_string()];
+    covgate_args.extend(extra_args.iter().cloned());
+    let args: Vec<&str> = covgate_args.iter().map(String::as_str).collect();
+    Runner::new("covgate").args(args).run()
+}
+
+fn run_llvm_cov(coverage_path: &Path, extra_args: &[String]) -> Result<()> {
+    let coverage_json_str = coverage_path
+        .to_str()
+        .context("coverage output path contained non-utf8 characters")?;
+    let mut llvm_cov_args = vec![
+        "llvm-cov".to_string(),
+        "--json".to_string(),
+        "--output-path".to_string(),
+        coverage_json_str.to_string(),
+    ];
+    llvm_cov_args.extend(extra_args.iter().cloned());
+    let args: Vec<&str> = llvm_cov_args.iter().map(String::as_str).collect();
+    Runner::new("cargo").args(args).run()
+}
+
+fn stable_coverage_path() -> PathBuf {
+    PathBuf::from("target/coverage.json")
 }
 
 fn release_version(version: &str) -> Result<()> {
