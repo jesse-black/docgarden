@@ -1,3 +1,3 @@
-[gates]
-fail_under_regions = 90
-fail_uncovered_functions = 0
+[[gates]]
+fail-under-regions = 90
+fail-uncovered-named-functions = 0

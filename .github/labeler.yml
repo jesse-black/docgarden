@@ -10,6 +10,9 @@ docs:
 chore:
   - head-branch: ['^chore/']
 
+skip-release-notes:
+  - head-branch: [^chore/release-']
+
 ci:
   - head-branch: ['^ci/']
 

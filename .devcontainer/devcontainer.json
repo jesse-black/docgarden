@@ -16,6 +16,10 @@
 	"postCreateCommand": "bash .devcontainer/post-create-command.sh",
 	"customizations": {
 		"vscode": {
+			"settings": {
+				"nix.enableLanguageServer": true,
+				"nix.serverPath": "nil"
+			},
 			"extensions": [
 				"openai.chatgpt",
 				"redhat.vscode-yaml",

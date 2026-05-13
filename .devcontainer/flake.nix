@@ -7,33 +7,19 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { nixpkgs, home-manager, rust-overlay, ... }:
+  outputs = { nixpkgs, home-manager, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ (import rust-overlay) ];
       };
       localModule = ./. + "/local.nix";
       localModules =
         if builtins.pathExists localModule
         then [ localModule ]
         else [ ];
-
-      rustToolchain = pkgs.rust-bin.stable."1.95.0".default.override {
-        extensions = [
-          "clippy"
-          "llvm-tools-preview"
-          "rust-src"
-          "rustfmt"
-        ];
-      };
     in {
       homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
@@ -41,14 +27,31 @@
           ./home.nix
           ({ pkgs, ... }: {
             home.packages = with pkgs; [
-              rustToolchain
+              # Core CLI tools
+              yq-go
+              ripgrep
+              fd
+              eza
+              gh
+              file
+              python3
+              ast-grep
+              bubblewrap
+
+              # Shell/script tooling
+              shellcheck
+              shfmt
+
+              # Nix editor tooling
+              nil
+              nixfmt
+
+              # Rust tooling
+              rustup
               cargo-llvm-cov
               cargo-deny
               cargo-machete
               cargo-binstall
-              shellcheck
-              shfmt
-              python3
             ];
           })
         ] ++ localModules;
