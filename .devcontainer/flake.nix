@@ -41,14 +41,27 @@
           ./home.nix
           ({ pkgs, ... }: {
             home.packages = with pkgs; [
+              # Core CLI tools
+              yq-go
+              ripgrep
+              fd
+              eza
+              gh
+              file
+              python3
+              ast-grep
+              bubblewrap
+
+              # Shell/script tooling
+              shellcheck
+              shfmt
+
+              # Rust tooling
               rustToolchain
               cargo-llvm-cov
               cargo-deny
               cargo-machete
               cargo-binstall
-              shellcheck
-              shfmt
-              python3
             ];
           })
         ] ++ localModules;
