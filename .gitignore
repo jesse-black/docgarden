@@ -2,3 +2,4 @@
 /dist
 local.nix
 .codex
+settings.local.json
