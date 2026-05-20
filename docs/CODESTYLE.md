@@ -85,6 +85,14 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 - NEVER fence production fields with `#[cfg(test)]` to expose internals to tests. The struct then has different layouts in test vs release builds and the test is implicitly checking implementation.
 - ALWAYS expose deliberately-test-visible state through `pub(crate) fn` accessors that exist in both profiles. The corresponding rule for what tests should assert lives in `docs/TESTING.md`.
 
+### Make invariants fail at compile time
+
+*Principles 2, 3, 5.*
+
+- ALWAYS choose code shapes that stop compiling when an invariant-bearing type changes. In handwritten trait impls, destructure the whole struct and mark intentionally ignored fields by name; when defaults carry behavior, name the defaulted fields instead of hiding them behind `..Default::default()`.
+- ALWAYS keep invariants behind the construction boundary. If direct construction or public mutation can create an invalid value, use private fields, private seal types, private modules, or accessors so the compiler enforces the route through validation.
+- ALWAYS keep mutability as local as the operation that needs it. If a value is mutable only while it is assembled or sorted, use a small initialization block and return the final immutable value.
+
 ### Keep orchestration functions readable
 
 *Principles 4, 5.*
