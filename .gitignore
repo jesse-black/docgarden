@@ -3,3 +3,4 @@
 local.nix
 .codex
 settings.local.json
+.antigravitycli
