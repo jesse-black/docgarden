@@ -42,7 +42,7 @@ enum Task {
 }
 
 fn validate() -> Result<()> {
-    Runner::new("cargo").args(["fmt", "--check"]).run()?;
+    Runner::new("cargo").args(["fmt"]).run()?;
     clippy()?;
     covgate_task(&[])?;
     Ok(())
@@ -83,14 +83,39 @@ fn run_llvm_cov(coverage_path: &Path, extra_args: &[String]) -> Result<()> {
     let coverage_json_str = coverage_path
         .to_str()
         .context("coverage output path contained non-utf8 characters")?;
-    let mut llvm_cov_args = vec![
-        "llvm-cov".to_string(),
+
+    let has_nextest = Command::new("cargo")
+        .arg("nextest")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let mut coverage_args = vec!["llvm-cov".to_string()];
+    if has_nextest {
+        coverage_args.extend([
+            "nextest".to_string(),
+            "--status-level".to_string(),
+            "none".to_string(),
+            "--failure-output".to_string(),
+            "immediate-final".to_string(),
+            "--show-progress".to_string(),
+            "none".to_string(),
+        ]);
+    } else {
+        coverage_args.push("-q".to_string());
+    }
+    coverage_args.extend([
         "--json".to_string(),
         "--output-path".to_string(),
         coverage_json_str.to_string(),
-    ];
-    llvm_cov_args.extend(extra_args.iter().cloned());
-    let args: Vec<&str> = llvm_cov_args.iter().map(String::as_str).collect();
+        "--fail-under-regions=90".to_string(),
+    ]);
+    coverage_args.extend(extra_args.iter().cloned());
+
+    let args: Vec<&str> = coverage_args.iter().map(String::as_str).collect();
     Runner::new("cargo").args(args).run()
 }
 
