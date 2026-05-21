@@ -89,9 +89,10 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 - [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] Pass 1: Cold review completed.
+- [ ] Pass 2: Context review completed:
+    - [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+    - [ ] Adheres to the principles of `docs/TESTING.md`.
 - [ ] All review findings have been addressed.
 ```
 

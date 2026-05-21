@@ -101,7 +101,8 @@ description: "Address the code smells and defensive programming recommendations 
 - [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [x] Standard review posture applied.
-- [x] Adheres to the principles of `docs/CODESTYLE.md`.
-- [x] Adheres to the principles of `docs/TESTING.md`.
-- [x] All review findings have been addressed.
+- [ ] Pass 1: Cold review completed.
+- [ ] Pass 2: Context review completed:
+    - [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+    - [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] All review findings have been addressed.
