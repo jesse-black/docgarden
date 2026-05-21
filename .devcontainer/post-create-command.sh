@@ -14,10 +14,6 @@ if ! rustup show active-toolchain >/dev/null 2>&1; then
   rustup toolchain install
 fi
 
-if ! rustup show active-toolchain >/dev/null 2>&1; then
-  rustup toolchain install
-fi
-
 if ! command -v covgate >/dev/null 2>&1; then
   cargo install covgate --locked
 fi
