@@ -4,11 +4,22 @@ use markdown::mdast::{InlineCode, Node, Text};
 
 use crate::config::Config;
 
+/// How the reference string is syntactically expressed relative to the
+/// repository root.  Exactly one variant applies per candidate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ReferenceSyntax {
+    /// Bare name or path with no leading prefix (e.g. `docs/guide.md`).
+    Standard,
+    /// Path prefixed with `./` or `../` (e.g. `./guide.md`).
+    Relative,
+    /// Path prefixed with `/` anchored to the workspace root (e.g. `/docs/guide.md`).
+    WorkspaceRoot,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct CandidateReference {
     pub(crate) display_text: String,
-    pub(crate) uses_relative_syntax: bool,
-    pub(crate) uses_workspace_root_syntax: bool,
+    pub(crate) syntax: ReferenceSyntax,
     pub(crate) is_directory_like: bool,
 }
 
@@ -45,58 +56,43 @@ fn classify_reference(
     if kind == ReferenceKind::Backtick && contains_disallowed_backtick_syntax(value) {
         return None;
     }
-    let uses_relative_syntax = has_relative_prefix(value);
-    let uses_workspace_root_syntax = has_workspace_root_prefix(value);
+    let syntax = if has_relative_prefix(value) {
+        ReferenceSyntax::Relative
+    } else if has_workspace_root_prefix(value) {
+        ReferenceSyntax::WorkspaceRoot
+    } else {
+        ReferenceSyntax::Standard
+    };
 
-    if is_path_like_reference(
-        value,
-        kind,
-        uses_relative_syntax,
-        uses_workspace_root_syntax,
-    ) {
-        return Some(CandidateReference::new(
-            value,
-            uses_relative_syntax,
-            uses_workspace_root_syntax,
-        ));
+    if is_path_like_reference(value, kind, syntax) {
+        return Some(CandidateReference::new(value, syntax));
     }
 
     let path = Path::new(value);
     if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
         let extension = format!(".{extension}");
-        if config.known_extensions.contains(&extension) {
-            return Some(CandidateReference::new(value, false, false));
+        if config.known_extensions().contains(&extension) {
+            return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
         }
     }
-    if config.special_filenames.contains(value) {
-        return Some(CandidateReference::new(value, false, false));
+    if config.special_filenames().contains(value) {
+        return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
     }
     None
 }
 
 impl CandidateReference {
-    fn new(
-        value: &str,
-        uses_relative_syntax: bool,
-        uses_workspace_root_syntax: bool,
-    ) -> CandidateReference {
+    fn new(value: &str, syntax: ReferenceSyntax) -> CandidateReference {
         CandidateReference {
             display_text: value.to_string(),
-            uses_relative_syntax,
-            uses_workspace_root_syntax,
+            syntax,
             is_directory_like: value.ends_with('/') || value.ends_with('\\'),
         }
     }
 }
 
-fn is_path_like_reference(
-    value: &str,
-    kind: ReferenceKind,
-    uses_relative_syntax: bool,
-    uses_workspace_root_syntax: bool,
-) -> bool {
-    uses_workspace_root_syntax
-        || uses_relative_syntax
+fn is_path_like_reference(value: &str, kind: ReferenceKind, syntax: ReferenceSyntax) -> bool {
+    syntax != ReferenceSyntax::Standard
         || match kind {
             ReferenceKind::Backtick => value.ends_with('/') || value.ends_with('\\'),
             ReferenceKind::Link => value.contains('/') || value.contains('\\'),
@@ -112,16 +108,16 @@ pub(crate) fn resolve_candidate(
     let normalized_display = display_text.trim_start_matches('/');
     let base = match kind {
         ReferenceKind::Backtick => {
-            if candidate.uses_workspace_root_syntax {
+            if candidate.syntax == ReferenceSyntax::WorkspaceRoot {
                 Path::new("")
-            } else if candidate.uses_relative_syntax {
+            } else if candidate.syntax == ReferenceSyntax::Relative {
                 Path::new(file).parent().unwrap_or_else(|| Path::new(""))
             } else {
                 Path::new("")
             }
         }
         ReferenceKind::Link => {
-            if candidate.uses_workspace_root_syntax {
+            if candidate.syntax == ReferenceSyntax::WorkspaceRoot {
                 Path::new("")
             } else {
                 Path::new(file).parent().unwrap_or_else(|| Path::new(""))
@@ -171,7 +167,7 @@ pub(crate) fn render_link_destination(
     resolved: &ResolvedReference,
     exists_path: &Path,
 ) -> String {
-    if candidate.uses_workspace_root_syntax {
+    if candidate.syntax == ReferenceSyntax::WorkspaceRoot {
         return format!("/{}", render_repo_relative(resolved, exists_path));
     }
     let from_dir = Path::new(file).parent().unwrap_or_else(|| Path::new(""));
@@ -313,8 +309,7 @@ mod tests {
     fn resolve_candidate_normalizes_relative_segments_and_separators() {
         let candidate = CandidateReference {
             display_text: "./nested\\..\\real.md".to_string(),
-            uses_relative_syntax: true,
-            uses_workspace_root_syntax: false,
+            syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
 
@@ -328,8 +323,7 @@ mod tests {
     fn resolve_candidate_rejects_escape_above_repository_root() {
         let candidate = CandidateReference {
             display_text: "../../../secret.md".to_string(),
-            uses_relative_syntax: true,
-            uses_workspace_root_syntax: false,
+            syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
 
@@ -344,8 +338,7 @@ mod tests {
         std::fs::create_dir(&docs).unwrap();
         let candidate = CandidateReference {
             display_text: "/docs".to_string(),
-            uses_relative_syntax: false,
-            uses_workspace_root_syntax: true,
+            syntax: super::ReferenceSyntax::WorkspaceRoot,
             is_directory_like: true,
         };
         let resolved = resolve_candidate("README.md", &candidate, ReferenceKind::Link).unwrap();

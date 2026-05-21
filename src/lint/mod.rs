@@ -41,7 +41,7 @@ struct WalkState<'a> {
 }
 
 pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<Vec<Diagnostic>> {
-    let relative_path = repository_relative_path(&config.repository_root, path)?;
+    let relative_path = repository_relative_path(config.repository_root(), path)?;
     let rule_policy = config.effective_rule_policy_for_path(&relative_path);
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
@@ -182,9 +182,11 @@ pub(crate) fn edit_from_position(
 }
 
 fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
-    let mut sorted: Vec<_> = edits.iter().collect();
-    sorted.sort_by_key(|edit| std::cmp::Reverse(edit.start_offset));
-    let mut rewritten = source.to_string();
+    let sorted = {
+        let mut s: Vec<_> = edits.iter().collect();
+        s.sort_by_key(|edit| std::cmp::Reverse(edit.start_offset));
+        s
+    };
 
     for [later, earlier] in sorted.array_windows::<2>() {
         if earlier.end_offset > later.start_offset {
@@ -198,9 +200,13 @@ fn apply_edits(source: &str, edits: &[Edit]) -> Result<String> {
         }
     }
 
-    for edit in sorted {
-        rewritten.replace_range(edit.start_offset..edit.end_offset, &edit.replacement);
-    }
+    let rewritten = {
+        let mut r = source.to_string();
+        for edit in &sorted {
+            r.replace_range(edit.start_offset..edit.end_offset, &edit.replacement);
+        }
+        r
+    };
 
     Ok(rewritten)
 }
@@ -215,28 +221,14 @@ pub fn summarize(diagnostics: &[Diagnostic]) -> FixSummary {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
 
     use crate::config::Config;
-    use crate::defaults::{default_extensions, default_special_filenames};
+    use crate::lint::references::ReferenceSyntax;
 
     use super::references::{classify_inline_reference, classify_link_reference};
 
     fn test_config() -> Config {
-        Config {
-            repository_root: PathBuf::from("/tmp/repo"),
-            skills_dir: PathBuf::from(".agents/skills"),
-            plans_dir: PathBuf::from("docs/exec-plans"),
-            include: Vec::new(),
-            exclude: Vec::new(),
-            rule_applications: Vec::new(),
-            known_extensions: default_extensions(),
-            special_filenames: default_special_filenames(),
-            config_path: None,
-            config_was_explicit: false,
-            frontmatter_rules: Vec::new(),
-            respect_gitignore: true,
-        }
+        Config::for_testing("/tmp/repo")
     }
 
     #[test]
@@ -245,13 +237,11 @@ mod tests {
 
         let relative = classify_inline_reference(&config, "./docs/guide.md").unwrap();
         assert_eq!(relative.display_text, "./docs/guide.md");
-        assert!(relative.uses_relative_syntax);
-        assert!(!relative.uses_workspace_root_syntax);
+        assert_eq!(relative.syntax, ReferenceSyntax::Relative);
 
         let workspace_root = classify_inline_reference(&config, "/docs/guide.md").unwrap();
         assert_eq!(workspace_root.display_text, "/docs/guide.md");
-        assert!(!workspace_root.uses_relative_syntax);
-        assert!(workspace_root.uses_workspace_root_syntax);
+        assert_eq!(workspace_root.syntax, ReferenceSyntax::WorkspaceRoot);
     }
 
     #[test]
@@ -295,12 +285,11 @@ mod tests {
 
         let relative = classify_link_reference(&config, "../README.md").unwrap();
         assert_eq!(relative.display_text, "../README.md");
-        assert!(relative.uses_relative_syntax);
-        assert!(!relative.uses_workspace_root_syntax);
+        assert_eq!(relative.syntax, ReferenceSyntax::Relative);
 
         let nested = classify_link_reference(&config, "docs/guide").unwrap();
         assert_eq!(nested.display_text, "docs/guide");
-        assert!(!nested.uses_relative_syntax);
+        assert_eq!(nested.syntax, ReferenceSyntax::Standard);
 
         let readme = classify_link_reference(&config, "README.md").unwrap();
         assert_eq!(readme.display_text, "README.md");

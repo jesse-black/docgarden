@@ -35,7 +35,7 @@ fn lint_inline_code_node<'a>(
     {
         let exists_path = context
             .config
-            .repository_root
+            .repository_root()
             .join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
         if !exists && candidate.is_directory_like {
@@ -98,7 +98,7 @@ fn lint_link_node<'a>(
     {
         let exists_path = context
             .config
-            .repository_root
+            .repository_root()
             .join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
         if !exists && candidate.is_directory_like {

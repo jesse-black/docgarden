@@ -21,14 +21,31 @@ struct MatchResult {
     first_field_hit: Option<Field>,
 }
 
+/// Output mode for `docgarden match`.  Exactly one variant is active per
+/// invocation; the CLI lowers `--path-only` / `--explain` into this enum
+/// before calling `execute_match` so the matcher never reasons about
+/// contradictory flag combinations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MatchOutputMode {
+    Default,
+    PathOnly,
+    Explain,
+}
+
+/// Whether ANSI styling is applied to rendered output.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ColorRendering {
+    Plain,
+    Ansi,
+}
+
 pub(crate) struct MatchOptions {
     pub(crate) raw_query: Vec<String>,
     pub(crate) config_path: Option<PathBuf>,
     pub(crate) no_gitignore: bool,
     pub(crate) color: ColorChoice,
     pub(crate) limit: usize,
-    pub(crate) path_only: bool,
-    pub(crate) explain: bool,
+    pub(crate) output_mode: MatchOutputMode,
     pub(crate) scope: Option<Scope>,
 }
 
@@ -59,7 +76,7 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
 
     let mut config = Config::load(&repository_root, options.config_path.as_deref())?;
     if options.no_gitignore {
-        config.respect_gitignore = false;
+        config.disable_gitignore();
     }
 
     let files = if let Some(scope) = options.scope {
@@ -79,39 +96,47 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
         .collect();
     let stats = CombinedFieldStats::build(&candidates);
 
-    let mut results: Vec<MatchResult> = documents
-        .iter()
-        .zip(candidates.iter())
-        .filter_map(|(document, candidate)| {
-            let hit = crate::score::score(&query_terms, candidate, &stats);
-            if hit.score <= 0.0 {
-                return None;
-            }
-            Some(MatchResult {
-                repo_relative_path: document.repo_relative_path.clone(),
-                name: document.name.clone(),
-                description: document.description.clone(),
-                score: hit.score,
-                matched_terms: hit.matched_terms,
-                first_field_hit: hit.first_field_hit,
+    let results = {
+        let mut r: Vec<MatchResult> = documents
+            .iter()
+            .zip(candidates.iter())
+            .filter_map(|(document, candidate)| {
+                let hit = crate::score::score(&query_terms, candidate, &stats);
+                if hit.score <= 0.0 {
+                    return None;
+                }
+                Some(MatchResult {
+                    repo_relative_path: document.repo_relative_path.clone(),
+                    name: document.name.clone(),
+                    description: document.description.clone(),
+                    score: hit.score,
+                    matched_terms: hit.matched_terms,
+                    first_field_hit: hit.first_field_hit,
+                })
             })
-        })
-        .collect();
+            .collect();
 
-    results.sort_by(|a, b| {
-        b.score
-            .total_cmp(&a.score)
-            .then(b.matched_terms.cmp(&a.matched_terms))
-            .then(field_priority(a.first_field_hit).cmp(&field_priority(b.first_field_hit)))
-            .then(a.repo_relative_path.cmp(&b.repo_relative_path))
-    });
+        r.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then(b.matched_terms.cmp(&a.matched_terms))
+                .then(field_priority(a.first_field_hit).cmp(&field_priority(b.first_field_hit)))
+                .then(a.repo_relative_path.cmp(&b.repo_relative_path))
+        });
 
-    results.truncate(options.limit);
+        r.truncate(options.limit);
+        r
+    };
 
-    let style_output = colorize_stdout(options.color) && !options.path_only;
+    let color_rendering =
+        if colorize_stdout(options.color) && options.output_mode != MatchOutputMode::PathOnly {
+            ColorRendering::Ansi
+        } else {
+            ColorRendering::Plain
+        };
     let query_term_set: HashSet<&str> = query_terms.iter().map(String::as_str).collect();
 
-    if options.explain && !options.path_only {
+    if options.output_mode == MatchOutputMode::Explain {
         println!("score | relative | coverage | path | name | description");
     }
 
@@ -119,21 +144,24 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
     let query_term_count = query_terms.len() as u32;
 
     for r in &results {
-        if options.path_only {
-            println!("{}", r.repo_relative_path);
-        } else if options.explain {
-            println!(
+        match options.output_mode {
+            MatchOutputMode::PathOnly => println!("{}", r.repo_relative_path),
+            MatchOutputMode::Explain => println!(
                 "{}",
                 render_explain_row(
                     r,
                     &query_term_set,
-                    style_output,
+                    color_rendering,
                     top_score,
                     query_term_count
                 )
-            );
-        } else {
-            println!("{}", render_default_row(r, &query_term_set, style_output));
+            ),
+            MatchOutputMode::Default => {
+                println!(
+                    "{}",
+                    render_default_row(r, &query_term_set, color_rendering)
+                )
+            }
         }
     }
 
@@ -143,14 +171,14 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
 fn render_default_row(
     result: &MatchResult,
     query_terms: &HashSet<&str>,
-    style_output: bool,
+    color: ColorRendering,
 ) -> String {
-    let path = render_match_field(&result.repo_relative_path, query_terms, style_output);
-    let name = render_match_field(&result.name, query_terms, style_output);
+    let path = render_match_field(&result.repo_relative_path, query_terms, color);
+    let name = render_match_field(&result.name, query_terms, color);
     let description = result
         .description
         .as_deref()
-        .map(|description| render_match_field(description, query_terms, style_output))
+        .map(|description| render_match_field(description, query_terms, color))
         .unwrap_or_default();
 
     format!("{path} | {name} | {description}")
@@ -159,7 +187,7 @@ fn render_default_row(
 fn render_explain_row(
     result: &MatchResult,
     query_terms: &HashSet<&str>,
-    style_output: bool,
+    color: ColorRendering,
     top_score: f32,
     query_term_count: u32,
 ) -> String {
@@ -170,19 +198,19 @@ fn render_explain_row(
     };
     let score = render_explain_score(
         result.score,
-        style_output,
+        color,
         top_score,
         result.matched_terms,
         query_term_count,
     );
     let relative = format!("{}% of top", relative as u32);
     let coverage = format!("{}/{} terms", result.matched_terms, query_term_count);
-    let path = render_match_field(&result.repo_relative_path, query_terms, style_output);
-    let name = render_match_field(&result.name, query_terms, style_output);
+    let path = render_match_field(&result.repo_relative_path, query_terms, color);
+    let name = render_match_field(&result.name, query_terms, color);
     let description = result
         .description
         .as_deref()
-        .map(|description| render_match_field(description, query_terms, style_output))
+        .map(|description| render_match_field(description, query_terms, color))
         .unwrap_or_default();
 
     format!("{score} | {relative} | {coverage} | {path} | {name} | {description}")
@@ -190,13 +218,13 @@ fn render_explain_row(
 
 fn render_explain_score(
     score: f32,
-    style_output: bool,
+    color: ColorRendering,
     top_score: f32,
     matched_terms: u32,
     query_term_count: u32,
 ) -> String {
     let rendered = format!("{score:.2}");
-    if !style_output {
+    if color == ColorRendering::Plain {
         return rendered;
     }
 
@@ -205,23 +233,23 @@ fn render_explain_score(
         ScoreBand::Medium => 33,
         ScoreBand::High => 32,
     };
-    format!("\u{1b}[1;{code}m{rendered}\u{1b}[0m")
+    format!("\x1b[1;{code}m{rendered}\x1b[0m")
 }
 
-fn render_match_field(input: &str, query_terms: &HashSet<&str>, style_output: bool) -> String {
+fn render_match_field(input: &str, query_terms: &HashSet<&str>, color: ColorRendering) -> String {
     let mut rendered = String::new();
     let mut token = String::new();
 
     for ch in input.chars() {
         if is_separator(ch) {
-            flush_render_token(&mut rendered, &mut token, query_terms, style_output);
+            flush_render_token(&mut rendered, &mut token, query_terms, color);
             push_escaped_char(&mut rendered, ch);
         } else {
             token.push(ch);
         }
     }
 
-    flush_render_token(&mut rendered, &mut token, query_terms, style_output);
+    flush_render_token(&mut rendered, &mut token, query_terms, color);
     rendered
 }
 
@@ -229,7 +257,7 @@ fn flush_render_token(
     rendered: &mut String,
     token: &mut String,
     query_terms: &HashSet<&str>,
-    style_output: bool,
+    color: ColorRendering,
 ) {
     if token.is_empty() {
         return;
@@ -237,7 +265,7 @@ fn flush_render_token(
 
     for span in analyze_surface_spans(token) {
         let escaped = escape_pipe(span.surface);
-        if style_output
+        if color == ColorRendering::Ansi
             && span
                 .terms
                 .iter()
@@ -304,7 +332,7 @@ fn field_priority(field: Option<Field>) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{field_priority, render_match_field};
+    use super::{ColorRendering, field_priority, render_match_field};
     use crate::score::Field;
     use std::collections::HashSet;
 
@@ -318,7 +346,8 @@ mod tests {
     #[test]
     fn render_match_field_highlights_matching_text_terms() {
         let query_terms: HashSet<&str> = HashSet::from(["review"]);
-        let rendered = render_match_field("Review the active plan", &query_terms, true);
+        let rendered =
+            render_match_field("Review the active plan", &query_terms, ColorRendering::Ansi);
         assert!(rendered.contains("\u{1b}[1mReview\u{1b}[0m"));
         assert!(rendered.contains("active"));
     }
@@ -326,21 +355,26 @@ mod tests {
     #[test]
     fn render_match_field_highlights_matching_path_terms() {
         let query_terms: HashSet<&str> = HashSet::from(["score"]);
-        let rendered = render_match_field("docs/active-scoring.md", &query_terms, true);
+        let rendered =
+            render_match_field("docs/active-scoring.md", &query_terms, ColorRendering::Ansi);
         assert!(rendered.contains("\u{1b}[1mscoring\u{1b}[0m"));
     }
 
     #[test]
     fn render_match_field_highlights_surface_token_by_stem() {
         let query_terms: HashSet<&str> = HashSet::from(["plan"]);
-        let rendered = render_match_field("Review the active plans", &query_terms, true);
+        let rendered = render_match_field(
+            "Review the active plans",
+            &query_terms,
+            ColorRendering::Ansi,
+        );
         assert!(rendered.contains("\u{1b}[1mplans\u{1b}[0m"));
     }
 
     #[test]
     fn render_match_field_does_not_highlight_stopword_surface_token() {
         let query_terms: HashSet<&str> = HashSet::from(["the"]);
-        let rendered = render_match_field("the plan", &query_terms, true);
+        let rendered = render_match_field("the plan", &query_terms, ColorRendering::Ansi);
         assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
         assert!(rendered.contains("the"));
     }
@@ -348,33 +382,33 @@ mod tests {
     #[test]
     fn render_match_field_highlights_camel_case_halves() {
         let plan_terms: HashSet<&str> = HashSet::from(["plan"]);
-        let plan_rendered = render_match_field("ExecPlan", &plan_terms, true);
+        let plan_rendered = render_match_field("ExecPlan", &plan_terms, ColorRendering::Ansi);
         assert!(plan_rendered.contains("Exec\u{1b}[1mPlan\u{1b}[0m"));
         assert!(!plan_rendered.contains("\u{1b}[1mExec\u{1b}[0mPlan"));
 
         let exec_terms: HashSet<&str> = HashSet::from(["exec"]);
-        let exec_rendered = render_match_field("ExecPlan", &exec_terms, true);
+        let exec_rendered = render_match_field("ExecPlan", &exec_terms, ColorRendering::Ansi);
         assert!(exec_rendered.contains("\u{1b}[1mExec\u{1b}[0mPlan"));
     }
 
     #[test]
     fn render_match_field_highlights_possessive_base_only() {
         let query_terms: HashSet<&str> = HashSet::from(["jim"]);
-        let rendered = render_match_field("Jim's notebook", &query_terms, true);
+        let rendered = render_match_field("Jim's notebook", &query_terms, ColorRendering::Ansi);
         assert!(rendered.contains("\u{1b}[1mJim\u{1b}[0m's"));
     }
 
     #[test]
     fn render_match_field_does_not_match_inside_internal_apostrophe() {
         let query_terms: HashSet<&str> = HashSet::from(["the"]);
-        let rendered = render_match_field("there's", &query_terms, true);
+        let rendered = render_match_field("there's", &query_terms, ColorRendering::Ansi);
         assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
     }
 
     #[test]
     fn render_match_field_highlights_compound_dictionary_parts() {
         let query_terms: HashSet<&str> = HashSet::from(["plan"]);
-        let rendered = render_match_field("execplan", &query_terms, true);
+        let rendered = render_match_field("execplan", &query_terms, ColorRendering::Ansi);
         assert_eq!(rendered, "exec\u{1b}[1mplan\u{1b}[0m");
     }
 }

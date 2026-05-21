@@ -16,7 +16,7 @@ pub(crate) struct DocumentMetadata {
 }
 
 pub(crate) fn load_document_metadata(config: &Config, path: &Path) -> Result<DocumentMetadata> {
-    let repo_relative_path = repository_relative_path(&config.repository_root, path)?;
+    let repo_relative_path = repository_relative_path(config.repository_root(), path)?;
     let source =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     let (frontmatter_name, description) = match parse_from_str(&source) {

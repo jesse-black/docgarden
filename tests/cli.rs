@@ -1946,3 +1946,20 @@ max-chars = 20
         .assert()
         .success();
 }
+
+#[test]
+fn match_path_only_and_explain_conflict() {
+    // --path-only and --explain are mutually exclusive output modes.
+    // clap must reject the combination at parse time, before any repository
+    // walk or match computation occurs.
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("README.md"), "# Repo\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--path-only", "--explain", "anything"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+}
