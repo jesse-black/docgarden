@@ -92,6 +92,7 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 - ALWAYS choose code shapes that stop compiling when an invariant-bearing type changes. In handwritten trait impls, destructure the whole struct and mark intentionally ignored fields by name; when defaults carry behavior, name the defaulted fields instead of hiding them behind `..Default::default()`.
 - ALWAYS keep invariants behind the construction boundary. If direct construction or public mutation can create an invalid value, use private fields, private seal types, private modules, or accessors so the compiler enforces the route through validation.
 - ALWAYS keep mutability as local as the operation that needs it. If a value is mutable only while it is assembled or sorted, use a small initialization block and return the final immutable value.
+- When a defensive idiom conflicts with an enabled lint, trust the lint unless the ignored field is behavior-bearing at that call site. Use explicit ignored fields for manual trait impls and policy-sensitive decisions; use `..` when the code intentionally ignores all details of a variant and future fields should not force a local decision.
 
 ### Keep orchestration functions readable
 

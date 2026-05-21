@@ -1,5 +1,5 @@
 ---
-description: "Codebase review findings regarding Rust code smells and defensive programming principles; read when prioritizing Config invariants, CLI output modes, manual trait implementations, boolean flags, wildcard patterns, or temporary mutability cleanup."
+description: "Codebase review findings regarding Rust code smells and defensive programming principles; read when prioritizing Config invariants, CLI output modes, manual trait implementations, boolean flags, or temporary mutability cleanup."
 ---
 
 # Codebase Review: Code Smells & Invariants
@@ -46,23 +46,7 @@ These findings can hide invalid states, ambiguous user-facing behavior, or futur
 
 These are useful hardening opportunities, but the current code is small and readable enough that they are lower-risk cleanup.
 
-### Finding 5: Match wildcard `..` on `FrontmatterParseResult::Malformed`
-
-[src/documents.rs:27](../../src/documents.rs) uses:
-
-```rust
-FrontmatterParseResult::None | FrontmatterParseResult::Malformed { .. } => (None, None),
-```
-
-**Why it's a smell:** `FrontmatterParseResult` is local. If `Malformed` gains another field, this match will continue silently.
-
-**Defensive refactor:** Name the intentionally ignored field:
-
-```rust
-FrontmatterParseResult::None | FrontmatterParseResult::Malformed { line: _ } => (None, None),
-```
-
-### Finding 6: Temporary mutability in short assembly blocks
+### Finding 5: Temporary mutability in short assembly blocks
 
 [src/lint/mod.rs:184](../../src/lint/mod.rs) keeps `sorted` and `rewritten` mutable while applying edits, and [src/matching.rs:82](../../src/matching.rs) keeps `results` mutable through sorting and truncation.
 
@@ -70,7 +54,7 @@ FrontmatterParseResult::None | FrontmatterParseResult::Malformed { line: _ } => 
 
 **Defensive refactor:** Use small initialization blocks that return immutable `sorted`, `rewritten`, and `results` values after sorting, truncation, or replacement work is complete.
 
-### Finding 7: Threading `style_output: bool` through rendering helpers
+### Finding 6: Threading `style_output: bool` through rendering helpers
 
 [src/matching.rs:143](../../src/matching.rs), [src/matching.rs:159](../../src/matching.rs), [src/matching.rs:191](../../src/matching.rs), and [src/matching.rs:211](../../src/matching.rs) pass `style_output: bool` through multiple rendering helpers.
 
