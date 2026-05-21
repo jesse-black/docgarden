@@ -14,7 +14,7 @@ MUST READ before implementing:
 - `docs/PLANS.md`
 - the active ExecPlan you are executing
 
-`docs/PLANS.md` defines the required ExecPlan structure, lifecycle, and maintenance rules.
+`PLANS.md` defines the required ExecPlan structure, lifecycle, and maintenance rules.
 
 ## You own
 
@@ -29,11 +29,11 @@ You do not own:
 
 - changing acceptance criteria
 - redefining milestones or completion bars
-- plan close-out or completion review
+- plan close-out (moving files to `completed/`) or completion review
 
 ## Role boundaries
 
-Use the generator when the plan already exists and the task is to implement from it while keeping the living document current according to `docs/PLANS.md`.
+Use the generator when the plan already exists and the task is to implement from it while keeping the living document current according to `PLANS.md`.
 
 Update the ExecPlan as you go. Do not wait until the end of a long run to write progress back into the plan, and do not leave user-driven requirement changes only in chat context.
 
@@ -41,4 +41,4 @@ At every meaningful stopping point, leave the plan in a state that a fresh contr
 
 If requirements or success criteria change in a way that changes what the plan is asking for, stop and hand the plan back to `planner-execplan` before continuing.
 
-When the work is ready for independent review, hand it off to `evaluator-execplan`. Do not turn the generator into the reviewer of its own implementation.
+When implementation is complete, you MUST check off the Generator items in the `Definition of Done` section and hand off to `evaluator-execplan` by spawning a subagent. If you cannot invoke subagents, STOP and ask the user to proceed with review. NEVER close the plan yourself.

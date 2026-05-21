@@ -89,11 +89,10 @@ pub(crate) fn split_camel_case(input: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let chars: Vec<(usize, char)> = input.char_indices().collect();
 
-    for i in 1..chars.len() {
+    for (i, (end, _)) in chars.iter().enumerate().skip(1) {
         if is_camel_boundary(&chars, i) {
-            let end = chars[i].0;
-            parts.push(&input[start..end]);
-            start = end;
+            parts.push(&input[start..*end]);
+            start = *end;
         }
     }
 
@@ -102,8 +101,12 @@ pub(crate) fn split_camel_case(input: &str) -> Vec<&str> {
 }
 
 fn is_camel_boundary(chars: &[(usize, char)], index: usize) -> bool {
-    let previous = chars[index - 1].1;
-    let current = chars[index].1;
+    let Some((_, previous)) = chars.get(index.saturating_sub(1)) else {
+        return false;
+    };
+    let Some((_, current)) = chars.get(index) else {
+        return false;
+    };
     let next = chars.get(index + 1).map(|(_, ch)| *ch);
 
     current.is_ascii_uppercase()

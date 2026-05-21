@@ -49,6 +49,7 @@
               # Rust tooling
               rustup
               cargo-llvm-cov
+              cargo-nextest
               cargo-deny
               cargo-machete
               cargo-binstall

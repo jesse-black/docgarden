@@ -244,40 +244,113 @@ pub struct EffectiveRulePolicy {
 
 #[derive(Clone)]
 pub struct Config {
-    pub repository_root: PathBuf,
-    pub skills_dir: PathBuf,
-    pub plans_dir: PathBuf,
-    pub include: Vec<String>,
-    pub exclude: Vec<String>,
-    pub rule_applications: Vec<RuleApplication>,
-    pub known_extensions: BTreeSet<String>,
-    pub special_filenames: BTreeSet<String>,
-    pub config_path: Option<PathBuf>,
-    pub config_was_explicit: bool,
-    pub frontmatter_rules: Vec<FrontmatterRule>,
-    pub respect_gitignore: bool,
+    repository_root: PathBuf,
+    skills_dir: PathBuf,
+    plans_dir: PathBuf,
+    include: Vec<String>,
+    exclude: Vec<String>,
+    rule_applications: Vec<RuleApplication>,
+    known_extensions: BTreeSet<String>,
+    special_filenames: BTreeSet<String>,
+    config_path: Option<PathBuf>,
+    config_was_explicit: bool,
+    frontmatter_rules: Vec<FrontmatterRule>,
+    respect_gitignore: bool,
 }
 
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Config {
+            repository_root,
+            skills_dir,
+            plans_dir,
+            include,
+            exclude,
+            rule_applications,
+            known_extensions,
+            special_filenames,
+            config_path,
+            config_was_explicit,
+            frontmatter_rules,
+            respect_gitignore,
+        } = self;
+
         f.debug_struct("Config")
-            .field("repository_root", &self.repository_root)
-            .field("skills_dir", &self.skills_dir)
-            .field("plans_dir", &self.plans_dir)
-            .field("include", &self.include)
-            .field("exclude", &self.exclude)
-            .field("rule_application_count", &self.rule_applications.len())
-            .field("known_extensions", &self.known_extensions)
-            .field("special_filenames", &self.special_filenames)
-            .field("config_path", &self.config_path)
-            .field("config_was_explicit", &self.config_was_explicit)
-            .field("frontmatter_rule_count", &self.frontmatter_rules.len())
-            .field("respect_gitignore", &self.respect_gitignore)
+            .field("repository_root", repository_root)
+            .field("skills_dir", skills_dir)
+            .field("plans_dir", plans_dir)
+            .field("include", include)
+            .field("exclude", exclude)
+            .field("rule_application_count", &rule_applications.len())
+            .field("known_extensions", known_extensions)
+            .field("special_filenames", special_filenames)
+            .field("config_path", config_path)
+            .field("config_was_explicit", config_was_explicit)
+            .field("frontmatter_rule_count", &frontmatter_rules.len())
+            .field("respect_gitignore", respect_gitignore)
             .finish()
     }
 }
 
 impl Config {
+    pub fn repository_root(&self) -> &Path {
+        &self.repository_root
+    }
+
+    pub fn include(&self) -> &[String] {
+        &self.include
+    }
+
+    pub fn exclude(&self) -> &[String] {
+        &self.exclude
+    }
+
+    pub fn known_extensions(&self) -> &BTreeSet<String> {
+        &self.known_extensions
+    }
+
+    pub fn special_filenames(&self) -> &BTreeSet<String> {
+        &self.special_filenames
+    }
+
+    pub fn config_was_explicit(&self) -> bool {
+        self.config_was_explicit
+    }
+
+    pub fn respect_gitignore(&self) -> bool {
+        self.respect_gitignore
+    }
+
+    pub fn config_path(&self) -> Option<&Path> {
+        self.config_path.as_deref()
+    }
+
+    pub fn disable_gitignore(&mut self) {
+        self.respect_gitignore = false;
+    }
+
+    /// Construct a minimal `Config` for unit tests that need a `Config` but do
+    /// not require filesystem-backed loading.  Uses default extensions and
+    /// special filenames; all other collections are empty.
+    #[cfg(test)]
+    pub(crate) fn for_testing(repository_root: impl Into<PathBuf>) -> Self {
+        use crate::defaults::{default_extensions, default_special_filenames};
+        Self {
+            repository_root: repository_root.into(),
+            skills_dir: PathBuf::from(".agents/skills"),
+            plans_dir: PathBuf::from("docs/exec-plans"),
+            include: Vec::new(),
+            exclude: Vec::new(),
+            rule_applications: Vec::new(),
+            known_extensions: default_extensions(),
+            special_filenames: default_special_filenames(),
+            config_path: None,
+            config_was_explicit: false,
+            frontmatter_rules: Vec::new(),
+            respect_gitignore: true,
+        }
+    }
+
     pub fn load(repository_root: &Path, explicit_config: Option<&Path>) -> Result<Self> {
         let repository_root = repository_root
             .canonicalize()
@@ -341,7 +414,10 @@ impl Config {
                     Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = false,
                     Rule::MaxTokens => policy.max_tokens = None,
                     Rule::MaxLines => policy.max_lines = None,
-                    rule => {
+                    Rule::UnresolvedLinkPath
+                    | Rule::FrontmatterFieldMissing
+                    | Rule::FrontmatterMalformed
+                    | Rule::FrontmatterFieldMaxChars => {
                         policy.ignored_rules.insert(*rule);
                     }
                 }
@@ -353,7 +429,12 @@ impl Config {
                         policy.backtick_path_severity = Some(app.severity.into());
                     }
                     Rule::PreferLinksForLocalPaths => policy.prefer_links_for_local_paths = true,
-                    _ => {}
+                    Rule::UnresolvedLinkPath
+                    | Rule::MaxTokens
+                    | Rule::MaxLines
+                    | Rule::FrontmatterFieldMissing
+                    | Rule::FrontmatterMalformed
+                    | Rule::FrontmatterFieldMaxChars => {}
                 }
             }
 
@@ -635,11 +716,27 @@ mod tests {
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        assert!(config.config_path.is_none());
-        assert!(!config.rule_applications.is_empty());
-        assert!(!config.frontmatter_rules.is_empty());
-        assert_eq!(config.skills_dir, Path::new(".agents/skills"));
-        assert_eq!(config.plans_dir, Path::new("docs/exec-plans"));
+        assert!(config.config_path().is_none());
+        let agents_policy = config.effective_rule_policy_for_path("AGENTS.md");
+        assert!(
+            agents_policy.max_lines.is_some() || agents_policy.max_tokens.is_some(),
+            "embedded default config should include rules"
+        );
+        assert!(
+            config
+                .frontmatter_policy_for_path("README.md")
+                .field_max_chars
+                .contains_key("description"),
+            "embedded default config should include frontmatter rules"
+        );
+        assert_eq!(
+            config.skills_root(),
+            config.repository_root().join(".agents/skills")
+        );
+        assert_eq!(
+            config.plans_root(),
+            config.repository_root().join("docs/exec-plans")
+        );
     }
 
     #[test]
@@ -657,13 +754,16 @@ mod tests {
         let config = Config::load(&repository_root, None).unwrap();
 
         assert_eq!(
-            config.repository_root,
+            config.repository_root(),
             repository_root.canonicalize().unwrap()
         );
-        assert!(config.config_path.is_none());
-        // embedded default applies — rules come from it, not the nested docs/docgarden.toml
-        assert!(!config.rule_applications.is_empty());
-        assert_eq!(config.include, vec!["*.md"]);
+        assert!(config.config_path().is_none());
+        let agents_policy = config.effective_rule_policy_for_path("AGENTS.md");
+        assert!(
+            agents_policy.max_lines.is_some() || agents_policy.max_tokens.is_some(),
+            "embedded default config should include rules"
+        );
+        assert_eq!(config.include(), &["*.md".to_string()]);
     }
 
     #[test]
@@ -692,16 +792,19 @@ disable = ["unresolved-link-path"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        assert_eq!(config.config_path, Some(config_path));
-        assert!(!config.config_was_explicit);
-        assert!(!config.respect_gitignore);
-        assert_eq!(config.skills_dir, Path::new(".codex/skills"));
-        assert_eq!(config.plans_dir, Path::new("plans"));
-        assert!(config.known_extensions.contains(".proto"));
-        assert!(config.known_extensions.contains(".rego"));
-        assert!(!config.known_extensions.contains(".md"));
-        assert!(config.special_filenames.contains("Tiltfile"));
-        assert!(!config.special_filenames.contains("LICENSE"));
+        assert_eq!(config.config_path(), Some(config_path.as_path()));
+        assert!(!config.config_was_explicit());
+        assert!(!config.respect_gitignore());
+        assert_eq!(
+            config.skills_root(),
+            config.repository_root().join(".codex/skills")
+        );
+        assert_eq!(config.plans_root(), config.repository_root().join("plans"));
+        assert!(config.known_extensions().contains(".proto"));
+        assert!(config.known_extensions().contains(".rego"));
+        assert!(!config.known_extensions().contains(".md"));
+        assert!(config.special_filenames().contains("Tiltfile"));
+        assert!(!config.special_filenames().contains("LICENSE"));
 
         let generated_policy = config.effective_rule_policy_for_path("docs/generated/output.md");
         assert!(
@@ -740,9 +843,9 @@ disable = ["max-lines"]
 
         let config = Config::load(&repository_root, Some(&config_path)).unwrap();
 
-        assert_eq!(config.config_path, Some(config_path));
-        assert!(config.config_was_explicit);
-        assert_eq!(config.include, vec!["docs/**/*.md".to_string()]);
+        assert_eq!(config.config_path(), Some(config_path.as_path()));
+        assert!(config.config_was_explicit());
+        assert_eq!(config.include(), &["docs/**/*.md".to_string()]);
         let policy = config.effective_rule_policy_for_path("README.md");
         assert_eq!(policy.max_lines, None);
     }
@@ -804,7 +907,7 @@ disable = ["max-lines"]
 
         let config = Config::load(&repository_root, None).unwrap();
 
-        assert!(config.respect_gitignore);
+        assert!(config.respect_gitignore());
     }
 
     #[test]
@@ -1422,9 +1525,6 @@ severity = "warn"
         .unwrap();
 
         let config = Config::load(&repository_root, None).unwrap();
-
-        assert_eq!(config.rule_applications.len(), 1);
-        assert_eq!(config.rule_applications[0].severity, RuleSeverity::Warn);
 
         let docs_policy = config.effective_rule_policy_for_path("docs/guide.md");
         assert_eq!(docs_policy.backtick_path_severity, Some(Severity::Warning));

@@ -13,8 +13,8 @@ pub fn discover_markdown_files_for_targets(
     targets: &[PathBuf],
     depth: DirectoryDepth,
 ) -> Result<Vec<PathBuf>> {
-    let include = PatternMatcher::new(&config.include)?;
-    let exclude = PatternMatcher::new(&config.exclude)?;
+    let include = PatternMatcher::new(config.include())?;
+    let exclude = PatternMatcher::new(config.exclude())?;
     let mut files = BTreeSet::new();
 
     for target in targets {
@@ -57,10 +57,10 @@ fn discover_markdown_files_under(
     let mut walker = WalkBuilder::new(root);
     walker
         .hidden(false)
-        .git_ignore(config.respect_gitignore)
-        .git_exclude(config.respect_gitignore)
-        .git_global(config.respect_gitignore)
-        .ignore(config.respect_gitignore)
+        .git_ignore(config.respect_gitignore())
+        .git_exclude(config.respect_gitignore())
+        .git_global(config.respect_gitignore())
+        .ignore(config.respect_gitignore())
         .require_git(false);
     walker.follow_links(false);
     if depth == DirectoryDepth::Shallow {
@@ -80,7 +80,7 @@ fn discover_markdown_files_under(
         if !is_markdown_path(&path) {
             continue;
         }
-        let relative = repository_relative_path(&config.repository_root, &path)?;
+        let relative = repository_relative_path(config.repository_root(), &path)?;
         if !include.is_match(&relative, false) {
             continue;
         }

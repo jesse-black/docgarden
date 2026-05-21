@@ -1,11 +1,16 @@
 {
 	"name": "Docgarden",
-	"build": {
-		"dockerfile": "Dockerfile"
+	"image": "mcr.microsoft.com/devcontainers/base:trixie",
+	"features": {
+		"ghcr.io/devcontainers/features/nix:1": {
+			"multiUser": false,
+			"extraNixConfig": "experimental-features = nix-command flakes"
+		}
 	},
 	"runArgs": [
 		"--name=docgarden"
 	],
+	"updateRemoteUserUID": false,
 	"containerEnv": {
 		"HOME_LOCAL_NIX": "${containerWorkspaceFolder}/.devcontainer/local.nix",
 		"WORKSPACE_FOLDER": "${containerWorkspaceFolder}"

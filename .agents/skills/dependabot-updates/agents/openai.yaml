@@ -1,4 +1,0 @@
-interface:
-  display_name: "Dependabot Updates"
-  short_description: "Handle grouped dependency update PRs"
-  default_prompt: "Use $dependabot-updates to assess and implement this Dependabot dependency update safely."

@@ -67,7 +67,7 @@ fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
         .map(|component| component.as_os_str().to_os_string())
         .collect();
 
-    for path in &paths[1..] {
+    for path in paths.iter().skip(1) {
         let other: Vec<OsString> = path
             .components()
             .map(|component| component.as_os_str().to_os_string())

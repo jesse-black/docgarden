@@ -33,12 +33,20 @@ fn parse_match_rows(stdout: &str) -> Vec<MatchRow> {
     stdout
         .lines()
         .map(|line| {
-            let cols: Vec<&str> = line.split(" | ").collect();
-            assert_eq!(cols.len(), 3, "expected 3 columns in output: {line}");
+            let mut cols = line.split(" | ");
+            let path = cols.next().expect("match output should include path");
+            let name = cols.next().expect("match output should include name");
+            let description = cols
+                .next()
+                .expect("match output should include description");
+            assert!(
+                cols.next().is_none(),
+                "expected 3 columns in output: {line}"
+            );
             MatchRow {
-                path: cols[0].to_string(),
-                name: cols[1].to_string(),
-                description: cols[2].to_string(),
+                path: path.to_string(),
+                name: name.to_string(),
+                description: description.to_string(),
             }
         })
         .collect()
@@ -64,19 +72,26 @@ fn parse_explain_rows(stdout: &str) -> Vec<ExplainRow> {
 
     lines
         .map(|line| {
-            let cols: Vec<&str> = line.split(" | ").collect();
-            assert_eq!(
-                cols.len(),
-                6,
+            let mut cols = line.split(" | ");
+            let score = cols.next().expect("explain output should include score");
+            let relative = cols.next().expect("explain output should include relative");
+            let coverage = cols.next().expect("explain output should include coverage");
+            let path = cols.next().expect("explain output should include path");
+            let name = cols.next().expect("explain output should include name");
+            let description = cols
+                .next()
+                .expect("explain output should include description");
+            assert!(
+                cols.next().is_none(),
                 "expected 6 columns in explain output: {line}"
             );
             ExplainRow {
-                score: cols[0].trim().parse().expect("score should be float"),
-                relative: cols[1].to_string(),
-                coverage: cols[2].to_string(),
-                path: cols[3].to_string(),
-                name: cols[4].to_string(),
-                description: cols[5].to_string(),
+                score: score.trim().parse().expect("score should be float"),
+                relative: relative.to_string(),
+                coverage: coverage.to_string(),
+                path: path.to_string(),
+                name: name.to_string(),
+                description: description.to_string(),
             }
         })
         .collect()
@@ -1930,4 +1945,21 @@ max-chars = 20
         .args(["lint", "guide.md", "--color", "never"])
         .assert()
         .success();
+}
+
+#[test]
+fn match_path_only_and_explain_conflict() {
+    // --path-only and --explain are mutually exclusive output modes.
+    // clap must reject the combination at parse time, before any repository
+    // walk or match computation occurs.
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("README.md"), "# Repo\n").unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--path-only", "--explain", "anything"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
 }

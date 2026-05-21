@@ -126,7 +126,11 @@ struct MatchArgs {
         help = "Print only repository-relative paths, one per line"
     )]
     path_only: bool,
-    #[arg(long, help = "Show diagnostic data explaining each document's ranking")]
+    #[arg(
+        long,
+        conflicts_with = "path_only",
+        help = "Show diagnostic data explaining each document's ranking"
+    )]
     explain: bool,
     #[arg(
         long,
@@ -183,14 +187,20 @@ pub fn run() -> Result<()> {
         Command::Fix(args) => execute_lint(args, Mode::Fix),
         Command::Match(args) => {
             let scope = args.scope();
+            let output_mode = if args.path_only {
+                matching::MatchOutputMode::PathOnly
+            } else if args.explain {
+                matching::MatchOutputMode::Explain
+            } else {
+                matching::MatchOutputMode::Default
+            };
             matching::execute_match(matching::MatchOptions {
                 raw_query: args.query,
                 config_path: args.config,
                 no_gitignore: args.no_gitignore,
                 color: args.color,
                 limit: args.limit,
-                path_only: args.path_only,
-                explain: args.explain,
+                output_mode,
                 scope,
             })
         }
@@ -263,7 +273,7 @@ fn execute_list(args: ListArgs) -> Result<()> {
     )?;
     let mut config = Config::load(&repository_root, args.config.as_deref())?;
     if args.no_gitignore {
-        config.respect_gitignore = false;
+        config.disable_gitignore();
     }
 
     let files = if let Some(scope) = scope {
@@ -313,7 +323,7 @@ fn execute(
     )?;
     let mut config = Config::load(&repository_root, config_path.as_deref())?;
     if no_gitignore {
-        config.respect_gitignore = false;
+        config.disable_gitignore();
     }
     let files =
         discover_markdown_files_for_targets(&config, &resolved_targets, DirectoryDepth::Recursive)?;
@@ -386,9 +396,8 @@ fn print_fix_hint(
         return;
     }
     let config_suffix = config
-        .config_path
-        .as_ref()
-        .filter(|_| config.config_was_explicit)
+        .config_path()
+        .filter(|_| config.config_was_explicit())
         .map(|path| format!(" --config {}", display_relative(repository_root, path)))
         .unwrap_or_default();
     println!();
