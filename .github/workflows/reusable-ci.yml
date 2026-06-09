@@ -41,7 +41,7 @@ jobs:
       - name: Clippy
         id: clippy
         if: ${{ !cancelled() }}
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Dependency hygiene
         id: dependency_hygiene
         if: ${{ !cancelled() }}
@@ -49,11 +49,11 @@ jobs:
       - name: Dogfood lint
         id: dogfood_lint
         if: ${{ !cancelled() }}
-        run: cargo run -- lint .
+        run: cargo run --locked -- lint .
       - name: Coverage
         id: coverage
         if: ${{ !cancelled() }}
-        run: cargo llvm-cov --json --output-path target/coverage.json
+        run: cargo llvm-cov --locked --json --output-path target/coverage.json
       - name: Covgate
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         run: covgate check target/coverage.json
