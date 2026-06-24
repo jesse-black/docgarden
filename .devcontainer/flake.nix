@@ -9,53 +9,61 @@
     };
   };
 
-  outputs = { nixpkgs, home-manager, ... }:
+  outputs =
+    { nixpkgs, home-manager, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
       };
       localModule = ./. + "/local.nix";
-      localModules =
-        if builtins.pathExists localModule
-        then [ localModule ]
-        else [ ];
-    in {
+      localModules = if builtins.pathExists localModule then [ localModule ] else [ ];
+    in
+    {
       homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         modules = [
-          ./home.nix
-          ({ pkgs, ... }: {
-            home.packages = with pkgs; [
-              # Core CLI tools
-              yq-go
-              ripgrep
-              fd
-              eza
-              gh
-              file
-              python3
-              ast-grep
-              bubblewrap
+          (
+            { pkgs, ... }:
+            {
+              home.username = "vscode";
+              home.homeDirectory = "/home/vscode";
+              home.stateVersion = "23.11";
 
-              # Shell/script tooling
-              shellcheck
-              shfmt
+              programs.home-manager.enable = true;
 
-              # Nix editor tooling
-              nil
-              nixfmt
+              home.packages = with pkgs; [
+                # Core CLI tools
+                yq-go
+                ripgrep
+                fd
+                eza
+                gh
+                file
+                python3
+                ast-grep
+                bubblewrap
 
-              # Rust tooling
-              rustup
-              cargo-llvm-cov
-              cargo-nextest
-              cargo-deny
-              cargo-machete
-              cargo-binstall
-            ];
-          })
-        ] ++ localModules;
+                # Shell/script tooling
+                shellcheck
+                shfmt
+
+                # Nix editor tooling
+                nil
+                nixfmt
+
+                # Rust tooling
+                rustup
+                cargo-llvm-cov
+                cargo-nextest
+                cargo-deny
+                cargo-machete
+                cargo-binstall
+              ];
+            }
+          )
+        ]
+        ++ localModules;
       };
     };
 }
