@@ -2,10 +2,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEVCONTAINER_PROFILE="${HOME}/.local/state/nix/profiles/devcontainer"
 
-nix run "path:${SCRIPT_DIR}#homeConfigurations.vscode.activationPackage"
+mkdir -p "$(dirname "${DEVCONTAINER_PROFILE}")"
+nix profile add --profile "${DEVCONTAINER_PROFILE}" "path:${SCRIPT_DIR}#devcontainer-tools"
 
-export PATH="${HOME}/.nix-profile/bin:${HOME}/.cargo/bin:${PATH}"
+export PATH="${DEVCONTAINER_PROFILE}/bin:${HOME}/.nix-profile/bin:${HOME}/.cargo/bin:${PATH}"
 
 cd "${WORKSPACE_FOLDER:-${SCRIPT_DIR}/..}"
 
