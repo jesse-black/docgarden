@@ -16,6 +16,15 @@ include = [
     "/README.md",
     "/LICENSE*",
 ]
+default-run = "docgarden"
+
+[[bin]]
+name = "docgarden"
+path = "src/main.rs"
+
+[[bin]]
+name = "dg"
+path = "src/bin/dg.rs"
 
 [lints]
 workspace = true
