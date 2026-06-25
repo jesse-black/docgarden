@@ -1,61 +1,47 @@
 {
-  description = "Devcontainer Home Manager configuration";
+  description = "Devcontainer tool profile";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { nixpkgs, home-manager, ... }:
+  outputs =
+    { nixpkgs, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
       };
-      localModule = ./. + "/local.nix";
-      localModules =
-        if builtins.pathExists localModule
-        then [ localModule ]
-        else [ ];
-    in {
-      homeConfigurations.vscode = home-manager.lib.homeManagerConfiguration {
-        inherit pkgs;
-        modules = [
-          ./home.nix
-          ({ pkgs, ... }: {
-            home.packages = with pkgs; [
-              # Core CLI tools
-              yq-go
-              ripgrep
-              fd
-              eza
-              gh
-              file
-              python3
-              ast-grep
-              bubblewrap
+      devcontainerTools = pkgs.buildEnv {
+        name = "devcontainer-tools";
+        paths = with pkgs; [
+          # Core CLI tools
+          ripgrep
+          file
+          ast-grep
 
-              # Shell/script tooling
-              shellcheck
-              shfmt
+          # Shell/script tooling
+          shellcheck
+          shfmt
 
-              # Nix editor tooling
-              nil
-              nixfmt
+          # Nix editor tooling
+          nil
+          nixfmt
 
-              # Rust tooling
-              rustup
-              cargo-llvm-cov
-              cargo-nextest
-              cargo-deny
-              cargo-machete
-              cargo-binstall
-            ];
-          })
-        ] ++ localModules;
+          # Rust tooling
+          rustup
+          cargo-llvm-cov
+          cargo-nextest
+          cargo-deny
+          cargo-machete
+          cargo-binstall
+        ];
+      };
+    in
+    {
+      packages.${system} = {
+        devcontainer-tools = devcontainerTools;
+        default = devcontainerTools;
       };
     };
 }

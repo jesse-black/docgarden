@@ -7,7 +7,19 @@ permissions:
   contents: read
 
 jobs:
+  dependency-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1
+      - uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2
+        with:
+          tool: cargo-deny@0.19.4
+      - name: Dependency policy
+        run: cargo deny check advisories licenses sources bans
+
   quality-check:
+    needs: dependency-policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -20,47 +32,28 @@ jobs:
       - uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2
         with:
           tool: covgate@0.2.0
+      - uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2
+        with:
+          tool: cargo-machete@0.9.2
       - name: Format
         id: format
         run: cargo fmt --check
       - name: Clippy
         id: clippy
-        if: ${{ always() }}
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        if: ${{ !cancelled() }}
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Dependency hygiene
+        id: dependency_hygiene
+        if: ${{ !cancelled() }}
+        run: cargo machete
+      - name: Dogfood lint
+        id: dogfood_lint
+        if: ${{ !cancelled() }}
+        run: cargo run --locked -- lint .
       - name: Coverage
         id: coverage
-        if: ${{ always() }}
-        run: cargo llvm-cov --json --output-path target/coverage.json
+        if: ${{ !cancelled() }}
+        run: cargo llvm-cov --locked --json --output-path target/coverage.json
       - name: Covgate
-        if: ${{ always() && steps.coverage.outcome == 'success' }}
-        run: covgate check target/coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
-
-  dependency-hygiene:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1
-      - uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2
-        with:
-          tool: cargo-machete@0.9.2
-      - name: Dependency hygiene
-        run: cargo machete
-
-  dependency-policy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1
-      - uses: taiki-e/install-action@7769b73c2ec98c38dfcf2e18c83cfd4880c038c1 # v2
-        with:
-          tool: cargo-deny@0.19.4
-      - name: Dependency policy
-        run: cargo deny check advisories licenses sources bans
-
-  dogfood-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions-rust-lang/setup-rust-toolchain@2b1f5e9b395427c92ee4e3331786ca3c37afe2d7 # v1
-      - name: Dogfood lint
-        run: cargo run -- lint .
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        run: covgate check target/coverage.json
