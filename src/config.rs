@@ -27,6 +27,13 @@ pub struct FrontmatterRuleConfig {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct MatchConfig {
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FileConfig {
     #[serde(default = "default_skills_dir")]
     pub skills_dir: String,
@@ -48,6 +55,8 @@ pub struct FileConfig {
     pub respect_gitignore: bool,
     #[serde(default)]
     pub rules: Vec<RuleConfig>,
+    #[serde(default, rename = "match")]
+    pub match_config: Option<MatchConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -249,6 +258,7 @@ pub struct Config {
     plans_dir: PathBuf,
     include: Vec<String>,
     exclude: Vec<String>,
+    match_exclude: Vec<String>,
     rule_applications: Vec<RuleApplication>,
     known_extensions: BTreeSet<String>,
     special_filenames: BTreeSet<String>,
@@ -266,6 +276,7 @@ impl std::fmt::Debug for Config {
             plans_dir,
             include,
             exclude,
+            match_exclude,
             rule_applications,
             known_extensions,
             special_filenames,
@@ -281,6 +292,7 @@ impl std::fmt::Debug for Config {
             .field("plans_dir", plans_dir)
             .field("include", include)
             .field("exclude", exclude)
+            .field("match_exclude", match_exclude)
             .field("rule_application_count", &rule_applications.len())
             .field("known_extensions", known_extensions)
             .field("special_filenames", special_filenames)
@@ -303,6 +315,10 @@ impl Config {
 
     pub fn exclude(&self) -> &[String] {
         &self.exclude
+    }
+
+    pub fn match_exclude(&self) -> &[String] {
+        &self.match_exclude
     }
 
     pub fn known_extensions(&self) -> &BTreeSet<String> {
@@ -341,6 +357,7 @@ impl Config {
             plans_dir: PathBuf::from("docs/exec-plans"),
             include: Vec::new(),
             exclude: Vec::new(),
+            match_exclude: Vec::new(),
             rule_applications: Vec::new(),
             known_extensions: default_extensions(),
             special_filenames: default_special_filenames(),
@@ -375,12 +392,15 @@ impl Config {
 
         let (rule_applications, frontmatter_rules) = lower_rules(&repository_root, parsed.rules)?;
 
+        let match_exclude = parsed.match_config.map(|m| m.exclude).unwrap_or_default();
+
         Ok(Self {
             repository_root,
             skills_dir,
             plans_dir,
             include,
             exclude: parsed.exclude,
+            match_exclude,
             rule_applications,
             known_extensions,
             special_filenames,
@@ -1688,5 +1708,58 @@ enable = ["unresolved-backtick-path"]
             other_policy.backtick_path_severity.is_none(),
             "broad disable without matching narrow enable should leave rule off"
         );
+    }
+
+    #[test]
+    fn match_exclude_parses_and_defaults() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[match]
+exclude = ["skills/**", "docs/generated/**"]
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert_eq!(
+            config.match_exclude(),
+            &["skills/**".to_string(), "docs/generated/**".to_string()]
+        );
+    }
+
+    #[test]
+    fn match_exclude_defaults_to_empty_without_config() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+
+        let config = Config::load(&repository_root, None).unwrap();
+
+        assert!(config.match_exclude().is_empty());
+    }
+
+    #[test]
+    fn match_exclude_rejects_unknown_keys() {
+        let temp = TempDir::new().unwrap();
+        let repository_root = temp.path().join("repo");
+        fs::create_dir_all(&repository_root).unwrap();
+        fs::write(
+            repository_root.join("docgarden.toml"),
+            r#"
+[match]
+unknown-key = true
+"#,
+        )
+        .unwrap();
+
+        let error = Config::load(&repository_root, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("failed to parse"));
     }
 }

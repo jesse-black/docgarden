@@ -1973,3 +1973,206 @@ fn match_path_only_and_explain_conflict() {
         .failure()
         .stderr(predicate::str::contains("cannot be used with"));
 }
+
+// ---------------------------------------------------------------------------
+// match-only exclusion integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn match_only_exclusion_filters_source_skills() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("skills/builder/SKILL.md").parent().unwrap()).unwrap();
+    fs::create_dir_all(
+        root.join(".agents/skills/builder/SKILL.md")
+            .parent()
+            .unwrap(),
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[match]
+exclude = ["skills/**"]
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("skills/builder/SKILL.md"),
+        "---\nname: skill-builder\ndescription: A skill builder tool.\n---\n# Skill Builder\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(".agents/skills/builder/SKILL.md"),
+        "---\nname: agent-builder\ndescription: Agent-local builder skill.\n---\n# Agent Builder\n",
+    )
+    .unwrap();
+
+    // Broad match should exclude skills/builder/ and include .agents/skills/builder/
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "builder"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.lines().all(|line| !line.starts_with("skills/")),
+        "broad match should exclude source skills/: {stdout}"
+    );
+    assert!(
+        stdout.contains(".agents/skills/builder/SKILL.md"),
+        "broad match should include live agent skills/: {stdout}"
+    );
+}
+
+#[test]
+fn match_skills_scope_uses_live_agent_skills_dir() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("skills/builder/SKILL.md").parent().unwrap()).unwrap();
+    fs::create_dir_all(
+        root.join(".agents/skills/builder/SKILL.md")
+            .parent()
+            .unwrap(),
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[match]
+exclude = ["skills/**"]
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("skills/builder/SKILL.md"),
+        "---\nname: skill-builder\ndescription: A skill builder tool.\n---\n# Skill Builder\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(".agents/skills/builder/SKILL.md"),
+        "---\nname: agent-builder\ndescription: Agent-local builder skill.\n---\n# Agent Builder\n",
+    )
+    .unwrap();
+
+    // --skills scope uses configured skills-dir (default: .agents/skills)
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--skills", "builder"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("agent-builder"),
+        "--skills should find live agent skills: {stdout}"
+    );
+    assert!(
+        !stdout.contains("skill-builder"),
+        "--skills should exclude source skills: {stdout}"
+    );
+}
+
+#[test]
+fn match_scopes_ignore_match_only_exclusion() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("skills/builder/SKILL.md").parent().unwrap()).unwrap();
+    fs::create_dir_all(root.join("docs/exec-plans/active")).unwrap();
+
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[match]
+exclude = ["skills/**", "docs/**"]
+"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("skills/builder/SKILL.md"),
+        "---\nname: skill-builder\ndescription: A skill builder tool.\n---\n# Skill Builder\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/exec-plans/active/plan-alpha.md"),
+        "---\nname: Plan Alpha\ndescription: An active plan.\n---\n# Plan Alpha\n",
+    )
+    .unwrap();
+
+    // --plans scope should ignore [match].exclude entirely
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--plans", "plan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("docs/exec-plans/active/plan-alpha.md"),
+        "--plans scope should bypass match.exclude for docs: {stdout}"
+    );
+}
+
+#[test]
+fn lint_still_scans_source_and_generated_skills() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("skills/builder/SKILL.md").parent().unwrap()).unwrap();
+    fs::create_dir_all(
+        root.join(".agents/skills/builder/SKILL.md")
+            .parent()
+            .unwrap(),
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[match]
+exclude = ["skills/**"]
+
+[[rules]]
+path = "*.md"
+
+[rules.frontmatter.fields.description]
+max-chars = 20
+"#,
+    )
+    .unwrap();
+
+    // Both files have descriptions exceeding max-chars = 20
+    let long_desc = "This description is way longer than twenty characters.";
+    fs::write(
+        root.join("skills/builder/SKILL.md"),
+        format!("---\nname: builder\ndescription: {long_desc}\n---\n# Skill Builder\n"),
+    )
+    .unwrap();
+    fs::write(
+        root.join(".agents/skills/builder/SKILL.md"),
+        format!("---\nname: agent-builder\ndescription: {long_desc}\n---\n# Agent Builder\n"),
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", ".", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(
+        stdout.contains("skills/builder/SKILL.md"),
+        "lint should scan source skills/: {stdout}"
+    );
+    assert!(
+        stdout.contains(".agents/skills/builder/SKILL.md"),
+        "lint should scan generated skills/: {stdout}"
+    );
+}

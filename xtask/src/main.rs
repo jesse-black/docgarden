@@ -1,3 +1,5 @@
+mod sync_skills;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -14,6 +16,7 @@ fn main() -> Result<()> {
         Task::LlvmCov { args } => llvm_cov_task(&args),
         Task::Covgate { args } => covgate_task(&args),
         Task::ReleaseVersion { version } => release_version(&version),
+        Task::SyncSkills { check } => sync_skills::sync_skills(check),
     }
 }
 
@@ -38,6 +41,11 @@ enum Task {
     },
     ReleaseVersion {
         version: String,
+    },
+    /// Sync redistributable source skills into .agents/skills/ with local command translation.
+    SyncSkills {
+        #[arg(long)]
+        check: bool,
     },
 }
 
@@ -229,7 +237,7 @@ fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
-fn project_root() -> Result<PathBuf> {
+pub(crate) fn project_root() -> Result<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_dir
         .parent()

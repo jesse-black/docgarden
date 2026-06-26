@@ -6,8 +6,10 @@ use anyhow::{Context, Result, bail};
 use crate::analyzer::{analyze_surface_spans, is_separator, normalize_text};
 use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
+use crate::diagnostics::PatternMatcher;
 use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
 use crate::documents::{escape_pipe, load_document_metadata_for_paths};
+use crate::paths::repository_relative_path;
 use crate::root::{RootMarker, infer_repository_root};
 use crate::scopes::{Scope, discover_scope_files};
 use crate::score::{Candidate, CombinedFieldStats, Field};
@@ -82,7 +84,12 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
     let files = if let Some(scope) = options.scope {
         discover_scope_files(&config, scope)?
     } else {
-        discover_markdown_files_for_targets(&config, &[repository_root], DirectoryDepth::Recursive)?
+        let discovered = discover_markdown_files_for_targets(
+            &config,
+            std::slice::from_ref(&repository_root),
+            DirectoryDepth::Recursive,
+        )?;
+        apply_match_exclude(&config, discovered)?
     };
     let documents = load_document_metadata_for_paths(&config, &files)?;
 
@@ -166,6 +173,29 @@ pub(crate) fn execute_match(options: MatchOptions) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn apply_match_exclude(config: &Config, files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    let patterns = config.match_exclude();
+    if patterns.is_empty() {
+        return Ok(files);
+    }
+
+    let matcher = PatternMatcher::new(patterns)?;
+    let repo_root = config.repository_root();
+
+    let filtered: Vec<PathBuf> = files
+        .into_iter()
+        .filter(|path| {
+            if let Ok(relative) = repository_relative_path(repo_root, path) {
+                !matcher.is_match(&relative, false)
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    Ok(filtered)
 }
 
 fn render_default_row(

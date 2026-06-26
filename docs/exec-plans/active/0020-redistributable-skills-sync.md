@@ -28,20 +28,20 @@ description: "Plan for adding redistributable source skills under `skills/`, syn
 - None yet.
 
 ## Steps
-- [ ] Add `skills/description-frontmatter-authoring/` by copying the current skill and changing command examples from `cargo run -- <subcommand> ...` to `docgarden <subcommand> ...`.
-- [ ] Keep `.agents/skills/description-frontmatter-authoring/` as generated output whose content matches `skills/description-frontmatter-authoring/` after command translation.
-- [ ] Add `cargo xtask sync-skills` to copy every skill directory present under `skills/` into `.agents/skills/`, preserving unrelated repo-local `.agents/skills/*` directories.
-- [ ] Add `cargo xtask sync-skills --check` to compare expected generated output with the working tree and fail with stale paths when generated files differ or are missing.
-- [ ] Implement Markdown command translation using the same strategy as `docgarden fix`: collect byte-offset edits from parsed Markdown nodes, reject overlapping edits, sort edits in reverse order, then apply replacements.
-- [ ] Translate shell command forms only, not product references: inline or fenced command text beginning with `docgarden <subcommand> ...` becomes `cargo run -- <subcommand> ...`; bare conceptual references such as ``docgarden match`` remain unchanged.
-- [ ] Add xtask tests for inline command translation, fenced shell command translation, conceptual ``docgarden match`` preservation, stale generated-file detection, and preservation of unrelated `.agents/skills` directories.
-- [ ] Add command-specific match exclusions with this public TOML shape: `[match]` plus `exclude = ["skills/**"]`.
-- [ ] Apply `[match].exclude` only to the unscoped `docgarden match <query>` corpus after normal Markdown discovery; do not apply it to `docgarden lint`, `docgarden fix`, `docgarden list`, `docgarden match --skills`, or `docgarden match --plans`.
-- [ ] Keep `.agents/skills` as configured `skills-dir`, exclude redistributable source `skills/**` from broad `docgarden match`, and keep both `skills/` and `.agents/skills/` visible to `lint`.
-- [ ] Add config/unit coverage for `[match].exclude` defaults, parsing, and unknown-key rejection.
-- [ ] Add integration coverage showing `docgarden match <query>` excludes redistributable source `skills/**` while still surfacing live `.agents/skills/**`, `docgarden match --skills <query>` uses configured live `.agents/skills`, `docgarden match --plans <query>` is not narrowed by `[match].exclude`, and `docgarden lint . --color never` still checks both source and generated skill files.
-- [ ] Update root `docgarden.toml` to keep `skills-dir = ".agents/skills"` and set `[match].exclude = ["skills/**"]`.
-- [ ] Keep `src/data/default-config.toml` default `skills-dir = ".agents/skills"` for ordinary repositories because `docgarden match --skills` should route to live skills usable by the agent.
+- [x] Add `skills/description-frontmatter-authoring/` by copying the current skill and changing command examples from `cargo run -- <subcommand> ...` to `docgarden <subcommand> ...`.
+- [x] Keep `.agents/skills/description-frontmatter-authoring/` as generated output whose content matches `skills/description-frontmatter-authoring/` after command translation.
+- [x] Add `cargo xtask sync-skills` to copy every skill directory present under `skills/` into `.agents/skills/`, preserving unrelated repo-local `.agents/skills/*` directories.
+- [x] Add `cargo xtask sync-skills --check` to compare expected generated output with the working tree and fail with stale paths when generated files differ or are missing.
+- [x] Implement Markdown command translation using the same strategy as `docgarden fix`: collect byte-offset edits from parsed Markdown nodes, reject overlapping edits, sort edits in reverse order, then apply replacements.
+- [x] Translate shell command forms only, not product references: inline or fenced command text beginning with `docgarden <subcommand> ...` becomes `cargo run -- <subcommand> ...`; bare conceptual references such as ``docgarden match`` remain unchanged.
+- [x] Add xtask tests for inline command translation, fenced shell command translation, conceptual ``docgarden match`` preservation, stale generated-file detection, and preservation of unrelated `.agents/skills` directories.
+- [x] Add command-specific match exclusions with this public TOML shape: `[match]` plus `exclude = ["skills/**"]`.
+- [x] Apply `[match].exclude` only to the unscoped `docgarden match <query>` corpus after normal Markdown discovery; do not apply it to `docgarden lint`, `docgarden fix`, `docgarden list`, `docgarden match --skills`, or `docgarden match --plans`.
+- [x] Keep `.agents/skills` as configured `skills-dir`, exclude redistributable source `skills/**` from broad `docgarden match`, and keep both `skills/` and `.agents/skills/` visible to `lint`.
+- [x] Add config/unit coverage for `[match].exclude` defaults, parsing, and unknown-key rejection.
+- [x] Add integration coverage showing `docgarden match <query>` excludes redistributable source `skills/**` while still surfacing live `.agents/skills/**`, `docgarden match --skills <query>` uses configured live `.agents/skills`, `docgarden match --plans <query>` is not narrowed by `[match].exclude`, and `docgarden lint . --color never` still checks both source and generated skill files.
+- [x] Update root `docgarden.toml` to set `[match].exclude = ["skills/**"]`; `skills-dir` is kept as the default `.agents/skills` via the embedded config.
+- [x] Keep `src/data/default-config.toml` default `skills-dir = ".agents/skills"` for ordinary repositories because `docgarden match --skills` should route to live skills usable by the agent.
 
 ## Validation
 - `cargo test -p xtask sync_skills`
@@ -64,7 +64,9 @@ description: "Plan for adding redistributable source skills under `skills/`, syn
 - Match-only exclusion should hide redistributable source `skills/**`, not live `.agents/skills/**`, because `docgarden match` is a routing tool for the skills available to the current agent.
 
 ## Review
-- [ ] None yet.
+- [x] Finding 1 (BLOCKING): Plan step 7 claimed tests for stale detection and unrelated-dir preservation existed but none were present. Added 4 tests: `apply_edits_rejects_overlapping_edits`, `check_detects_missing_generated_file`, `check_detects_stale_generated_file`, `sync_preserves_unrelated_destination_directories`.
+- [x] Finding 2 (MINOR): Plan step 13 wording implied `skills-dir` was explicitly set in `docgarden.toml`; clarified step to note it uses the embedded default.
+- [x] Finding 3 (MINOR): Missing test for `apply_edits` overlapping-edits error path; added `apply_edits_rejects_overlapping_edits` test.
 
 ## Definition of Done
 
@@ -72,10 +74,10 @@ description: "Plan for adding redistributable source skills under `skills/`, syn
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [ ] Goal achieved: `skills/` is source of truth, `.agents/skills` generated copies stay synchronized with translated commands, and match routes to live generated skills while lint covers both trees.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] Goal achieved: `skills/` is source of truth, `.agents/skills` generated copies stay synchronized with translated commands, and match routes to live generated skills while lint covers both trees.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
 - [ ] Pass 1: Cold review completed.
