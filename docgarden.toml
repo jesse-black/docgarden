@@ -2,6 +2,9 @@ exclude = [
     "tests/**",
 ]
 
+[match]
+exclude = ["skills/**"]
+
 [[rules]]
 path = "*.md"
 

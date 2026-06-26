@@ -7,5 +7,9 @@ publish = false
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive"] }
+markdown = "1.0.0"
 semver = "1.0"
 toml_edit = "0.23"
+
+[dev-dependencies]
+tempfile = "3"
