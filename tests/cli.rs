@@ -110,6 +110,11 @@ fn match_help_documents_output_columns_and_flags() {
         .stdout(predicate::str::contains(
             "Usage: docgarden match [OPTIONS] <QUERY>...",
         ))
+        .stdout(predicate::str::contains(
+            "Find repository Markdown documents whose descriptions match the query.",
+        ))
+        .stdout(predicate::str::contains("metadata").not())
+        .stdout(predicate::str::contains("frontmatter").not())
         .stdout(predicate::str::contains("--limit"))
         .stdout(predicate::str::contains("--path-only"))
         .stdout(predicate::str::contains("--explain"))
@@ -124,7 +129,10 @@ fn root_help_lists_match_subcommand() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("match"));
+        .stdout(predicate::str::contains("match"))
+        .stdout(predicate::str::contains(
+            "Find repository documents by description",
+        ));
 }
 
 #[test]
@@ -146,7 +154,12 @@ fn list_help_documents_output_columns_and_flags() {
         .stdout(predicate::str::contains(
             "Usage: docgarden list [OPTIONS] [TARGETS]...",
         ))
+        .stdout(predicate::str::contains(
+            "List repository Markdown documents with their descriptions.",
+        ))
         .stdout(predicate::str::contains("path | name | description"))
+        .stdout(predicate::str::contains("metadata").not())
+        .stdout(predicate::str::contains("frontmatter").not())
         .stdout(predicate::str::contains("--recurse"))
         .stdout(predicate::str::contains("--skills"))
         .stdout(predicate::str::contains("--plans"))
@@ -161,7 +174,10 @@ fn root_help_lists_list_subcommand() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("list"));
+        .stdout(predicate::str::contains("list"))
+        .stdout(predicate::str::contains(
+            "List repository documents and descriptions",
+        ));
 }
 
 #[test]
@@ -1195,6 +1211,10 @@ fn root_help_lists_explicit_subcommands() {
         .stdout(predicate::str::contains("Usage: docgarden <COMMAND>"))
         .stdout(predicate::str::contains("lint"))
         .stdout(predicate::str::contains("fix"))
+        .stdout(predicate::str::contains(
+            "Fix Markdown lint findings where possible",
+        ))
+        .stdout(predicate::str::contains("deterministic safe rewrites").not())
         .stdout(predicate::str::contains("init").not())
         .stdout(predicate::str::contains("skill").not())
         .stdout(predicate::str::contains("[TARGETS]").not())

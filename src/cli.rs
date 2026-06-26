@@ -25,31 +25,31 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    #[command(about = "Lint repository knowledge without modifying files")]
+    #[command(about = "Lint repository Markdown without changing files")]
     Lint(LintArgs),
-    #[command(about = "Apply deterministic safe rewrites")]
+    #[command(about = "Fix Markdown lint findings where possible")]
     Fix(LintArgs),
     #[command(
         visible_alias = "m",
-        about = "Rank repository documents by metadata match",
-        long_about = "Rank repository Markdown documents by how well their frontmatter \
-                      fields match the given query terms.\n\
+        about = "Find repository documents by description",
+        long_about = "Find repository Markdown documents whose descriptions match the \
+                      query.\n\
                       \n\
                       Output columns (default):\n\
                       \x20 path | name | description\n\
                       \n\
                       Fields are separated by ` | `. A literal `|` in any field is \
-                      escaped as `\\|`. Matching query terms are bolded when styled output \
-                      is enabled. The `name` column uses frontmatter `name` when \
-                      present and otherwise falls back to the filename without its \
-                      extension. The `description` column is empty when the document has \
-                      no frontmatter `description`."
+                      escaped as `\\|`. Matching query terms are bolded when color is \
+                      enabled. The `name` column uses the document name when present \
+                      and otherwise falls back to the filename without its extension. \
+                      The `description` column is empty when the document has no \
+                      description."
     )]
     Match(MatchArgs),
     #[command(
         visible_alias = "ls",
-        about = "List repository documents by metadata",
-        long_about = "List repository Markdown documents with compact frontmatter metadata.\n\
+        about = "List repository documents and descriptions",
+        long_about = "List repository Markdown documents with their descriptions.\n\
                       \n\
                       Output columns:\n\
                       \x20 path | name | description\n\
@@ -58,10 +58,10 @@ enum Command {
                       descend into nested directories. Scope switches select configured \
                       document sets and cannot be combined with positional targets. \
                       Fields are separated by ` | `. A literal `|` in any field is \
-                      escaped as `\\|`. The `name` column uses frontmatter `name` when \
+                      escaped as `\\|`. The `name` column uses the document name when \
                       present and otherwise falls back to the filename without its \
                       extension. The `description` column is empty when the document has \
-                      no frontmatter `description`."
+                      no description."
     )]
     List(ListArgs),
 }
@@ -74,18 +74,18 @@ struct LintArgs {
         help = "Repository root, directories, or Markdown files to lint"
     )]
     targets: Vec<PathBuf>,
-    #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
+    #[arg(long, help = "Read configuration from this docgarden.toml file")]
     config: Option<PathBuf>,
     #[arg(
         long,
-        help = "Ignore .gitignore and related exclude files during discovery"
+        help = "Include files ignored by .gitignore and related exclude files"
     )]
     no_gitignore: bool,
     #[arg(
         long,
         value_enum,
         default_value_t = ColorChoice::Auto,
-        help = "Control colored human-readable output"
+        help = "When to use color in text output"
     )]
     color: ColorChoice,
 }
@@ -96,28 +96,28 @@ struct MatchArgs {
     #[arg(
         required = true,
         num_args = 1..,
-        help = "Query terms; joined with spaces before tokenization"
+        help = "Query terms to match"
     )]
     query: Vec<String>,
-    #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
+    #[arg(long, help = "Read configuration from this docgarden.toml file")]
     config: Option<PathBuf>,
     #[arg(
         long,
-        help = "Ignore .gitignore and related exclude files during discovery"
+        help = "Include files ignored by .gitignore and related exclude files"
     )]
     no_gitignore: bool,
     #[arg(
         long,
         value_enum,
         default_value_t = ColorChoice::Auto,
-        help = "Control colored human-readable output"
+        help = "When to use color in text output"
     )]
     color: ColorChoice,
     #[arg(
         short = 'n',
         long,
         default_value_t = DEFAULT_MATCH_LIMIT,
-        help = "Limit results to the top N matches"
+        help = "Show at most N matches"
     )]
     limit: usize,
     #[arg(
@@ -129,18 +129,12 @@ struct MatchArgs {
     #[arg(
         long,
         conflicts_with = "path_only",
-        help = "Show diagnostic data explaining each document's ranking"
+        help = "Show scoring details for each result"
     )]
     explain: bool,
-    #[arg(
-        long,
-        help = "Restrict matching to configured skills-dir SKILL.md files"
-    )]
+    #[arg(long, help = "Search only SKILL.md files under skills-dir")]
     skills: bool,
-    #[arg(
-        long,
-        help = "Restrict matching to configured plans-dir Markdown files"
-    )]
+    #[arg(long, help = "Search only Markdown files under plans-dir")]
     plans: bool,
 }
 
@@ -154,18 +148,18 @@ struct ListArgs {
         help = "Markdown files or directories to list; defaults to the current directory"
     )]
     targets: Vec<PathBuf>,
-    #[arg(long, help = "Use an explicit docgarden.toml configuration file")]
+    #[arg(long, help = "Read configuration from this docgarden.toml file")]
     config: Option<PathBuf>,
     #[arg(
         long,
-        help = "Ignore .gitignore and related exclude files during discovery"
+        help = "Include files ignored by .gitignore and related exclude files"
     )]
     no_gitignore: bool,
     #[arg(short = 'R', long, help = "Recurse into nested directory targets")]
     recurse: bool,
-    #[arg(long, help = "List configured skills-dir SKILL.md files")]
+    #[arg(long, help = "List SKILL.md files under skills-dir")]
     skills: bool,
-    #[arg(long, help = "List configured plans-dir Markdown files")]
+    #[arg(long, help = "List Markdown files under plans-dir")]
     plans: bool,
     #[arg(long, help = "List Markdown files under plans-dir/active")]
     active_plans: bool,
