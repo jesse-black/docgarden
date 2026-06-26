@@ -62,6 +62,28 @@ Use `[[rules]].disable` instead when a file should still be discovered and linte
 
 This distinction matters because excluded files disappear from all lint checks, while rule disables preserve the file in discovery and relax only the named behavior.
 
+## Match Selection
+
+`docgarden match` may need command-specific corpus filters that should not affect repository linting.
+
+The public TOML shape for match-only exclusions is:
+
+    [match]
+    exclude = ["skills/**"]
+
+This is intentionally separate from top-level `exclude`. Top-level `exclude` removes files from the repository documentation contract for lint, fix, list, and match. `match.exclude` only removes files from the unscoped `docgarden match <QUERY>` corpus after normal Markdown discovery has selected files.
+
+`match.exclude` should not affect `docgarden lint`, `docgarden fix`, or `docgarden list`. It should also not affect explicit scoped matching such as `docgarden match --skills <QUERY>` or `docgarden match --plans <QUERY>`, because a scope switch is already an explicit request to search a configured corpus.
+
+A repository with redistributable source skills and generated local agent skills can therefore use:
+
+    skills-dir = ".agents/skills"
+
+    [match]
+    exclude = ["skills/**"]
+
+In that setup, broad `docgarden match <QUERY>` avoids duplicate source skill results while still routing to the live agent skills under `.agents/skills/`. `docgarden match --skills <QUERY>` searches the configured live skills directory, and `docgarden lint .` can still check both `skills/` and `.agents/skills/`.
+
 ## Why Not Generic Groups First
 
 The near-term design should avoid both extremes:
