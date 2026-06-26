@@ -1,4 +1,4 @@
-# docgarden
+# docgarden (dg)
 
 [![CI](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jesse-black/docgarden/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/docgarden.svg)](https://crates.io/crates/docgarden)

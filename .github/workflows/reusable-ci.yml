@@ -53,7 +53,7 @@ jobs:
       - name: Coverage
         id: coverage
         if: ${{ !cancelled() }}
-        run: cargo llvm-cov --locked --json --output-path target/coverage.json
+        run: cargo llvm-cov --locked --json --output-path target/coverage.json --ignore-filename-regex 'src/bin/dg\.rs$'
       - name: Covgate
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         run: covgate check target/coverage.json

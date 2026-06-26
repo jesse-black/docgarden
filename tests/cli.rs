@@ -128,6 +128,16 @@ fn root_help_lists_match_subcommand() {
 }
 
 #[test]
+fn dg_binary_help_uses_alias_name() {
+    Command::new(env!("CARGO_BIN_EXE_dg"))
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: dg <COMMAND>"))
+        .stdout(predicate::str::contains("match"));
+}
+
+#[test]
 fn list_help_documents_output_columns_and_flags() {
     Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .args(["list", "--help"])
