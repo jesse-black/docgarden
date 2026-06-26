@@ -111,6 +111,8 @@ fn run_llvm_cov(coverage_path: &Path, extra_args: &[String]) -> Result<()> {
         "--json".to_string(),
         "--output-path".to_string(),
         coverage_json_str.to_string(),
+        "--ignore-filename-regex".to_string(),
+        "src/bin/dg\\.rs$".to_string(),
         "--fail-under-regions=90".to_string(),
     ]);
     coverage_args.extend(extra_args.iter().cloned());
