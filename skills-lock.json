@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "cli-as-harness": {
+      "source": "jesse-black/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cli-as-harness/SKILL.md",
+      "computedHash": "e987f806257755396d10842da558910263f9138b72733ea36a5f6b2b231eb0e7"
+    },
     "evaluator-execplan": {
       "source": "jesse-black/execplan-skills",
       "sourceType": "github",
