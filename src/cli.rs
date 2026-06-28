@@ -31,9 +31,8 @@ enum Command {
     Fix(LintArgs),
     #[command(
         visible_alias = "m",
-        about = "Find repository documents by description",
-        long_about = "Find repository Markdown documents whose descriptions match the \
-                      query.\n\
+        about = "Find repository documents by description, name, or path",
+        long_about = "Find repository Markdown documents by description, name, or path.\n\
                       \n\
                       Output columns (default):\n\
                       \x20 path | name | description\n\
@@ -60,8 +59,8 @@ enum Command {
                       Fields are separated by ` | `. A literal `|` in any field is \
                       escaped as `\\|`. The `name` column uses the document name when \
                       present and otherwise falls back to the filename without its \
-                      extension. The `description` column is empty when the document has \
-                      no description."
+                      extension. Directory and scope listings omit documents without \
+                      descriptions."
     )]
     List(ListArgs),
 }
@@ -71,7 +70,7 @@ struct LintArgs {
     #[arg(
         default_value = ".",
         num_args = 0..,
-        help = "Repository root, directories, or Markdown files to lint"
+        help = "Repository root, directories, or Markdown files to process"
     )]
     targets: Vec<PathBuf>,
     #[arg(long, help = "Read configuration from this docgarden.toml file")]
@@ -140,7 +139,7 @@ struct MatchArgs {
 
 #[derive(ClapArgs, Debug)]
 #[command(
-    group(ArgGroup::new("list-scope").args(["skills", "plans", "active_plans", "completed_plans"]).multiple(false))
+    group(ArgGroup::new("list-scope").args(["skills", "plans", "active_plans", "completed_plans"]).multiple(false).conflicts_with("targets"))
 )]
 struct ListArgs {
     #[arg(
@@ -242,10 +241,6 @@ fn execute_lint(args: LintArgs, mode: Mode) -> Result<()> {
 
 fn execute_list(args: ListArgs) -> Result<()> {
     let scope = args.scope();
-    if scope.is_some() && !args.targets.is_empty() {
-        bail!("scope switches cannot be combined with targets");
-    }
-
     let cwd = std::env::current_dir()
         .context("failed to determine current working directory")?
         .canonicalize()
