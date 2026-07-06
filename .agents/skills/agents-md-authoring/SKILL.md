@@ -1,6 +1,8 @@
 ---
 name: agents-md-authoring
 description: Create or revise repository `AGENTS.md` files using a progressive-disclosure, dispatcher-style structure. Use when an agent needs to author or edit a top-level or directory-local `AGENTS.md`, convert a long instruction file into task-oriented "Start Here for ..." sections, add a concise "Must Follow" section with Always/Never rules, improve skill-discovery cues, or decide whether guidance belongs in root `AGENTS.md`, deeper docs, local `AGENTS.md`, or a repository-local skill.
+metadata:
+  internal: true
 ---
 
 # AGENTS.md Authoring

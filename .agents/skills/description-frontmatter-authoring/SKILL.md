@@ -1,6 +1,8 @@
 ---
 name: description-frontmatter-authoring
 description: Create or revise Markdown `description` frontmatter so `docgarden match` routes agents to the right repository documents. Use when adding a new routed Markdown document, updating existing frontmatter, fixing noisy or missing match results, tuning skills or docs discovery, or making descriptions more query-aligned without loading document bodies.
+metadata:
+  internal: true
 ---
 
 # Description Frontmatter Authoring

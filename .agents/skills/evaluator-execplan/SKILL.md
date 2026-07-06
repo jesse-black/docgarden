@@ -1,6 +1,8 @@
 ---
 name: evaluator-execplan
 description: Review the current branch, PR, or worktree against the plan or ExecPlan and record findings. Use when an agent needs a code review with findings for changes associated with an active plan.
+metadata:
+  internal: true
 ---
 
 # Evaluator ExecPlan

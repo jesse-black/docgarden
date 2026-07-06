@@ -56,6 +56,7 @@ fn sync_skills_at(source_root: &Path, dest_root: &Path, check: bool) -> Result<(
         })?;
 
         let translated = translate_skill_commands(&source_content)?;
+        let generated = mark_skill_internal(&translated)?;
 
         if check {
             let dest_skill_path = dest_root.join(skill_name).join("SKILL.md");
@@ -72,7 +73,7 @@ fn sync_skills_at(source_root: &Path, dest_root: &Path, check: bool) -> Result<(
                     dest_skill_path.display()
                 )
             })?;
-            if dest_content != translated {
+            if dest_content != generated {
                 stale_paths.push(format!(
                     "stale generated file: {}",
                     dest_skill_path.display()
@@ -83,7 +84,7 @@ fn sync_skills_at(source_root: &Path, dest_root: &Path, check: bool) -> Result<(
             fs::create_dir_all(&dest_dir)
                 .with_context(|| format!("failed to create directory: {}", dest_dir.display()))?;
             let dest_skill_path = dest_dir.join("SKILL.md");
-            fs::write(&dest_skill_path, &translated).with_context(|| {
+            fs::write(&dest_skill_path, &generated).with_context(|| {
                 format!(
                     "failed to write generated skill: {}",
                     dest_skill_path.display()
@@ -121,6 +122,39 @@ pub(crate) fn translate_skill_commands(source: &str) -> Result<String> {
 
     let edits = collect_translation_edits(source, &tree);
     apply_edits(source, &edits)
+}
+
+fn mark_skill_internal(source: &str) -> Result<String> {
+    let mut options = ParseOptions::gfm();
+    options.constructs.frontmatter = true;
+    let tree = to_mdast(source, &options)
+        .map_err(|error| anyhow!("failed to parse skill frontmatter: {error}"))?;
+    let yaml = tree
+        .children()
+        .and_then(|children| children.first())
+        .and_then(|node| match node {
+            Node::Yaml(yaml) => Some(yaml),
+            _ => None,
+        })
+        .context("skill has no YAML frontmatter")?;
+    let position = yaml
+        .position
+        .as_ref()
+        .context("frontmatter has no position")?;
+    let frontmatter = &source[position.start.offset..position.end.offset];
+    let closing_delimiter = frontmatter
+        .rfind("\n---")
+        .context("skill frontmatter has no closing delimiter")?;
+    let insert_at = position.start.offset + closing_delimiter + 1;
+
+    apply_edits(
+        source,
+        &[Edit {
+            start_offset: insert_at,
+            end_offset: insert_at,
+            replacement: "metadata:\n  internal: true\n".to_string(),
+        }],
+    )
 }
 
 #[derive(Debug, PartialEq, Eq)]
