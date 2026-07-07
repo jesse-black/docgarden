@@ -63,23 +63,26 @@ pub(crate) fn path_prefix(repo_relative_path: &str) -> String {
         .to_owned()
 }
 
-pub(crate) fn escape_pipe(s: &str) -> String {
-    s.replace('|', r"\|")
+pub(crate) fn escape_row_field(s: &str) -> String {
+    s.chars()
+        .map(|ch| if ch == '\n' || ch == '\r' { ' ' } else { ch })
+        .collect::<String>()
+        .replace('|', r"\|")
 }
 
 pub(crate) fn render_metadata_row(document: &DocumentMetadata) -> String {
     let description = document.description.as_deref().unwrap_or_default();
     format!(
         "{} | {} | {}",
-        escape_pipe(&document.repo_relative_path),
-        escape_pipe(&document.name),
-        escape_pipe(description)
+        escape_row_field(&document.repo_relative_path),
+        escape_row_field(&document.name),
+        escape_row_field(description)
     )
 }
 
 fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Option<String> {
     if let YamlValue::Scalar(s) = fm.get(key)? {
-        Some(s.clone())
+        Some(s.trim_end_matches(['\n', '\r']).to_string())
     } else {
         None
     }
@@ -87,7 +90,7 @@ fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Opti
 
 #[cfg(test)]
 mod tests {
-    use super::{fallback_name_from_path, path_prefix};
+    use super::{DocumentMetadata, fallback_name_from_path, path_prefix, render_metadata_row};
 
     #[test]
     fn fallback_name_uses_file_stem() {
@@ -110,5 +113,20 @@ mod tests {
     #[test]
     fn path_prefix_uses_directory_only() {
         assert_eq!(path_prefix("docs/skills/SKILL.md"), "docs/skills");
+    }
+
+    #[test]
+    fn render_metadata_row_normalizes_newlines_in_description() {
+        let row = render_metadata_row(&DocumentMetadata {
+            repo_relative_path: "docs/guide.md".to_string(),
+            path_prefix: "docs".to_string(),
+            name: "Guide".to_string(),
+            description: Some("First paragraph.\nSecond paragraph.".to_string()),
+        });
+
+        assert_eq!(
+            row,
+            "docs/guide.md | Guide | First paragraph. Second paragraph."
+        );
     }
 }
