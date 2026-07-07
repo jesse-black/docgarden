@@ -1,6 +1,7 @@
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
+use github_slugger::Slugger;
 use markdown::mdast::Node;
 use markdown::{ParseOptions, to_mdast};
 
@@ -169,48 +170,26 @@ fn is_markdown_target(path: &std::path::Path) -> bool {
             .is_some_and(|filename| filename.eq_ignore_ascii_case("README"))
 }
 
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "only root and heading nodes matter when checking generated heading anchors"
-)]
 fn node_contains_anchor(node: &Node, anchor: &str) -> bool {
-    match node {
-        Node::Root(root) => root
-            .children
-            .iter()
-            .any(|child| node_contains_anchor(child, anchor)),
-        Node::Heading(heading) => slugify_heading(&label_text(&heading.children)) == anchor,
-        _ => false,
-    }
+    node_contains_anchor_with_slugger(node, anchor, &mut Slugger::default())
 }
 
-fn slugify_heading(value: &str) -> String {
-    let mut slug = String::new();
-    let mut previous_was_separator = false;
-    for ch in value.chars().flat_map(char::to_lowercase) {
-        if ch.is_alphanumeric() {
-            slug.push(ch);
-            previous_was_separator = false;
-        } else if (ch.is_whitespace() || ch == '-') && !slug.is_empty() && !previous_was_separator {
-            slug.push('-');
-            previous_was_separator = true;
-        }
+fn node_contains_anchor_with_slugger(node: &Node, anchor: &str, slugger: &mut Slugger) -> bool {
+    if let Node::Heading(heading) = node {
+        slugger.slug(&label_text(&heading.children)) == anchor
+    } else {
+        node.children().is_some_and(|children| {
+            children
+                .iter()
+                .any(|child| node_contains_anchor_with_slugger(child, anchor, slugger))
+        })
     }
-    if slug.ends_with('-') {
-        slug.pop();
-    }
-    slug
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_markdown_target, slugify_heading, target_anchor_exists};
+    use super::{is_markdown_target, target_anchor_exists};
     use tempfile::TempDir;
-
-    #[test]
-    fn slugify_heading_collapses_separators_and_trims_trailing_separator() {
-        assert_eq!(slugify_heading("Testing -- Guidance -"), "testing-guidance");
-    }
 
     #[test]
     fn target_anchor_exists_rejects_anchors_on_directories() {

@@ -50,6 +50,7 @@ unimplemented = "deny"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive"] }
+github-slugger = "0.1"
 ignore = "0.4"
 markdown = "1.0.0"
 rust-stemmers = "1.2"

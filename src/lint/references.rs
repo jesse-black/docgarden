@@ -289,41 +289,12 @@ fn has_relative_prefix(value: &str) -> bool {
 pub(crate) fn label_text(children: &[Node]) -> String {
     let mut text = String::new();
     for child in children {
-        match child {
-            Node::Text(Text { value, .. }) => text.push_str(value),
-            Node::InlineCode(InlineCode { value, .. }) => text.push_str(value),
-            Node::Link(link) => text.push_str(&label_text(&link.children)),
-            Node::Root(_)
-            | Node::Blockquote(_)
-            | Node::FootnoteDefinition(_)
-            | Node::MdxJsxFlowElement(_)
-            | Node::List(_)
-            | Node::MdxjsEsm(_)
-            | Node::Toml(_)
-            | Node::Yaml(_)
-            | Node::Break(_)
-            | Node::InlineMath(_)
-            | Node::Delete(_)
-            | Node::Emphasis(_)
-            | Node::MdxTextExpression(_)
-            | Node::FootnoteReference(_)
-            | Node::Html(_)
-            | Node::Image(_)
-            | Node::ImageReference(_)
-            | Node::MdxJsxTextElement(_)
-            | Node::LinkReference(_)
-            | Node::Strong(_)
-            | Node::Code(_)
-            | Node::Math(_)
-            | Node::MdxFlowExpression(_)
-            | Node::Heading(_)
-            | Node::Table(_)
-            | Node::ThematicBreak(_)
-            | Node::TableRow(_)
-            | Node::TableCell(_)
-            | Node::ListItem(_)
-            | Node::Definition(_)
-            | Node::Paragraph(_) => {}
+        if let Node::Text(Text { value, .. }) = child {
+            text.push_str(value);
+        } else if let Node::InlineCode(InlineCode { value, .. }) = child {
+            text.push_str(value);
+        } else if let Some(children) = child.children() {
+            text.push_str(&label_text(children));
         }
     }
     text
