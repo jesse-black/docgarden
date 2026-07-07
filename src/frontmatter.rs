@@ -138,8 +138,8 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
             let (val, consumed) = parse_block_value(lines, i, line_num)?;
             i += consumed;
             val
-        } else if value_str == ">-" {
-            let (val, consumed) = parse_folded_strip_scalar(lines, i, line_num)?;
+        } else if let Some(chomp) = FoldedChomp::parse(value_str) {
+            let (val, consumed) = parse_folded_scalar(lines, i, line_num, chomp)?;
             i += consumed;
             val
         } else {
@@ -271,33 +271,44 @@ fn parse_nested_mapping(
     Ok(fields)
 }
 
-/// Parse a folded strip block scalar (`>-`) into a single scalar string.
-fn parse_folded_strip_scalar(
+#[derive(Clone, Copy)]
+enum FoldedChomp {
+    Clip,
+    Strip,
+    Keep,
+}
+
+impl FoldedChomp {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            ">" => Some(Self::Clip),
+            ">-" => Some(Self::Strip),
+            ">+" => Some(Self::Keep),
+            _ => None,
+        }
+    }
+}
+
+/// Parse a folded block scalar (`>`, `>-`, or `>+`) into a scalar string.
+fn parse_folded_scalar(
     lines: &[(usize, &str)],
     start: usize,
     parent_line: usize,
+    chomp: FoldedChomp,
 ) -> Result<(YamlValue, usize), usize> {
-    let child_indent = lines
-        .iter()
-        .skip(start)
-        .find_map(|&(_, line)| {
-            if line.trim().is_empty() {
-                None
-            } else {
-                Some(line_indent(line))
-            }
-        })
-        .ok_or(parent_line)?;
-
+    let child_indent = folded_scalar_indent(lines, start).ok_or(parent_line)?;
     if child_indent == 0 {
         return Err(parent_line);
     }
 
-    let mut parts = Vec::new();
+    let mut content = Vec::new();
     let mut consumed = 0;
 
     for &(line_num, line) in lines.iter().skip(start) {
         if line.trim().is_empty() {
+            if !content.is_empty() {
+                content.push(None);
+            }
             consumed += 1;
             continue;
         }
@@ -310,11 +321,63 @@ fn parse_folded_strip_scalar(
             return Err(line_num);
         }
 
-        parts.push(line[child_indent..].trim().to_string());
+        content.push(Some(line[child_indent..].trim().to_string()));
         consumed += 1;
     }
 
-    Ok((YamlValue::Scalar(parts.join(" ")), consumed))
+    Ok((
+        YamlValue::Scalar(fold_scalar_content(&content, chomp)),
+        consumed,
+    ))
+}
+
+fn folded_scalar_indent(lines: &[(usize, &str)], start: usize) -> Option<usize> {
+    lines.iter().skip(start).find_map(|&(_, line)| {
+        if line.trim().is_empty() {
+            None
+        } else {
+            Some(line_indent(line))
+        }
+    })
+}
+
+fn fold_scalar_content(lines: &[Option<String>], chomp: FoldedChomp) -> String {
+    let trailing_blank_lines = lines.iter().rev().take_while(|line| line.is_none()).count();
+    let content_end = lines.len() - trailing_blank_lines;
+
+    let mut output = String::new();
+    let mut paragraph = Vec::new();
+
+    for line in lines.iter().take(content_end) {
+        match line {
+            Some(text) => paragraph.push(text.as_str()),
+            None => {
+                flush_folded_paragraph(&mut output, &mut paragraph);
+                output.push('\n');
+            }
+        }
+    }
+
+    flush_folded_paragraph(&mut output, &mut paragraph);
+
+    match chomp {
+        FoldedChomp::Strip => {}
+        FoldedChomp::Clip => output.push('\n'),
+        FoldedChomp::Keep => {
+            output.push('\n');
+            output.extend(std::iter::repeat_n('\n', trailing_blank_lines));
+        }
+    }
+
+    output
+}
+
+fn flush_folded_paragraph(output: &mut String, paragraph: &mut Vec<&str>) {
+    if paragraph.is_empty() {
+        return;
+    }
+    output.push_str(&paragraph.join(" "));
+    paragraph.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +623,40 @@ mod tests {
             fm.get("description"),
             Some(&YamlValue::Scalar(
                 "Claude Code generated skill description frontmatter.".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_folded_clip_description_scalar() {
+        let src = "---\ndescription: >\n  Folded clip\n  description.\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar("Folded clip description.\n".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_folded_keep_description_scalar() {
+        let src = "---\ndescription: >+\n  Folded keep\n  description.\n\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(
+                "Folded keep description.\n\n".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_folded_strip_scalar_preserves_blank_line_as_paragraph_break() {
+        let src = "---\ndescription: >-\n  First paragraph.\n\n  Second paragraph.\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(
+                "First paragraph.\nSecond paragraph.".to_string()
             ))
         );
     }
