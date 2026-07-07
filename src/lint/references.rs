@@ -19,6 +19,8 @@ pub(crate) enum ReferenceSyntax {
 #[derive(Clone, Debug)]
 pub(crate) struct CandidateReference {
     pub(crate) display_text: String,
+    pub(crate) path_text: String,
+    pub(crate) anchor: Option<String>,
     pub(crate) syntax: ReferenceSyntax,
     pub(crate) is_directory_like: bool,
 }
@@ -56,38 +58,68 @@ fn classify_reference(
     if kind == ReferenceKind::Backtick && contains_disallowed_backtick_syntax(value) {
         return None;
     }
-    let syntax = if has_relative_prefix(value) {
+    let path_text = link_path_text(value, kind);
+    let syntax = if has_relative_prefix(path_text) {
         ReferenceSyntax::Relative
-    } else if has_workspace_root_prefix(value) {
+    } else if has_workspace_root_prefix(path_text) {
         ReferenceSyntax::WorkspaceRoot
     } else {
         ReferenceSyntax::Standard
     };
 
-    if is_path_like_reference(value, kind, syntax) {
-        return Some(CandidateReference::new(value, syntax));
+    if is_path_like_reference(path_text, kind, syntax) {
+        return Some(CandidateReference::new(value, syntax, kind));
     }
 
-    let path = Path::new(value);
+    let path = Path::new(path_text);
     if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
         let extension = format!(".{extension}");
         if config.known_extensions().contains(&extension) {
-            return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
+            return Some(CandidateReference::new(
+                value,
+                ReferenceSyntax::Standard,
+                kind,
+            ));
         }
     }
-    if config.special_filenames().contains(value) {
-        return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
+    if config.special_filenames().contains(path_text) {
+        return Some(CandidateReference::new(
+            value,
+            ReferenceSyntax::Standard,
+            kind,
+        ));
     }
     None
 }
 
 impl CandidateReference {
-    fn new(value: &str, syntax: ReferenceSyntax) -> CandidateReference {
+    fn new(value: &str, syntax: ReferenceSyntax, kind: ReferenceKind) -> CandidateReference {
+        let path_text = link_path_text(value, kind).to_string();
         CandidateReference {
             display_text: value.to_string(),
+            anchor: link_anchor(value, kind).map(str::to_string),
+            is_directory_like: path_text.ends_with('/') || path_text.ends_with('\\'),
+            path_text,
             syntax,
-            is_directory_like: value.ends_with('/') || value.ends_with('\\'),
         }
+    }
+}
+
+fn link_path_text(value: &str, kind: ReferenceKind) -> &str {
+    if kind == ReferenceKind::Link {
+        value.split_once('#').map_or(value, |(path, _)| path)
+    } else {
+        value
+    }
+}
+
+fn link_anchor(value: &str, kind: ReferenceKind) -> Option<&str> {
+    if kind == ReferenceKind::Link {
+        value
+            .split_once('#')
+            .and_then(|(_, anchor)| (!anchor.is_empty()).then_some(anchor))
+    } else {
+        None
     }
 }
 
@@ -104,7 +136,7 @@ pub(crate) fn resolve_candidate(
     candidate: &CandidateReference,
     kind: ReferenceKind,
 ) -> Option<ResolvedReference> {
-    let display_text = candidate.display_text.replace('\\', "/");
+    let display_text = candidate.path_text.replace('\\', "/");
     let normalized_display = display_text.trim_start_matches('/');
     let base = match kind {
         ReferenceKind::Backtick => {
@@ -309,6 +341,8 @@ mod tests {
     fn resolve_candidate_normalizes_relative_segments_and_separators() {
         let candidate = CandidateReference {
             display_text: "./nested\\..\\real.md".to_string(),
+            path_text: "./nested\\..\\real.md".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
@@ -323,6 +357,8 @@ mod tests {
     fn resolve_candidate_rejects_escape_above_repository_root() {
         let candidate = CandidateReference {
             display_text: "../../../secret.md".to_string(),
+            path_text: "../../../secret.md".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
@@ -338,6 +374,8 @@ mod tests {
         std::fs::create_dir(&docs).unwrap();
         let candidate = CandidateReference {
             display_text: "/docs".to_string(),
+            path_text: "/docs".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::WorkspaceRoot,
             is_directory_like: true,
         };

@@ -1,5 +1,8 @@
-use anyhow::Result;
+use std::fs;
+
+use anyhow::{Context, Result, anyhow};
 use markdown::mdast::Node;
+use markdown::{ParseOptions, to_mdast};
 
 use crate::config::Rule;
 use crate::diagnostics::Severity;
@@ -101,10 +104,15 @@ fn lint_link_node<'a>(
             .repository_root()
             .join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
+        let anchor_exists = if exists {
+            target_anchor_exists(&exists_path, candidate.anchor.as_deref())?
+        } else {
+            false
+        };
         if !exists && candidate.is_directory_like {
             return Ok(Vec::new());
         }
-        if !exists {
+        if !exists || !anchor_exists {
             return Ok(vec![Finding {
                 payload: DiagnosticPayload {
                     file: context.file,
@@ -123,4 +131,76 @@ fn lint_link_node<'a>(
         }
     }
     Ok(Vec::new())
+}
+
+fn target_anchor_exists(path: &std::path::Path, anchor: Option<&str>) -> Result<bool> {
+    let Some(anchor) = anchor else {
+        return Ok(true);
+    };
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let source = fs::read_to_string(path)
+        .with_context(|| format!("failed to read linked Markdown file {}", path.display()))?;
+    let tree = to_mdast(&source, &ParseOptions::gfm()).map_err(|error| {
+        anyhow!(
+            "failed to parse linked Markdown file {}: {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(node_contains_anchor(&tree, anchor))
+}
+
+#[expect(
+    clippy::wildcard_enum_match_arm,
+    reason = "only root and heading nodes matter when checking generated heading anchors"
+)]
+fn node_contains_anchor(node: &Node, anchor: &str) -> bool {
+    match node {
+        Node::Root(root) => root
+            .children
+            .iter()
+            .any(|child| node_contains_anchor(child, anchor)),
+        Node::Heading(heading) => slugify_heading(&label_text(&heading.children)) == anchor,
+        _ => false,
+    }
+}
+
+fn slugify_heading(value: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_separator = false;
+    for ch in value.chars().flat_map(char::to_lowercase) {
+        if ch.is_alphanumeric() {
+            slug.push(ch);
+            previous_was_separator = false;
+        } else if (ch.is_whitespace() || ch == '-') && !slug.is_empty() && !previous_was_separator {
+            slug.push('-');
+            previous_was_separator = true;
+        }
+    }
+    if slug.ends_with('-') {
+        slug.pop();
+    }
+    slug
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{slugify_heading, target_anchor_exists};
+    use tempfile::TempDir;
+
+    #[test]
+    fn slugify_heading_collapses_separators_and_trims_trailing_separator() {
+        assert_eq!(slugify_heading("Testing -- Guidance -"), "testing-guidance");
+    }
+
+    #[test]
+    fn target_anchor_exists_rejects_anchors_on_directories() {
+        let temp = TempDir::new().unwrap();
+
+        let exists = target_anchor_exists(temp.path(), Some("testing-guidance")).unwrap();
+
+        assert!(!exists);
+    }
 }

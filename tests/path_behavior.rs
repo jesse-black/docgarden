@@ -410,6 +410,47 @@ fn glob_pattern_markdown_link_is_reported_as_broken_link() {
 }
 
 #[test]
+fn markdown_link_with_existing_heading_anchor_resolves() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(root.join("docs/testing.md"), "# Testing Guidance\n").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "[Testing](docs/testing.md#testing-guidance)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-link-path").not());
+}
+
+#[test]
+fn markdown_link_with_missing_heading_anchor_is_reported() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(root.join("docs/testing.md"), "# Testing Guidance\n").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "[Testing](docs/testing.md#missing-guidance)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-link-path"))
+        .stdout(predicate::str::contains("docs/testing.md#missing-guidance"));
+}
+
+#[test]
 fn same_directory_markdown_link_resolves_relative_to_current_file() {
     let temp = tempdir().unwrap();
     let root = temp.path();
