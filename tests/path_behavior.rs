@@ -410,6 +410,29 @@ fn glob_pattern_markdown_link_is_reported_as_broken_link() {
 }
 
 #[test]
+fn non_markdown_link_with_fragment_resolves_when_file_exists() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(
+        root.join("openapi.yaml"),
+        "components:\n  schemas:\n    Foo: {}\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("README.md"),
+        "[Schema](openapi.yaml#/components/schemas/Foo)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-link-path").not());
+}
+
+#[test]
 fn markdown_link_with_existing_heading_anchor_resolves() {
     let temp = tempdir().unwrap();
     let root = temp.path();

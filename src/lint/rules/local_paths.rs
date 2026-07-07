@@ -140,6 +140,9 @@ fn target_anchor_exists(path: &std::path::Path, anchor: Option<&str>) -> Result<
     if !path.is_file() {
         return Ok(false);
     }
+    if !is_markdown_target(path) {
+        return Ok(true);
+    }
     let source = fs::read_to_string(path)
         .with_context(|| format!("failed to read linked Markdown file {}", path.display()))?;
     let tree = to_mdast(&source, &ParseOptions::gfm()).map_err(|error| {
@@ -150,6 +153,20 @@ fn target_anchor_exists(path: &std::path::Path, anchor: Option<&str>) -> Result<
         )
     })?;
     Ok(node_contains_anchor(&tree, anchor))
+}
+
+fn is_markdown_target(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("md")
+                || extension.eq_ignore_ascii_case("markdown")
+                || extension.eq_ignore_ascii_case("mdown")
+        })
+        || path
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .is_some_and(|filename| filename.eq_ignore_ascii_case("README"))
 }
 
 #[expect(
@@ -187,7 +204,7 @@ fn slugify_heading(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{slugify_heading, target_anchor_exists};
+    use super::{is_markdown_target, slugify_heading, target_anchor_exists};
     use tempfile::TempDir;
 
     #[test]
@@ -202,5 +219,15 @@ mod tests {
         let exists = target_anchor_exists(temp.path(), Some("testing-guidance")).unwrap();
 
         assert!(!exists);
+    }
+
+    #[test]
+    fn is_markdown_target_accepts_markdown_extensions_and_readme() {
+        assert!(is_markdown_target(std::path::Path::new("docs/guide.md")));
+        assert!(is_markdown_target(std::path::Path::new(
+            "docs/guide.markdown"
+        )));
+        assert!(is_markdown_target(std::path::Path::new("README")));
+        assert!(!is_markdown_target(std::path::Path::new("openapi.yaml")));
     }
 }
