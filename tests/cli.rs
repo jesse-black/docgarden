@@ -925,6 +925,13 @@ fn match_reports_read_error_for_unreadable_discovered_file() {
     perms.set_mode(0o000);
     fs::set_permissions(&unreadable, perms).unwrap();
 
+    if fs::read_to_string(&unreadable).is_ok() {
+        let mut restore = fs::metadata(&unreadable).unwrap().permissions();
+        restore.set_mode(0o644);
+        fs::set_permissions(&unreadable, restore).unwrap();
+        return;
+    }
+
     let assert = Command::new(env!("CARGO_BIN_EXE_docgarden"))
         .current_dir(root)
         .args(["match", "hidden"])
