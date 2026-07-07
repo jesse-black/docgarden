@@ -1,6 +1,8 @@
 ---
 name: architecture-md-authoring
 description: Create or revise repository `ARCHITECTURE.md` files as short, stable architecture codemaps. Use when an agent needs to author or edit `ARCHITECTURE.md`, restructure an architecture document around a bird's-eye view and code map, clarify system boundaries, add architectural invariants or cross-cutting concerns, or decide which implementation detail should stay out of `ARCHITECTURE.md` and live in deeper design documents instead.
+metadata:
+  internal: true
 ---
 
 # ARCHITECTURE.md Authoring

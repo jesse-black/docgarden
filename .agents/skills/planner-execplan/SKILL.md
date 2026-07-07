@@ -1,6 +1,8 @@
 ---
 name: planner-execplan
 description: Create, update, revise, reopen, or rescope a plan or ExecPlan using `PLANS.md`. Use when an agent needs to create a plan, plan a change, update the plan with new requirements, or rewrite an active ExecPlan.
+metadata:
+  internal: true
 ---
 
 # Planner ExecPlan
