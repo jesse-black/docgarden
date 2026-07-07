@@ -1,6 +1,7 @@
 /target
 /dist
 local.nix
+.env
 .codex
 settings.local.json
 .antigravitycli
