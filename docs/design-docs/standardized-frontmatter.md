@@ -76,13 +76,21 @@ Any later `---` in the body is ordinary Markdown content, not frontmatter.
   - booleans `true` and `false`
   - integers in base 10
   - dates in ISO `YYYY-MM-DD` form, initially treated as strings unless or until a schema opts into stricter date typing
+  - folded block scalars using `>`, `>-`, or `>+`
 - sequences introduced with `- `, primarily for string lists
+
+Folded block scalars retain their YAML folding and chomping semantics in the
+shared parser. Lint rules therefore inspect the actual scalar value, including
+any final or trailing line breaks retained by `>` or `>+`. Discovery output has
+a separate presentation constraint: `list` and `match` render descriptions as
+single-line row fields, so they remove trailing line breaks and render embedded
+line breaks as spaces.
 
 ### Explicitly unsupported in v1
 
 - anchors and aliases
 - tags
-- block scalars such as `|` and `>`
+- literal block scalars using `|`
 - flow-style collections such as `[a, b]` or `{a: b}`
 - multi-document YAML
 - duplicate keys in the same mapping
