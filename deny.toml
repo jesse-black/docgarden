@@ -128,6 +128,7 @@ allow = [
 allow-build-scripts = [
   { name = "anyhow", version = "=1.0.103" },
   { name = "assert_cmd", version = "=2.2.2" },
+  { name = "crossbeam-epoch", version = "=0.9.20" },
   { name = "crossbeam-utils", version = "=0.8.21" },
   { name = "getrandom", version = "=0.4.2" },
   { name = "libc", version = "=0.2.182" },
