@@ -138,6 +138,10 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
             let (val, consumed) = parse_block_value(lines, i, line_num)?;
             i += consumed;
             val
+        } else if value_str == ">-" {
+            let (val, consumed) = parse_folded_strip_scalar(lines, i, line_num)?;
+            i += consumed;
+            val
         } else {
             // Inline scalar.
             parse_inline_scalar(value_str).ok_or(line_num)?
@@ -265,6 +269,52 @@ fn parse_nested_mapping(
         fields.push((key.to_string(), value));
     }
     Ok(fields)
+}
+
+/// Parse a folded strip block scalar (`>-`) into a single scalar string.
+fn parse_folded_strip_scalar(
+    lines: &[(usize, &str)],
+    start: usize,
+    parent_line: usize,
+) -> Result<(YamlValue, usize), usize> {
+    let child_indent = lines
+        .iter()
+        .skip(start)
+        .find_map(|&(_, line)| {
+            if line.trim().is_empty() {
+                None
+            } else {
+                Some(line_indent(line))
+            }
+        })
+        .ok_or(parent_line)?;
+
+    if child_indent == 0 {
+        return Err(parent_line);
+    }
+
+    let mut parts = Vec::new();
+    let mut consumed = 0;
+
+    for &(line_num, line) in lines.iter().skip(start) {
+        if line.trim().is_empty() {
+            consumed += 1;
+            continue;
+        }
+
+        let indent = line_indent(line);
+        if indent < child_indent {
+            break;
+        }
+        if indent > child_indent {
+            return Err(line_num);
+        }
+
+        parts.push(line[child_indent..].trim().to_string());
+        consumed += 1;
+    }
+
+    Ok((YamlValue::Scalar(parts.join(" ")), consumed))
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +549,69 @@ mod tests {
         assert!(matches!(
             parse_from_str(src),
             FrontmatterParseResult::Malformed { .. }
+        ));
+    }
+
+    #[test]
+    fn parse_folded_strip_description_scalar() {
+        let src = "---\ndescription: >-\n  Claude Code generated skill\n  description frontmatter.\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(
+                "Claude Code generated skill description frontmatter.".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_folded_strip_scalar_skips_blank_lines_before_content() {
+        let src = "---\ndescription: >-\n\n  First line\n  second line\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar("First line second line".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_folded_strip_scalar_stops_at_next_top_level_field() {
+        let src = "---\ndescription: >-\n  First line\n\nname: Guide\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar("First line".to_string()))
+        );
+        assert_eq!(
+            fm.get("name"),
+            Some(&YamlValue::Scalar("Guide".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_malformed_folded_strip_scalar_without_content() {
+        let src = "---\ndescription: >-\n---\n";
+        assert!(matches!(
+            parse_from_str(src),
+            FrontmatterParseResult::Malformed { line: 2 }
+        ));
+    }
+
+    #[test]
+    fn parse_malformed_folded_strip_scalar_without_indented_content() {
+        let src = "---\ndescription: >-\nname: Guide\n---\n";
+        assert!(matches!(
+            parse_from_str(src),
+            FrontmatterParseResult::Malformed { line: 2 }
+        ));
+    }
+
+    #[test]
+    fn parse_malformed_folded_strip_scalar_with_deeper_indent() {
+        let src = "---\ndescription: >-\n  First line\n    deeper line\n---\n";
+        assert!(matches!(
+            parse_from_str(src),
+            FrontmatterParseResult::Malformed { line: 4 }
         ));
     }
 

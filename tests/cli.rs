@@ -1929,6 +1929,36 @@ required = ["description"]
 }
 
 #[test]
+fn folded_strip_frontmatter_description_satisfies_required_field() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter]
+required = ["description"]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: >-\n  Claude Code generated skill\n  description frontmatter.\n---\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("frontmatter-malformed").not())
+        .stdout(predicate::str::contains("frontmatter-field-missing").not());
+}
+
+#[test]
 fn frontmatter_max_chars_enforced_for_present_field() {
     let temp = tempdir().unwrap();
     let root = temp.path();
