@@ -139,7 +139,7 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
             i += consumed;
             val
         } else if let Some(chomp) = FoldedScalarMarker::parse(value_str) {
-            let (val, consumed) = parse_folded_scalar(lines, i, line_num, chomp)?;
+            let (val, consumed) = parse_folded_scalar(lines, i, chomp);
             i += consumed;
             val
         } else {
@@ -271,41 +271,43 @@ fn parse_nested_mapping(
     Ok(fields)
 }
 
-struct FoldedScalarMarker;
+#[derive(Clone, Copy)]
+enum FoldedScalarMarker {
+    Clip,
+    Strip,
+    Keep,
+}
 
 impl FoldedScalarMarker {
     fn parse(value: &str) -> Option<Self> {
         match value {
-            ">" | ">-" | ">+" => Some(Self),
+            ">" => Some(Self::Clip),
+            ">-" => Some(Self::Strip),
+            ">+" => Some(Self::Keep),
             _ => None,
         }
     }
 }
 
 /// Parse a folded block scalar (`>`, `>-`, or `>+`) into a scalar string.
-///
-/// All accepted folded markers are intentionally normalized to stripped
-/// semantics for docgarden frontmatter, so `>`, `>-`, and `>+` produce the
-/// same scalar value.
 fn parse_folded_scalar(
     lines: &[(usize, &str)],
     start: usize,
-    parent_line: usize,
-    _marker: FoldedScalarMarker,
-) -> Result<(YamlValue, usize), usize> {
-    let child_indent = folded_scalar_indent(lines, start).ok_or(parent_line)?;
+    marker: FoldedScalarMarker,
+) -> (YamlValue, usize) {
+    let Some((content_start, child_indent)) = folded_scalar_start(lines, start) else {
+        return (YamlValue::Scalar(String::new()), lines.len() - start);
+    };
     if child_indent == 0 {
-        return Err(parent_line);
+        return (YamlValue::Scalar(String::new()), content_start - start);
     }
 
     let mut content = Vec::new();
-    let mut consumed = 0;
+    let mut consumed = content_start - start;
 
-    for &(line_num, line) in lines.iter().skip(start) {
+    for &(_, line) in lines.iter().skip(content_start) {
         if line.trim().is_empty() {
-            if !content.is_empty() {
-                content.push(None);
-            }
+            content.push(None);
             consumed += 1;
             continue;
         }
@@ -314,54 +316,75 @@ fn parse_folded_scalar(
         if indent < child_indent {
             break;
         }
-        if indent > child_indent {
-            return Err(line_num);
-        }
 
-        content.push(Some(line[child_indent..].trim().to_string()));
+        content.push(Some(FoldedScalarLine {
+            text: line[child_indent..].trim_end().to_string(),
+            more_indented: indent > child_indent,
+        }));
         consumed += 1;
     }
 
-    Ok((YamlValue::Scalar(fold_scalar_content(&content)), consumed))
+    let value = fold_scalar_content(&content, marker);
+    (YamlValue::Scalar(value), consumed)
 }
 
-fn folded_scalar_indent(lines: &[(usize, &str)], start: usize) -> Option<usize> {
-    lines.iter().skip(start).find_map(|&(_, line)| {
-        if line.trim().is_empty() {
-            None
-        } else {
-            Some(line_indent(line))
-        }
-    })
+fn folded_scalar_start(lines: &[(usize, &str)], start: usize) -> Option<(usize, usize)> {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find(|(_, (_, line))| !line.trim().is_empty())
+        .map(|(index, (_, line))| (index, line_indent(line)))
 }
 
-fn fold_scalar_content(lines: &[Option<String>]) -> String {
+struct FoldedScalarLine {
+    text: String,
+    more_indented: bool,
+}
+
+fn fold_scalar_content(lines: &[Option<FoldedScalarLine>], marker: FoldedScalarMarker) -> String {
     let trailing_blank_lines = lines.iter().rev().take_while(|line| line.is_none()).count();
     let content_end = lines.len() - trailing_blank_lines;
 
     let mut output = String::new();
-    let mut paragraph = Vec::new();
+    let mut previous_more_indented = false;
+    let mut pending_blank_lines = 0;
 
     for line in lines.iter().take(content_end) {
         match line {
-            Some(text) => paragraph.push(text.as_str()),
-            None => {
-                flush_folded_paragraph(&mut output, &mut paragraph);
-                output.push('\n');
+            Some(line) => {
+                if !output.is_empty() {
+                    let preserved_break = previous_more_indented || line.more_indented;
+                    if pending_blank_lines > 0 {
+                        let breaks = pending_blank_lines + usize::from(preserved_break);
+                        output.extend(std::iter::repeat_n('\n', breaks));
+                    } else if preserved_break {
+                        output.push('\n');
+                    } else {
+                        output.push(' ');
+                    }
+                }
+                output.push_str(&line.text);
+                previous_more_indented = line.more_indented;
+                pending_blank_lines = 0;
             }
+            None => pending_blank_lines += 1,
         }
     }
 
-    flush_folded_paragraph(&mut output, &mut paragraph);
-    output
-}
-
-fn flush_folded_paragraph(output: &mut String, paragraph: &mut Vec<&str>) {
-    if paragraph.is_empty() {
-        return;
+    match marker {
+        FoldedScalarMarker::Strip => {}
+        FoldedScalarMarker::Clip if !output.is_empty() => output.push('\n'),
+        FoldedScalarMarker::Clip => {}
+        FoldedScalarMarker::Keep if !output.is_empty() => {
+            output.extend(std::iter::repeat_n('\n', trailing_blank_lines + 1));
+        }
+        FoldedScalarMarker::Keep => {
+            output.extend(std::iter::repeat_n('\n', trailing_blank_lines));
+        }
     }
-    output.push_str(&paragraph.join(" "));
-    paragraph.clear();
+
+    output
 }
 
 // ---------------------------------------------------------------------------
@@ -612,22 +635,24 @@ mod tests {
     }
 
     #[test]
-    fn parse_folded_clip_description_scalar_uses_strip_semantics() {
+    fn parse_folded_clip_description_scalar_keeps_final_line_break() {
         let src = "---\ndescription: >\n  Folded clip\n  description.\n---\n";
         let fm = assert_valid(src);
         assert_eq!(
             fm.get("description"),
-            Some(&YamlValue::Scalar("Folded clip description.".to_string()))
+            Some(&YamlValue::Scalar("Folded clip description.\n".to_string()))
         );
     }
 
     #[test]
-    fn parse_folded_keep_description_scalar_uses_strip_semantics() {
+    fn parse_folded_keep_description_scalar_keeps_trailing_line_breaks() {
         let src = "---\ndescription: >+\n  Folded keep\n  description.\n\n---\n";
         let fm = assert_valid(src);
         assert_eq!(
             fm.get("description"),
-            Some(&YamlValue::Scalar("Folded keep description.".to_string()))
+            Some(&YamlValue::Scalar(
+                "Folded keep description.\n\n".to_string()
+            ))
         );
     }
 
@@ -668,30 +693,39 @@ mod tests {
     }
 
     #[test]
-    fn parse_malformed_folded_strip_scalar_without_content() {
+    fn parse_empty_folded_strip_scalar() {
         let src = "---\ndescription: >-\n---\n";
-        assert!(matches!(
-            parse_from_str(src),
-            FrontmatterParseResult::Malformed { line: 2 }
-        ));
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(String::new()))
+        );
     }
 
     #[test]
-    fn parse_malformed_folded_strip_scalar_without_indented_content() {
+    fn parse_empty_folded_strip_scalar_before_next_field() {
         let src = "---\ndescription: >-\nname: Guide\n---\n";
-        assert!(matches!(
-            parse_from_str(src),
-            FrontmatterParseResult::Malformed { line: 2 }
-        ));
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(String::new()))
+        );
+        assert_eq!(
+            fm.get("name"),
+            Some(&YamlValue::Scalar("Guide".to_string()))
+        );
     }
 
     #[test]
-    fn parse_malformed_folded_strip_scalar_with_deeper_indent() {
-        let src = "---\ndescription: >-\n  First line\n    deeper line\n---\n";
-        assert!(matches!(
-            parse_from_str(src),
-            FrontmatterParseResult::Malformed { line: 4 }
-        ));
+    fn parse_folded_strip_scalar_preserves_more_indented_lines() {
+        let src = "---\ndescription: >-\n  First line\n    deeper line\n  Last line\n---\n";
+        let fm = assert_valid(src);
+        assert_eq!(
+            fm.get("description"),
+            Some(&YamlValue::Scalar(
+                "First line\n  deeper line\nLast line".to_string()
+            ))
+        );
     }
 
     #[test]

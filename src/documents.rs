@@ -82,7 +82,7 @@ pub(crate) fn render_metadata_row(document: &DocumentMetadata) -> String {
 
 fn extract_scalar(fm: &crate::frontmatter::ParsedFrontmatter, key: &str) -> Option<String> {
     if let YamlValue::Scalar(s) = fm.get(key)? {
-        Some(s.clone())
+        Some(s.trim_end_matches(['\n', '\r']).to_string())
     } else {
         None
     }

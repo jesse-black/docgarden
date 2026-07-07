@@ -219,6 +219,32 @@ fn list_default_output_has_three_pipe_separated_columns() {
 }
 
 #[test]
+fn list_and_match_strip_folded_scalar_chomping_from_output() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: >+\n  searchable text\n\n---\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["list", "guide.md"])
+        .assert()
+        .success()
+        .stdout("guide.md | guide | searchable text\n");
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["match", "--color", "never", "searchable"])
+        .assert()
+        .success()
+        .stdout("guide.md | guide | searchable text\n");
+}
+
+#[test]
 fn list_directory_targets_are_shallow_without_recurse() {
     let temp = tempdir().unwrap();
     let root = temp.path();
@@ -1956,6 +1982,36 @@ required = ["description"]
         .success()
         .stdout(predicate::str::contains("frontmatter-malformed").not())
         .stdout(predicate::str::contains("frontmatter-field-missing").not());
+}
+
+#[test]
+fn folded_clip_chomping_counts_toward_frontmatter_max_chars() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("docgarden.toml"),
+        r#"
+[[rules]]
+path = "**/*.md"
+
+[rules.frontmatter.fields.description]
+max-chars = 4
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("guide.md"),
+        "---\ndescription: >\n  text\n---\n# Guide\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .current_dir(root)
+        .args(["lint", "guide.md", "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("frontmatter-field-max-chars"))
+        .stdout(predicate::str::contains("has 5 characters"));
 }
 
 #[test]
