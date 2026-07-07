@@ -8,7 +8,7 @@ use crate::cli::{ColorChoice, colorize_stdout};
 use crate::config::Config;
 use crate::diagnostics::PatternMatcher;
 use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
-use crate::documents::{escape_pipe, load_document_metadata_for_paths};
+use crate::documents::{escape_row_field, load_document_metadata_for_paths};
 use crate::paths::repository_relative_path;
 use crate::root::{RootMarker, infer_repository_root};
 use crate::scopes::{Scope, discover_scope_files};
@@ -294,7 +294,7 @@ fn flush_render_token(
     }
 
     for span in analyze_surface_spans(token) {
-        let escaped = escape_pipe(span.surface);
+        let escaped = escape_row_field(span.surface);
         if color == ColorRendering::Ansi
             && span
                 .terms
@@ -314,6 +314,8 @@ fn flush_render_token(
 fn push_escaped_char(rendered: &mut String, ch: char) {
     if ch == '|' {
         rendered.push_str(r"\|");
+    } else if ch == '\n' || ch == '\r' {
+        rendered.push(' ');
     } else {
         rendered.push(ch);
     }
@@ -433,6 +435,18 @@ mod tests {
         let query_terms: HashSet<&str> = HashSet::from(["the"]);
         let rendered = render_match_field("there's", &query_terms, ColorRendering::Ansi);
         assert!(!rendered.contains("\u{1b}[1mthe\u{1b}[0m"));
+    }
+
+    #[test]
+    fn render_match_field_normalizes_newlines() {
+        let query_terms = HashSet::new();
+        let rendered = render_match_field(
+            "First paragraph.\nSecond paragraph.",
+            &query_terms,
+            ColorRendering::Plain,
+        );
+
+        assert_eq!(rendered, "First paragraph. Second paragraph.");
     }
 
     #[test]

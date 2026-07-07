@@ -138,7 +138,7 @@ fn parse_yaml_block(lines: &[(usize, &str)]) -> Result<Vec<(String, YamlValue)>,
             let (val, consumed) = parse_block_value(lines, i, line_num)?;
             i += consumed;
             val
-        } else if let Some(chomp) = FoldedChomp::parse(value_str) {
+        } else if let Some(chomp) = FoldedScalarMarker::parse(value_str) {
             let (val, consumed) = parse_folded_scalar(lines, i, line_num, chomp)?;
             i += consumed;
             val
@@ -271,30 +271,27 @@ fn parse_nested_mapping(
     Ok(fields)
 }
 
-#[derive(Clone, Copy)]
-enum FoldedChomp {
-    Clip,
-    Strip,
-    Keep,
-}
+struct FoldedScalarMarker;
 
-impl FoldedChomp {
+impl FoldedScalarMarker {
     fn parse(value: &str) -> Option<Self> {
         match value {
-            ">" => Some(Self::Clip),
-            ">-" => Some(Self::Strip),
-            ">+" => Some(Self::Keep),
+            ">" | ">-" | ">+" => Some(Self),
             _ => None,
         }
     }
 }
 
 /// Parse a folded block scalar (`>`, `>-`, or `>+`) into a scalar string.
+///
+/// All accepted folded markers are intentionally normalized to stripped
+/// semantics for docgarden frontmatter, so `>`, `>-`, and `>+` produce the
+/// same scalar value.
 fn parse_folded_scalar(
     lines: &[(usize, &str)],
     start: usize,
     parent_line: usize,
-    chomp: FoldedChomp,
+    _marker: FoldedScalarMarker,
 ) -> Result<(YamlValue, usize), usize> {
     let child_indent = folded_scalar_indent(lines, start).ok_or(parent_line)?;
     if child_indent == 0 {
@@ -325,10 +322,7 @@ fn parse_folded_scalar(
         consumed += 1;
     }
 
-    Ok((
-        YamlValue::Scalar(fold_scalar_content(&content, chomp)),
-        consumed,
-    ))
+    Ok((YamlValue::Scalar(fold_scalar_content(&content)), consumed))
 }
 
 fn folded_scalar_indent(lines: &[(usize, &str)], start: usize) -> Option<usize> {
@@ -341,7 +335,7 @@ fn folded_scalar_indent(lines: &[(usize, &str)], start: usize) -> Option<usize> 
     })
 }
 
-fn fold_scalar_content(lines: &[Option<String>], chomp: FoldedChomp) -> String {
+fn fold_scalar_content(lines: &[Option<String>]) -> String {
     let trailing_blank_lines = lines.iter().rev().take_while(|line| line.is_none()).count();
     let content_end = lines.len() - trailing_blank_lines;
 
@@ -359,16 +353,6 @@ fn fold_scalar_content(lines: &[Option<String>], chomp: FoldedChomp) -> String {
     }
 
     flush_folded_paragraph(&mut output, &mut paragraph);
-
-    match chomp {
-        FoldedChomp::Strip => {}
-        FoldedChomp::Clip => output.push('\n'),
-        FoldedChomp::Keep => {
-            output.push('\n');
-            output.extend(std::iter::repeat_n('\n', trailing_blank_lines));
-        }
-    }
-
     output
 }
 
@@ -628,24 +612,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_folded_clip_description_scalar() {
+    fn parse_folded_clip_description_scalar_uses_strip_semantics() {
         let src = "---\ndescription: >\n  Folded clip\n  description.\n---\n";
         let fm = assert_valid(src);
         assert_eq!(
             fm.get("description"),
-            Some(&YamlValue::Scalar("Folded clip description.\n".to_string()))
+            Some(&YamlValue::Scalar("Folded clip description.".to_string()))
         );
     }
 
     #[test]
-    fn parse_folded_keep_description_scalar() {
+    fn parse_folded_keep_description_scalar_uses_strip_semantics() {
         let src = "---\ndescription: >+\n  Folded keep\n  description.\n\n---\n";
         let fm = assert_valid(src);
         assert_eq!(
             fm.get("description"),
-            Some(&YamlValue::Scalar(
-                "Folded keep description.\n\n".to_string()
-            ))
+            Some(&YamlValue::Scalar("Folded keep description.".to_string()))
         );
     }
 
