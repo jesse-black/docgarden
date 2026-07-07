@@ -474,6 +474,43 @@ fn markdown_link_with_missing_heading_anchor_is_reported() {
 }
 
 #[test]
+fn same_document_markdown_link_with_missing_heading_anchor_is_reported() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "# Existing Guidance\n\n[Missing](#missing-guidance)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("unresolved-link-path"))
+        .stdout(predicate::str::contains("#missing-guidance"));
+}
+
+#[test]
+fn same_document_markdown_link_with_existing_heading_anchor_resolves() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "# Existing Guidance\n\n[Existing](#existing-guidance)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-link-path").not());
+}
+
+#[test]
 fn markdown_link_to_formatted_heading_anchor_resolves() {
     let temp = tempdir().unwrap();
     let root = temp.path();

@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use github_slugger::Slugger;
@@ -16,14 +18,20 @@ use crate::lint::{Finding, edit_from_position};
 
 use super::NodeRuleContext;
 
+#[derive(Default)]
+pub(crate) struct AnchorCache {
+    anchors_by_path: HashMap<PathBuf, HashSet<String>>,
+}
+
 pub(crate) fn evaluate_node<'a>(
     context: &NodeRuleContext<'a>,
     node: &'a Node,
+    anchor_cache: &mut AnchorCache,
 ) -> Result<Vec<Finding<'a>>> {
     if let Node::InlineCode(inline) = node {
         lint_inline_code_node(context, inline)
     } else if let Node::Link(link) = node {
-        lint_link_node(context, link)
+        lint_link_node(context, link, anchor_cache)
     } else {
         Ok(Vec::new())
     }
@@ -92,6 +100,7 @@ fn lint_inline_code_node<'a>(
 fn lint_link_node<'a>(
     context: &NodeRuleContext<'a>,
     link: &'a markdown::mdast::Link,
+    anchor_cache: &mut AnchorCache,
 ) -> Result<Vec<Finding<'a>>> {
     let destination = link.url.trim();
     if is_external(destination) {
@@ -106,7 +115,7 @@ fn lint_link_node<'a>(
             .join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
         let anchor_exists = if exists {
-            target_anchor_exists(&exists_path, candidate.anchor.as_deref())?
+            target_anchor_exists(&exists_path, candidate.anchor.as_deref(), anchor_cache)?
         } else {
             false
         };
@@ -134,7 +143,11 @@ fn lint_link_node<'a>(
     Ok(Vec::new())
 }
 
-fn target_anchor_exists(path: &std::path::Path, anchor: Option<&str>) -> Result<bool> {
+fn target_anchor_exists(
+    path: &Path,
+    anchor: Option<&str>,
+    cache: &mut AnchorCache,
+) -> Result<bool> {
     let Some(anchor) = anchor else {
         return Ok(true);
     };
@@ -144,16 +157,24 @@ fn target_anchor_exists(path: &std::path::Path, anchor: Option<&str>) -> Result<
     if !is_markdown_target(path) {
         return Ok(true);
     }
-    let source = fs::read_to_string(path)
-        .with_context(|| format!("failed to read linked Markdown file {}", path.display()))?;
-    let tree = to_mdast(&source, &ParseOptions::gfm()).map_err(|error| {
-        anyhow!(
-            "failed to parse linked Markdown file {}: {}",
-            path.display(),
-            error
-        )
-    })?;
-    Ok(node_contains_anchor(&tree, anchor))
+    if !cache.anchors_by_path.contains_key(path) {
+        let source = fs::read_to_string(path)
+            .with_context(|| format!("failed to read linked Markdown file {}", path.display()))?;
+        let tree = to_mdast(&source, &ParseOptions::gfm()).map_err(|error| {
+            anyhow!(
+                "failed to parse linked Markdown file {}: {}",
+                path.display(),
+                error
+            )
+        })?;
+        cache
+            .anchors_by_path
+            .insert(path.to_path_buf(), collect_anchors(&tree));
+    }
+    Ok(cache
+        .anchors_by_path
+        .get(path)
+        .is_some_and(|anchors| anchors.contains(anchor)))
 }
 
 fn is_markdown_target(path: &std::path::Path) -> bool {
@@ -170,34 +191,52 @@ fn is_markdown_target(path: &std::path::Path) -> bool {
             .is_some_and(|filename| filename.eq_ignore_ascii_case("README"))
 }
 
-fn node_contains_anchor(node: &Node, anchor: &str) -> bool {
-    node_contains_anchor_with_slugger(node, anchor, &mut Slugger::default())
+fn collect_anchors(node: &Node) -> HashSet<String> {
+    let mut anchors = HashSet::new();
+    collect_anchors_with_slugger(node, &mut Slugger::default(), &mut anchors);
+    anchors
 }
 
-fn node_contains_anchor_with_slugger(node: &Node, anchor: &str, slugger: &mut Slugger) -> bool {
+fn collect_anchors_with_slugger(node: &Node, slugger: &mut Slugger, anchors: &mut HashSet<String>) {
     if let Node::Heading(heading) = node {
-        slugger.slug(&label_text(&heading.children)) == anchor
-    } else {
-        node.children().is_some_and(|children| {
-            children
-                .iter()
-                .any(|child| node_contains_anchor_with_slugger(child, anchor, slugger))
-        })
+        anchors.insert(slugger.slug(&label_text(&heading.children)));
+    } else if let Some(children) = node.children() {
+        for child in children {
+            collect_anchors_with_slugger(child, slugger, anchors);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_markdown_target, target_anchor_exists};
+    use super::{AnchorCache, is_markdown_target, target_anchor_exists};
     use tempfile::TempDir;
 
     #[test]
     fn target_anchor_exists_rejects_anchors_on_directories() {
         let temp = TempDir::new().unwrap();
 
-        let exists = target_anchor_exists(temp.path(), Some("testing-guidance")).unwrap();
+        let exists = target_anchor_exists(
+            temp.path(),
+            Some("testing-guidance"),
+            &mut AnchorCache::default(),
+        )
+        .unwrap();
 
         assert!(!exists);
+    }
+
+    #[test]
+    fn target_anchor_exists_caches_anchors_by_target_file() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("guide.md");
+        std::fs::write(&path, "# First\n\n# Second\n").unwrap();
+        let mut cache = AnchorCache::default();
+
+        assert!(target_anchor_exists(&path, Some("first"), &mut cache).unwrap());
+        assert!(target_anchor_exists(&path, Some("second"), &mut cache).unwrap());
+
+        assert_eq!(cache.anchors_by_path.len(), 1);
     }
 
     #[test]

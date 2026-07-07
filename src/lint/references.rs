@@ -67,7 +67,9 @@ fn classify_reference(
         ReferenceSyntax::Standard
     };
 
-    if is_path_like_reference(path_text, kind, syntax) {
+    if is_path_like_reference(path_text, kind, syntax)
+        || kind == ReferenceKind::Link && link_anchor(value, kind).is_some()
+    {
         return Some(CandidateReference::new(value, syntax, kind));
     }
 
@@ -136,6 +138,11 @@ pub(crate) fn resolve_candidate(
     candidate: &CandidateReference,
     kind: ReferenceKind,
 ) -> Option<ResolvedReference> {
+    if kind == ReferenceKind::Link && candidate.path_text.is_empty() {
+        return Some(ResolvedReference {
+            repo_relative_path: file.to_string(),
+        });
+    }
     let display_text = candidate.path_text.replace('\\', "/");
     let normalized_display = display_text.trim_start_matches('/');
     let base = match kind {
@@ -262,7 +269,6 @@ pub(crate) fn is_external(value: &str) -> bool {
         v if v.starts_with("http://")
             || v.starts_with("https://")
             || v.starts_with("mailto:")
-            || v.starts_with('#')
     )
 }
 
