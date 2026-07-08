@@ -1,6 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use markdown::mdast::{InlineCode, Node, Text};
+use percent_encoding::percent_decode_str;
 
 use crate::config::Config;
 
@@ -19,6 +20,8 @@ pub(crate) enum ReferenceSyntax {
 #[derive(Clone, Debug)]
 pub(crate) struct CandidateReference {
     pub(crate) display_text: String,
+    pub(crate) path_text: String,
+    pub(crate) anchor: Option<String>,
     pub(crate) syntax: ReferenceSyntax,
     pub(crate) is_directory_like: bool,
 }
@@ -56,38 +59,76 @@ fn classify_reference(
     if kind == ReferenceKind::Backtick && contains_disallowed_backtick_syntax(value) {
         return None;
     }
-    let syntax = if has_relative_prefix(value) {
+    let path_text = link_path_text(value, kind);
+    let syntax = if has_relative_prefix(path_text) {
         ReferenceSyntax::Relative
-    } else if has_workspace_root_prefix(value) {
+    } else if has_workspace_root_prefix(path_text) {
         ReferenceSyntax::WorkspaceRoot
     } else {
         ReferenceSyntax::Standard
     };
 
-    if is_path_like_reference(value, kind, syntax) {
-        return Some(CandidateReference::new(value, syntax));
+    if is_path_like_reference(path_text, kind, syntax)
+        || kind == ReferenceKind::Link && link_anchor(value, kind).is_some()
+    {
+        return Some(CandidateReference::new(value, syntax, kind));
     }
 
-    let path = Path::new(value);
+    let path = Path::new(path_text);
     if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
         let extension = format!(".{extension}");
         if config.known_extensions().contains(&extension) {
-            return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
+            return Some(CandidateReference::new(
+                value,
+                ReferenceSyntax::Standard,
+                kind,
+            ));
         }
     }
-    if config.special_filenames().contains(value) {
-        return Some(CandidateReference::new(value, ReferenceSyntax::Standard));
+    if config.special_filenames().contains(path_text) {
+        return Some(CandidateReference::new(
+            value,
+            ReferenceSyntax::Standard,
+            kind,
+        ));
     }
     None
 }
 
 impl CandidateReference {
-    fn new(value: &str, syntax: ReferenceSyntax) -> CandidateReference {
+    fn new(value: &str, syntax: ReferenceSyntax, kind: ReferenceKind) -> CandidateReference {
+        let path_text = link_path_text(value, kind).to_string();
         CandidateReference {
             display_text: value.to_string(),
+            anchor: link_anchor(value, kind).map(decode_fragment),
+            is_directory_like: path_text.ends_with('/') || path_text.ends_with('\\'),
+            path_text,
             syntax,
-            is_directory_like: value.ends_with('/') || value.ends_with('\\'),
         }
+    }
+}
+
+fn decode_fragment(value: &str) -> String {
+    percent_decode_str(value)
+        .decode_utf8()
+        .map_or_else(|_| value.to_string(), |decoded| decoded.into_owned())
+}
+
+fn link_path_text(value: &str, kind: ReferenceKind) -> &str {
+    if kind == ReferenceKind::Link {
+        value.split_once('#').map_or(value, |(path, _)| path)
+    } else {
+        value
+    }
+}
+
+fn link_anchor(value: &str, kind: ReferenceKind) -> Option<&str> {
+    if kind == ReferenceKind::Link {
+        value
+            .split_once('#')
+            .and_then(|(_, anchor)| (!anchor.is_empty()).then_some(anchor))
+    } else {
+        None
     }
 }
 
@@ -104,7 +145,12 @@ pub(crate) fn resolve_candidate(
     candidate: &CandidateReference,
     kind: ReferenceKind,
 ) -> Option<ResolvedReference> {
-    let display_text = candidate.display_text.replace('\\', "/");
+    if kind == ReferenceKind::Link && candidate.path_text.is_empty() {
+        return Some(ResolvedReference {
+            repo_relative_path: file.to_string(),
+        });
+    }
+    let display_text = candidate.path_text.replace('\\', "/");
     let normalized_display = display_text.trim_start_matches('/');
     let base = match kind {
         ReferenceKind::Backtick => {
@@ -230,7 +276,6 @@ pub(crate) fn is_external(value: &str) -> bool {
         v if v.starts_with("http://")
             || v.starts_with("https://")
             || v.starts_with("mailto:")
-            || v.starts_with('#')
     )
 }
 
@@ -257,41 +302,12 @@ fn has_relative_prefix(value: &str) -> bool {
 pub(crate) fn label_text(children: &[Node]) -> String {
     let mut text = String::new();
     for child in children {
-        match child {
-            Node::Text(Text { value, .. }) => text.push_str(value),
-            Node::InlineCode(InlineCode { value, .. }) => text.push_str(value),
-            Node::Link(link) => text.push_str(&label_text(&link.children)),
-            Node::Root(_)
-            | Node::Blockquote(_)
-            | Node::FootnoteDefinition(_)
-            | Node::MdxJsxFlowElement(_)
-            | Node::List(_)
-            | Node::MdxjsEsm(_)
-            | Node::Toml(_)
-            | Node::Yaml(_)
-            | Node::Break(_)
-            | Node::InlineMath(_)
-            | Node::Delete(_)
-            | Node::Emphasis(_)
-            | Node::MdxTextExpression(_)
-            | Node::FootnoteReference(_)
-            | Node::Html(_)
-            | Node::Image(_)
-            | Node::ImageReference(_)
-            | Node::MdxJsxTextElement(_)
-            | Node::LinkReference(_)
-            | Node::Strong(_)
-            | Node::Code(_)
-            | Node::Math(_)
-            | Node::MdxFlowExpression(_)
-            | Node::Heading(_)
-            | Node::Table(_)
-            | Node::ThematicBreak(_)
-            | Node::TableRow(_)
-            | Node::TableCell(_)
-            | Node::ListItem(_)
-            | Node::Definition(_)
-            | Node::Paragraph(_) => {}
+        if let Node::Text(Text { value, .. }) = child {
+            text.push_str(value);
+        } else if let Node::InlineCode(InlineCode { value, .. }) = child {
+            text.push_str(value);
+        } else if let Some(children) = child.children() {
+            text.push_str(&label_text(children));
         }
     }
     text
@@ -309,6 +325,8 @@ mod tests {
     fn resolve_candidate_normalizes_relative_segments_and_separators() {
         let candidate = CandidateReference {
             display_text: "./nested\\..\\real.md".to_string(),
+            path_text: "./nested\\..\\real.md".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
@@ -323,6 +341,8 @@ mod tests {
     fn resolve_candidate_rejects_escape_above_repository_root() {
         let candidate = CandidateReference {
             display_text: "../../../secret.md".to_string(),
+            path_text: "../../../secret.md".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::Relative,
             is_directory_like: false,
         };
@@ -338,6 +358,8 @@ mod tests {
         std::fs::create_dir(&docs).unwrap();
         let candidate = CandidateReference {
             display_text: "/docs".to_string(),
+            path_text: "/docs".to_string(),
+            anchor: None,
             syntax: super::ReferenceSyntax::WorkspaceRoot,
             is_directory_like: true,
         };

@@ -1,5 +1,11 @@
-use anyhow::Result;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, anyhow};
+use github_slugger::Slugger;
 use markdown::mdast::Node;
+use markdown::{ParseOptions, to_mdast};
 
 use crate::config::Rule;
 use crate::diagnostics::Severity;
@@ -12,14 +18,20 @@ use crate::lint::{Finding, edit_from_position};
 
 use super::NodeRuleContext;
 
+#[derive(Default)]
+pub(crate) struct AnchorCache {
+    anchors_by_path: HashMap<PathBuf, HashSet<String>>,
+}
+
 pub(crate) fn evaluate_node<'a>(
     context: &NodeRuleContext<'a>,
     node: &'a Node,
+    anchor_cache: &mut AnchorCache,
 ) -> Result<Vec<Finding<'a>>> {
     if let Node::InlineCode(inline) = node {
         lint_inline_code_node(context, inline)
     } else if let Node::Link(link) = node {
-        lint_link_node(context, link)
+        lint_link_node(context, link, anchor_cache)
     } else {
         Ok(Vec::new())
     }
@@ -88,6 +100,7 @@ fn lint_inline_code_node<'a>(
 fn lint_link_node<'a>(
     context: &NodeRuleContext<'a>,
     link: &'a markdown::mdast::Link,
+    anchor_cache: &mut AnchorCache,
 ) -> Result<Vec<Finding<'a>>> {
     let destination = link.url.trim();
     if is_external(destination) {
@@ -101,10 +114,15 @@ fn lint_link_node<'a>(
             .repository_root()
             .join(&resolved.repo_relative_path);
         let exists = exists_path.exists();
+        let anchor_exists = if exists {
+            target_anchor_exists(&exists_path, candidate.anchor.as_deref(), anchor_cache)?
+        } else {
+            false
+        };
         if !exists && candidate.is_directory_like {
             return Ok(Vec::new());
         }
-        if !exists {
+        if !exists || !anchor_exists {
             return Ok(vec![Finding {
                 payload: DiagnosticPayload {
                     file: context.file,
@@ -123,4 +141,98 @@ fn lint_link_node<'a>(
         }
     }
     Ok(Vec::new())
+}
+
+fn target_anchor_exists(
+    path: &Path,
+    anchor: Option<&str>,
+    cache: &mut AnchorCache,
+) -> Result<bool> {
+    let Some(anchor) = anchor else {
+        return Ok(true);
+    };
+    if !path.is_file() {
+        return Ok(false);
+    }
+    if !is_markdown_target(path) {
+        return Ok(true);
+    }
+    if !cache.anchors_by_path.contains_key(path) {
+        let source = fs::read_to_string(path)
+            .with_context(|| format!("failed to read linked Markdown file {}", path.display()))?;
+        let tree = to_mdast(&source, &ParseOptions::gfm()).map_err(|error| {
+            anyhow!(
+                "failed to parse linked Markdown file {}: {}",
+                path.display(),
+                error
+            )
+        })?;
+        cache
+            .anchors_by_path
+            .insert(path.to_path_buf(), collect_anchors(&tree));
+    }
+    Ok(cache
+        .anchors_by_path
+        .get(path)
+        .is_some_and(|anchors| anchors.contains(anchor)))
+}
+
+fn is_markdown_target(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("md")
+                || extension.eq_ignore_ascii_case("markdown")
+                || extension.eq_ignore_ascii_case("mdown")
+        })
+        || path
+            .file_name()
+            .and_then(|filename| filename.to_str())
+            .is_some_and(|filename| filename.eq_ignore_ascii_case("README"))
+}
+
+fn collect_anchors(node: &Node) -> HashSet<String> {
+    let mut anchors = HashSet::new();
+    collect_anchors_with_slugger(node, &mut Slugger::default(), &mut anchors);
+    anchors
+}
+
+fn collect_anchors_with_slugger(node: &Node, slugger: &mut Slugger, anchors: &mut HashSet<String>) {
+    if let Node::Heading(heading) = node {
+        anchors.insert(slugger.slug(&label_text(&heading.children)));
+    } else if let Some(children) = node.children() {
+        for child in children {
+            collect_anchors_with_slugger(child, slugger, anchors);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AnchorCache, is_markdown_target, target_anchor_exists};
+    use tempfile::TempDir;
+
+    #[test]
+    fn target_anchor_exists_rejects_anchors_on_directories() {
+        let temp = TempDir::new().unwrap();
+
+        let exists = target_anchor_exists(
+            temp.path(),
+            Some("testing-guidance"),
+            &mut AnchorCache::default(),
+        )
+        .unwrap();
+
+        assert!(!exists);
+    }
+
+    #[test]
+    fn is_markdown_target_accepts_markdown_extensions_and_readme() {
+        assert!(is_markdown_target(std::path::Path::new("docs/guide.md")));
+        assert!(is_markdown_target(std::path::Path::new(
+            "docs/guide.markdown"
+        )));
+        assert!(is_markdown_target(std::path::Path::new("README")));
+        assert!(!is_markdown_target(std::path::Path::new("openapi.yaml")));
+    }
 }

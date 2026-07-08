@@ -14,6 +14,7 @@ mod reporting;
 mod rules;
 
 use reporting::{DiagnosticPayload, push_diagnostic};
+pub(crate) use rules::local_paths::AnchorCache;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Mode {
@@ -40,7 +41,12 @@ struct WalkState<'a> {
     edits: &'a mut Vec<Edit>,
 }
 
-pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<Vec<Diagnostic>> {
+pub(crate) fn lint_file(
+    config: &Config,
+    path: &Path,
+    mode: Mode,
+    anchor_cache: &mut AnchorCache,
+) -> Result<Vec<Diagnostic>> {
     let relative_path = repository_relative_path(config.repository_root(), path)?;
     let rule_policy = config.effective_rule_policy_for_path(&relative_path);
     let source =
@@ -71,7 +77,14 @@ pub fn lint_file(config: &Config, path: &Path, mode: Mode) -> Result<Vec<Diagnos
         &mut state,
         rules::frontmatter::evaluate_frontmatter_rules(&fm_context)?,
     );
-    walk_node(config, &rule_policy, &relative_path, &tree, &mut state)?;
+    walk_node(
+        config,
+        &rule_policy,
+        &relative_path,
+        &tree,
+        anchor_cache,
+        &mut state,
+    )?;
 
     if mode == Mode::Fix && !edits.is_empty() {
         let rewritten = apply_edits(&source, &edits)?;
@@ -89,6 +102,7 @@ fn walk_node(
     policy: &EffectiveRulePolicy,
     file: &str,
     node: &Node,
+    anchor_cache: &mut AnchorCache,
     state: &mut WalkState<'_>,
 ) -> Result<()> {
     let context = rules::NodeRuleContext {
@@ -96,7 +110,10 @@ fn walk_node(
         policy,
         file,
     };
-    emit_findings(state, rules::local_paths::evaluate_node(&context, node)?);
+    emit_findings(
+        state,
+        rules::local_paths::evaluate_node(&context, node, anchor_cache)?,
+    );
 
     if matches!(node, Node::Link(_)) {
         return Ok(());
@@ -104,7 +121,7 @@ fn walk_node(
 
     if let Some(children) = children_mut(node) {
         for child in children {
-            walk_node(config, policy, file, child, state)?;
+            walk_node(config, policy, file, child, anchor_cache, state)?;
         }
     }
 
@@ -299,13 +316,18 @@ mod tests {
     fn link_reference_rejects_empty_and_external_destinations() {
         let config = test_config();
 
-        for value in [
-            "",
-            "https://example.com/docs",
-            "mailto:hi@example.com",
-            "#section",
-        ] {
+        for value in ["", "https://example.com/docs", "mailto:hi@example.com"] {
             assert!(classify_link_reference(&config, value).is_none(), "{value}");
         }
+    }
+
+    #[test]
+    fn link_reference_accepts_same_document_anchor() {
+        let config = test_config();
+
+        let anchor = classify_link_reference(&config, "#section").unwrap();
+
+        assert_eq!(anchor.display_text, "#section");
+        assert_eq!(anchor.anchor.as_deref(), Some("section"));
     }
 }

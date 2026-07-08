@@ -158,7 +158,7 @@ That makes wikilinks a higher-complexity opt-in mode rather than a natural defau
 
 Today `docgarden` validates local Markdown links by default and supports opt-in style enforcement for backtick paths.
 
-- `unresolved-link-path` fires by default for any local Markdown link that does not resolve within the repository.
+- `unresolved-link-path` fires by default for any local Markdown link that does not resolve within the repository, including heading fragments generated using GitHub-compatible slug semantics.
 - `unresolved-backtick-path` is opt-in via `[[rules]].enable` and fires when a backtick path does not resolve, using entry-level `severity`.
 - `prefer-links-for-local-paths` is opt-in via `[[rules]].enable` and rewrites backtick paths to Markdown links for repositories that prefer navigable link syntax.
 

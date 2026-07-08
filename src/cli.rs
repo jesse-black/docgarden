@@ -7,7 +7,7 @@ use clap::{ArgGroup, Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::discover::{DirectoryDepth, discover_markdown_files_for_targets};
-use crate::lint::{Mode, lint_file, summarize};
+use crate::lint::{AnchorCache, Mode, lint_file, summarize};
 use crate::listing;
 use crate::matching;
 use crate::root::{RootMarker, infer_repository_root};
@@ -317,9 +317,10 @@ fn execute(
     let files =
         discover_markdown_files_for_targets(&config, &resolved_targets, DirectoryDepth::Recursive)?;
     let mut diagnostics = Vec::new();
+    let mut anchor_cache = AnchorCache::default();
 
     for path in files {
-        diagnostics.extend(lint_file(&config, &path, mode)?);
+        diagnostics.extend(lint_file(&config, &path, mode, &mut anchor_cache)?);
     }
 
     print_diagnostics(&diagnostics, color);
