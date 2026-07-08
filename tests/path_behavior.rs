@@ -453,6 +453,26 @@ fn markdown_link_with_existing_heading_anchor_resolves() {
 }
 
 #[test]
+fn markdown_link_with_percent_encoded_heading_anchor_resolves() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docgarden.toml"), "").unwrap();
+    fs::write(root.join("docs/testing.md"), "# Café\n").unwrap();
+    fs::write(
+        root.join("README.md"),
+        "[Testing](docs/testing.md#caf%C3%A9)\n",
+    )
+    .unwrap();
+
+    Command::new(env!("CARGO_BIN_EXE_docgarden"))
+        .args(["lint", root.to_str().unwrap(), "--color", "never"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("unresolved-link-path").not());
+}
+
+#[test]
 fn markdown_link_with_missing_heading_anchor_is_reported() {
     let temp = tempdir().unwrap();
     let root = temp.path();

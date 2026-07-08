@@ -1,6 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use markdown::mdast::{InlineCode, Node, Text};
+use percent_encoding::percent_decode_str;
 
 use crate::config::Config;
 
@@ -99,12 +100,18 @@ impl CandidateReference {
         let path_text = link_path_text(value, kind).to_string();
         CandidateReference {
             display_text: value.to_string(),
-            anchor: link_anchor(value, kind).map(str::to_string),
+            anchor: link_anchor(value, kind).map(decode_fragment),
             is_directory_like: path_text.ends_with('/') || path_text.ends_with('\\'),
             path_text,
             syntax,
         }
     }
+}
+
+fn decode_fragment(value: &str) -> String {
+    percent_decode_str(value)
+        .decode_utf8()
+        .map_or_else(|_| value.to_string(), |decoded| decoded.into_owned())
 }
 
 fn link_path_text(value: &str, kind: ReferenceKind) -> &str {

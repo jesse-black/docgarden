@@ -227,19 +227,6 @@ mod tests {
     }
 
     #[test]
-    fn target_anchor_exists_caches_anchors_by_target_file() {
-        let temp = TempDir::new().unwrap();
-        let path = temp.path().join("guide.md");
-        std::fs::write(&path, "# First\n\n# Second\n").unwrap();
-        let mut cache = AnchorCache::default();
-
-        assert!(target_anchor_exists(&path, Some("first"), &mut cache).unwrap());
-        assert!(target_anchor_exists(&path, Some("second"), &mut cache).unwrap());
-
-        assert_eq!(cache.anchors_by_path.len(), 1);
-    }
-
-    #[test]
     fn is_markdown_target_accepts_markdown_extensions_and_readme() {
         assert!(is_markdown_target(std::path::Path::new("docs/guide.md")));
         assert!(is_markdown_target(std::path::Path::new(

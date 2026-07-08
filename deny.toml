@@ -70,6 +70,7 @@ allow = [
   { name = "num-traits" },
   { name = "once_cell" },
   { name = "once_cell_polyfill" },
+  { name = "percent-encoding" },
   { name = "predicates" },
   { name = "predicates-core" },
   { name = "predicates-tree" },
